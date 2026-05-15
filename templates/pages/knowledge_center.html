@@ -1,0 +1,359 @@
+
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block content %}
+    <!-- Hero Section -->
+    <section class="relative bg-gradient-to-br from-primary-50 via-accent-50 to-secondary-50 overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 200C200 100 400 300 600 200C800 100 1000 300 1200 200V400H0V200Z" fill="#1976D2"/>
+                <path d="M0 250C200 150 400 350 600 250C800 150 1000 350 1200 250V400H0V250Z" fill="#00695C" opacity="0.5"/>
+            </svg>
+        </div>
+        <div class="container-custom relative z-10 py-16 md:py-20">
+            <div class="max-w-4xl">
+                <div class="inline-flex items-center gap-2 bg-accent-100 text-accent-800 px-4 py-2 rounded-full mb-6">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                    </svg>
+                    <span class="font-semibold">Comprehensive Resource Library</span>
+                </div>
+                {% if hero and hero.title %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">{{ hero.title }}</h1>
+                {% else %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">Knowledge Center</h1>
+                {% endif %}
+                {% if hero and hero.subtitle %}
+                    <p class="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed">{{ hero.subtitle }}</p>
+                {% else %}
+                    <p class="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed">Access evidence-based clinical guidelines, research publications, educational materials, and professional development resources designed to advance breast cancer care excellence.</p>
+                {% endif %}
+                {% if call_to_action %}
+                    <div class="mb-8 flex flex-wrap gap-4">
+                        {% if call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            <a href="{{ call_to_action.primary_button_url }}" class="btn-primary inline-block">{{ call_to_action.primary_button_text }}</a>
+                        {% endif %}
+                        {% if call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                            <a href="{{ call_to_action.secondary_button_url }}" class="btn-outline inline-block">{{ call_to_action.secondary_button_text }}</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured Resources -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Featured Resources</h2>
+                    <p class="text-lg text-text-secondary">Most accessed and highly rated materials by our members</p>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {% for resource in featured_resources %}
+                    <div class="card-elevated hover-lift hover-shadow group">
+                        <div class="flex items-start justify-between mb-4">
+                            {% if resource.resource_type == 'guideline' %}
+                                <span class="inline-flex items-center gap-1 bg-primary-100 text-primary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Clinical Guideline
+                                </span>
+                            {% elif resource.resource_type == 'research_publication' %}
+                                <span class="inline-flex items-center gap-1 bg-secondary-100 text-secondary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                                    </svg>
+                                    Research Publication
+                                </span>
+                            {% elif resource.resource_type == 'educational_material' %}
+                                <span class="inline-flex items-center gap-1 bg-accent-100 text-accent-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z"/>
+                                    </svg>
+                                    Educational Material
+                                </span>
+                            {% elif resource.resource_type == 'tool' %}
+                                <span class="inline-flex items-center gap-1 bg-warning-light text-warning-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 7a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1zm-3 3a1 1 0 100 2h.01a1 1 0 100-2H10zm-4 1a1 1 0 011-1h.01a1 1 0 110 2H7a1 1 0 01-1-1zm1-4a1 1 0 100 2h.01a1 1 0 100-2H7zm2 1a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm4-4a1 1 0 100 2h.01a1 1 0 100-2H13zM9 9a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zM7 8a1 1 0 000 2h.01a1 1 0 000-2H7z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Clinical Tool
+                                </span>
+                            {% elif resource.resource_type == 'webinar' %}
+                                <span class="inline-flex items-center gap-1 bg-success-light text-success-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
+                                    </svg>
+                                    Webinar
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Resource
+                                </span>
+                            {% endif %}
+                                <button class="text-text-tertiary hover:text-secondary transition-colors">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">{{ resource.title }}</h3>
+                            {% if resource.description %}
+                                <p class="text-text-secondary mb-4 leading-relaxed">{{ resource.description }}</p>
+                            {% endif %}
+                            <div class="flex items-center gap-4 mb-4 text-sm text-text-secondary">
+                                {% if resource.updated_date %}
+                                    <span class="flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Updated: {{ resource.updated_date|date:"M d, Y" }}
+                                    </span>
+                                {% endif %}
+                                {% if resource.rating %}
+                                    <span class="flex items-center gap-1">
+                                        <svg class="w-4 h-4 text-warning" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                        </svg>
+                                        {{ resource.rating }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="flex gap-3">
+                                {% if resource.file_upload %}
+                                    <a href="{{ resource.file_upload.url }}" class="btn-primary flex-1">Download PDF</a>
+                                    {% if resource.external_link %}
+                                        <a href="{{ resource.external_link }}" class="btn-outline">Preview</a>
+                                    {% else %}
+                                        <a href="{{ resource.file_upload.url }}" class="btn-outline" target="_blank" rel="noopener noreferrer">Preview</a>
+                                    {% endif %}
+                                {% elif resource.external_link %}
+                                    <a href="{{ resource.external_link }}" class="btn-primary flex-1" target="_blank" rel="noopener noreferrer">View Resource</a>
+                                    <button class="btn-outline">Details</button>
+                                {% else %}
+                                    <button class="btn-primary flex-1" disabled>Not Available</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                {% empty %}
+                    <div class="col-span-3 text-center text-text-secondary">No featured resources found.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Clinical Guidelines Library -->
+    <section class="section bg-primary-50">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Clinical Guidelines & Protocols</h2>
+                <p class="text-lg text-text-secondary max-w-3xl mx-auto">Evidence-based practice guidelines for breast cancer screening, diagnosis, treatment, and survivorship care</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {% for resource in all_resources %}
+                    <div class="card-elevated hover-lift hover-shadow group">
+                        <div class="flex items-start justify-between mb-4">
+                            {% if resource.resource_type == 'guideline' %}
+                                <span class="inline-flex items-center gap-1 bg-primary-100 text-primary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Clinical Guideline
+                                </span>
+                            {% elif resource.resource_type == 'research_publication' %}
+                                <span class="inline-flex items-center gap-1 bg-secondary-100 text-secondary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                                    </svg>
+                                    Research Publication
+                                </span>
+                            {% elif resource.resource_type == 'educational_material' %}
+                                <span class="inline-flex items-center gap-1 bg-accent-100 text-accent-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z"/>
+                                    </svg>
+                                    Educational Material
+                                </span>
+                            {% elif resource.resource_type == 'tool' %}
+                                <span class="inline-flex items-center gap-1 bg-warning-light text-warning-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 7a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1zm-3 3a1 1 0 100 2h.01a1 1 0 100-2H10zm-4 1a1 1 0 011-1h.01a1 1 0 110 2H7a1 1 0 01-1-1zm1-4a1 1 0 100 2h.01a1 1 0 100-2H7zm2 1a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zm4-4a1 1 0 100 2h.01a1 1 0 100-2H13zM9 9a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1zM7 8a1 1 0 000 2h.01a1 1 0 000-2H7z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Clinical Tool
+                                </span>
+                            {% elif resource.resource_type == 'webinar' %}
+                                <span class="inline-flex items-center gap-1 bg-success-light text-success-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
+                                    </svg>
+                                    Webinar
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Resource
+                                </span>
+                            {% endif %}
+                                <button class="text-text-tertiary hover:text-secondary transition-colors">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">{{ resource.title }}</h3>
+                            {% if resource.description %}
+                                <p class="text-text-secondary mb-4 leading-relaxed">{{ resource.description }}</p>
+                            {% endif %}
+                            <div class="flex items-center gap-4 mb-4 text-sm text-text-secondary">
+                                {% if resource.updated_date %}
+                                    <span class="flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Updated: {{ resource.updated_date|date:"M d, Y" }}
+                                    </span>
+                                {% endif %}
+                                {% if resource.rating %}
+                                    <span class="flex items-center gap-1">
+                                        <svg class="w-4 h-4 text-warning" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                        </svg>
+                                        {{ resource.rating }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="flex gap-3">
+                                {% if resource.file_upload %}
+                                    <a href="{{ resource.file_upload.url }}" class="btn-primary flex-1">Download PDF</a>
+                                    {% if resource.external_link %}
+                                        <a href="{{ resource.external_link }}" class="btn-outline">Preview</a>
+                                    {% else %}
+                                        <a href="{{ resource.file_upload.url }}" class="btn-outline" target="_blank" rel="noopener noreferrer">Preview</a>
+                                    {% endif %}
+                                {% elif resource.external_link %}
+                                    <a href="{{ resource.external_link }}" class="btn-primary flex-1" target="_blank" rel="noopener noreferrer">View Resource</a>
+                                    <button class="btn-outline">Details</button>
+                                {% else %}
+                                    <button class="btn-primary flex-1" disabled>Not Available</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Clinical Tools -->
+    <!-- <section class="section">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Interactive Clinical Tools</h2>
+                <p class="text-lg text-text-secondary max-w-3xl mx-auto">Evidence-based calculators and assessment tools for clinical decision support</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Tool Card 1 -->
+               <!-- <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-primary-100 rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Risk Assessment Calculator</h3>
+                    <p class="text-sm text-text-secondary mb-4">Calculate individual breast cancer risk using validated models</p>
+                    <button class="btn-primary w-full">Launch Calculator</button>
+                </div>
+
+                <!-- Tool Card 2 -->
+               <!-- <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-secondary-100 rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Staging Assessment Tool</h3>
+                    <p class="text-sm text-text-secondary mb-4">Determine TNM staging based on clinical and pathological findings</p>
+                    <button class="btn-primary w-full">Launch Tool</button>
+                </div>
+
+                <!-- Tool Card 3 -->
+              <!--  <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-accent-100 rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Treatment Timeline Planner</h3>
+                    <p class="text-sm text-text-secondary mb-4">Create personalized treatment schedules and follow-up plans</p>
+                    <button class="btn-primary w-full">Launch Planner</button>
+                </div>
+
+                <!-- Tool Card 4 -->
+              <!--  <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-warning-light rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-warning-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Prognosis Estimator</h3>
+                    <p class="text-sm text-text-secondary mb-4">Estimate survival outcomes based on tumor characteristics</p>
+                    <button class="btn-primary w-full">Launch Estimator</button>
+                </div>
+
+                <!-- Tool Card 5 -->
+              <!--  <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-success-light rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-success-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Chemotherapy Dose Calculator</h3>
+                    <p class="text-sm text-text-secondary mb-4">Calculate appropriate chemotherapy dosing based on BSA</p>
+                    <button class="btn-primary w-full">Launch Calculator</button>
+                </div>
+
+                <!-- Tool Card 6 -->
+              <!--  <div class="card hover-lift hover-shadow">
+                    <div class="flex items-center justify-center w-16 h-16 bg-error-light rounded-lg mb-4">
+                        <svg class="w-8 h-8 text-error-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2">Side Effect Management Guide</h3>
+                    <p class="text-sm text-text-secondary mb-4">Interactive guide for managing treatment-related side effects</p>
+                    <button class="btn-primary w-full">Launch Guide</button>
+                </div>
+            </div>
+        </div>
+    </section> -->
+
+    <!-- Newsletter Subscription CTA -->
+    <section class="section bg-gradient-to-r from-primary to-primary-700 text-white">
+        <div class="container-custom">
+            <div class="max-w-3xl mx-auto text-center">
+                <svg class="w-16 h-16 mx-auto mb-6 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                <h2 class="text-3xl md:text-4xl font-headline font-bold mb-6">Stay Updated with Latest Resources</h2>
+                <p class="text-lg text-primary-100 mb-8 leading-relaxed">Subscribe to receive notifications about new clinical guidelines, research publications, and educational materials.</p>
+                <div class="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto">
+                    <input type="email" placeholder="Enter your email address" class="flex-1 px-6 py-4 rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-white">
+                    <button class="btn bg-white text-primary hover:bg-primary-50 focus:ring-white px-8 py-4">Subscribe</button>
+                </div>
+                
+            </div>
+        </div>
+    </section>
+{% endblock %}

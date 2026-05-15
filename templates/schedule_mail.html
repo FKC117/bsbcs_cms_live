@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Program Schedule Notification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            color: #333;
+        }
+        h3 {
+            color: #4CAF50;
+        }
+        p {
+            margin: 10px 0;
+        }
+        .schedule-details {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .schedule-details p {
+            margin: 5px 0;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #777;
+        }
+        .button {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <p>Dear Participant,</p>
+    <p>We are pleased to share your abstract presentation schedule for the event "<strong>{{ event.name }} {{ event.year }}</strong>".</p>
+
+    <div class="schedule-details">
+        <h3>Abstract Presentation Schedule Details</h3>
+        <p><strong>Title:</strong> {{ schedule.title }}</p>
+        <p><strong>Presenter:</strong> {{ schedule.presenter }}</p>
+        <p><strong>Hall/Room:</strong> {{ hall_rooms }}</p>
+        <p><strong>Program Day:</strong> {{ program_days }}</p>
+        <p><strong>Time:</strong> {{ start_times }} - {{ end_times }}</p>
+    </div>
+
+    <p>Looking forward to your participation.</p>
+
+    <div class="footer">
+        <p>Best regards,</p>
+        <p>The {{ event.name }} {{ event.year }} Team</p>
+    </div>
+</body>
+</html>

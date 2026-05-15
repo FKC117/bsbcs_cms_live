@@ -1,0 +1,92 @@
+{% extends "gene_base.html" %}
+
+{% block title %}Thank You{% endblock %}
+
+{% block content %}
+<section class="min-h-screen bg-pink-100 py-20">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-6 col-md-8">
+        <!-- Card Section -->
+        <div class="card shadow border-1 p-4 p-md-5 bg-white rounded">
+          <div class="card-body text-center">
+            <!-- Header Section -->
+            <h1 class="text-4xl font-bold text-pink-900 mb-4">Thank You!</h1>
+            <p class="text-lg text-gray-700 mb-5">Your feedback for <strong>{{ event.name }}</strong> has been recorded. We appreciate your input!</p>
+
+            <!-- Message Section -->
+            <div id="message-section" class="hidden mb-4">
+              <p id="message-text" class="text-lg"></p>
+            </div>
+
+            <!-- Button Section -->
+            <div class="flex justify-center space-x-4">
+              <a href="{% url 'index' %}" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
+                Back to Home
+              </a>
+              <!-- <button id="generate-certificate-btn" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
+                Send Certificate via Email
+              </button> -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- JavaScript to Handle Certificate Generation -->
+<script>
+  document.getElementById('generate-certificate-btn').addEventListener('click', function() {
+    const eventId = "{{ event.id }}";  // Pass the event ID to the view
+
+    // Show loading state
+    this.disabled = true;
+    this.textContent = 'Sending...';
+
+    // Call the generate_certificate view
+    fetch(`/event/${eventId}/generate_certificate/`)  // Updated URL with /event/ prefix
+      .then(response => response.json())
+      .then(data => {
+        const messageSection = document.getElementById('message-section');
+        const messageText = document.getElementById('message-text');
+
+        if (data.success) {
+          messageText.textContent = data.message;
+          messageText.classList.add('text-green-600');
+        } else {
+          messageText.textContent = data.error;
+          messageText.classList.add('text-red-600');
+        }
+
+        messageSection.classList.remove('hidden');
+      })
+      .catch(error => {
+        alert('An error occurred while sending the certificate.');
+      })
+      .finally(() => {
+        // Reset button state
+        this.disabled = false;
+        this.textContent = 'Send Certificate via Email';
+      });
+  });
+</script>
+<!-- Custom Styles -->
+<style>
+  body {
+    font-family: 'Arial', sans-serif;
+    background-color: #fce4ec;
+  }
+  .btn-pink {
+    background-color: #ec407a;
+    border-color: #ec407a;
+  }
+  .btn-pink:hover {
+    background-color: #d81b60;
+    border-color: #d81b60;
+  }
+  .hidden {
+    display: none;
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "gene_base.html" %}
+
+{% load static %}
+{% block title %}Payment{% endblock %}
+
+{% block content %}
+<style>
+    .btn-payment {
+        background-color: #ec407a;
+        border-color: #ec407a;
+        color: #fff;
+    }
+    .btn-payment:hover {
+        background-color: #d81b60;
+        border-color: #d81b60;
+    }
+</style>
+
+<div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-10 pb-10">
+    <section class="min-h-screen bg-gray-100 py-10 mt-10">
+        <div class="container mx-auto">
+            <div class="max-w-xl mx-auto bg-white p-8 border border-gray-200 rounded-lg shadow-md">
+                <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Complete Your Payment</h1>
+                <p class="text-lg text-gray-700 text-center mb-8">Please review your details and proceed to payment.</p>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold">Name:</label>
+                    <p class="text-gray-900">{{ participant.name }}</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold">Email:</label>
+                    <p class="text-gray-900">{{ participant.email }}</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold">Phone:</label>
+                    <p class="text-gray-900">{{ participant.phone }}</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold">Event:</label>
+                    <p class="text-gray-900">{{ participant.event.name }} {{ participant.event.year }}</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold">Amount:</label>
+                    <p class="text-gray-900">{{ event.amount }}</p>
+                </div>
+
+                <form method="POST" action="{% url 'registration:payment' event.id participant.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-payment w-full py-2 rounded-lg text-lg font-bold">Make Payment</button>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

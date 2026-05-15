@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"> 
+    {% comment %} Including htmx as local  {% endcomment %}
+    <script src="{% static 'js/htmx.js' %}"></script>
+  
+</head>
+<body>
+
+<header class="fixed inset-x-0 top-0 z-50 bg-white shadow">
+  <nav class="flex items-center justify-between p-6 lg:px-8">
+    <div class="flex lg:flex-1">
+      <a href="{% url 'website:homepage' %}" class="-m-1.5 p-1.5">
+        <span class="sr-only">Breast Cancer Conference</span>
+        <h1 class="text-xl font-bold">BBCC 2025</h1>
+      </a>
+    </div>
+    <div class="hidden lg:flex lg:gap-x-12">
+      <a href="{% url 'website:about' %}" class="text-sm font-semibold leading-6 text-gray-900">About</a>
+      <a href="{% url 'invitation' %}" class="text-sm font-semibold leading-6 text-gray-900">Invitation</a>
+      <a href="{% url 'speakers' %}" class="text-sm font-semibold leading-6 text-gray-900">Speakers</a>
+      <a href="{% url 'schedule' %}" class="text-sm font-semibold leading-6 text-gray-900">Schedule</a>
+      
+      {% if user.is_authenticated %}      
+      <a href="{% url 'abstract_submission' %}" class="text-sm font-semibold leading-6 text-gray-900">Abstract Submission</a>
+      {% else %}
+      <a href="{% url 'registration' %}" class="text-sm font-semibold leading-6 text-gray-900">Registration</a>
+      {% endif %}
+      <a href="#registration" class="text-sm font-semibold leading-6 text-gray-900">Sponsorship</a>
+    </div>
+    <div class="hidden lg:flex lg:flex-1 lg:justify-end">
+      {% if user.is_authenticated %}
+        <span class="text-sm font-semibold leading-6 text-gray-900">Welcome, {{ user.get_username }}</span>
+        <a href="{% url 'logout' %}" class="ml-4 text-sm font-semibold leading-6 text-gray-900">Logout</a>
+      {% else %}
+        <a href="{% url 'login' %}" class="text-sm font-semibold leading-6 text-gray-900">Login</a>
+      {% endif %}
+    </div>
+  </nav>
+</header>
+
+{% block content %}
+{% endblock %}
+
+<footer class="py-8 bg-gray-200 text-center">
+  <div class="text-gray-700">
+    <p>© 2025 Breast Cancer Conference. All rights reserved.</p>
+    <p>Follow us on our social channels.</p>
+  </div>
+</footer>
+</body>
+</html>

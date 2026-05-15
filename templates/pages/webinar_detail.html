@@ -1,0 +1,310 @@
+{% extends "pages/base.html" %}
+{% load static %}
+{% load site_tags %}
+
+{% block content %}
+    <!-- Hero Section with Webinar Title -->
+    <section class="relative bg-gradient-to-br from-primary-50 via-accent-50 to-secondary-50 overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 200C200 100 400 300 600 200C800 100 1000 300 1200 200V400H0V200Z" fill="#1976D2"/>
+                <path d="M0 250C200 150 400 350 600 250C800 150 1000 350 1200 250V400H0V250Z" fill="#00695C" opacity="0.5"/>
+            </svg>
+        </div>
+        <div class="container-custom relative z-10 py-8 md:py-12">
+            <div class="mb-8 flex items-center gap-3">
+                <a href="{% url 'website:webinars' %}" class="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    Back to Webinars
+                </a>
+            </div>
+            <div class="max-w-3xl">
+                <div class="inline-flex items-center gap-2 bg-accent-100 text-accent-800 px-4 py-2 rounded-full mb-6">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                    </svg>
+                    <span class="font-semibold">{{ webinar.get_type_display }}</span>
+                </div>
+                <h1 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-6">{{ webinar.title }}</h1>
+                <div class="flex flex-wrap items-center gap-6 text-text-secondary">
+                    {% if webinar.presenter_name %}
+                        <div class="flex items-center gap-3">
+                            {% if webinar.presenter_image %}
+                                <img src="{{ webinar.presenter_image.url }}" alt="{{ webinar.presenter_name }}" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            {% endif %}
+                            <div>
+                                <p class="font-semibold text-text-primary">{{ webinar.presenter_name }}</p>
+                                <p class="text-sm">Presenter</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                    {% if webinar.recorded_date %}
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v2h16V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V7z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>{{ webinar.recorded_date|date:"F d, Y" }}</span>
+                        </div>
+                    {% endif %}
+                    {% if webinar.duration %}
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00-.293.707l-.707.707a1 1 0 101.414 1.414l1.414-1.414A1 1 0 0011 6V6z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>{{ webinar.duration }}</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <section class="section bg-surface">
+        <div class="container-custom">
+            <div class="flex flex-col lg:flex-row lg:items-start" style="gap: 4%;">
+                <!-- Left Column: Video and Details (68%) -->
+                <div style="flex: 0 0 68%; max-width: 68%;" class="w-full lg:w-auto">
+                    <!-- Video Section -->
+                    {% if webinar.video_url %}
+                        <div class="mb-8">
+                            <div class="bg-black rounded-lg overflow-hidden shadow-lg">
+                                <div class="relative" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-height: 360px;">
+                                    <iframe 
+                                        src="https://www.youtube.com/embed/{{ webinar.video_url|extract_youtube_id }}?rel=0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowfullscreen
+                                        referrerpolicy="no-referrer-when-downgrade"
+                                        loading="lazy"
+                                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;">
+                                    </iframe>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Description -->
+                    {% if webinar.description %}
+                        <div class="mb-8">
+                            <h2 class="text-xl font-headline font-bold text-text-primary mb-4">About This Webinar</h2>
+                            <div class="prose prose-sm max-w-none text-text-secondary leading-relaxed">
+                                {{ webinar.description|linebreaks }}
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Panels Section -->
+                    {% if webinar.international_panel.all or webinar.national_panel.all or webinar.moderators.all %}
+                        <div class="mb-8">
+                            <h2 class="text-xl font-headline font-bold text-text-primary mb-6">Panel & Speakers</h2>
+                            
+                            <!-- International Panel -->
+                            {% if webinar.international_panel.all %}
+                                <div class="mb-10">
+                                    <h3 class="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
+                                        <svg class="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                                        </svg>
+                                        International Panel
+                                    </h3>
+                                    <div class="grid md:grid-cols-2 gap-4">
+                                        {% for panelist in webinar.international_panel.all %}
+                                            <div class="card-elevated hover-lift p-3">
+                                                <div class="flex items-start gap-3">
+                                                    {% if panelist.image %}
+                                                        <img src="{{ panelist.image.url }}" alt="{{ panelist.name }}" class="w-12 h-12 rounded-lg object-cover flex-shrink-0" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                                    {% else %}
+                                                        <div class="w-12 h-12 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                                                            <svg class="w-6 h-6 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div>
+                                                        <h4 class="font-semibold text-text-primary text-sm">{{ panelist.name }}</h4>
+                                                        {% if panelist.title %}
+                                                            <p class="text-xs text-text-secondary mb-1">{{ panelist.title }}</p>
+                                                        {% endif %}
+                                                        {% if panelist.bio %}
+                                                            <p class="text-xs text-text-tertiary leading-relaxed">{{ panelist.bio|truncatewords:15 }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            <!-- National Panel -->
+                            {% if webinar.national_panel.all %}
+                                <div class="mb-10">
+                                    <h3 class="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
+                                        <svg class="w-5 h-5 text-secondary" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a1 1 0 001 1h12a1 1 0 001-1V6a2 2 0 00-2-2H4zm12 4H4V6h12v2z" clip-rule="evenodd"/>
+                                        </svg>
+                                        National Panel
+                                    </h3>
+                                    <div class="grid md:grid-cols-2 gap-4">
+                                        {% for panelist in webinar.national_panel.all %}
+                                            <div class="card-elevated hover-lift p-3">
+                                                <div class="flex items-start gap-3">
+                                                    {% if panelist.image %}
+                                                        <img src="{{ panelist.image.url }}" alt="{{ panelist.name }}" class="w-12 h-12 rounded-lg object-cover flex-shrink-0" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                                    {% else %}
+                                                        <div class="w-12 h-12 rounded-lg bg-secondary-100 flex items-center justify-center flex-shrink-0">
+                                                            <svg class="w-6 h-6 text-secondary" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div>
+                                                        <h4 class="font-semibold text-text-primary text-sm">{{ panelist.name }}</h4>
+                                                        {% if panelist.title %}
+                                                            <p class="text-xs text-text-secondary mb-1">{{ panelist.title }}</p>
+                                                        {% endif %}
+                                                        {% if panelist.bio %}
+                                                            <p class="text-xs text-text-tertiary leading-relaxed">{{ panelist.bio|truncatewords:15 }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            <!-- Moderators -->
+                            {% if webinar.moderators.all %}
+                                <div class="mb-10">
+                                    <h3 class="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
+                                        <svg class="w-5 h-5 text-accent" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v2h8v-2zM2 8a2 2 0 11-4 0 2 2 0 014 0zM5 15a4 4 0 00-4 4v2h4v-2a4 4 0 004-4v-2a4 4 0 00-4 0z"/>
+                                        </svg>
+                                        Moderators
+                                    </h3>
+                                    <div class="grid md:grid-cols-2 gap-4">
+                                        {% for panelist in webinar.moderators.all %}
+                                            <div class="card-elevated hover-lift p-3">
+                                                <div class="flex items-start gap-3">
+                                                    {% if panelist.image %}
+                                                        <img src="{{ panelist.image.url }}" alt="{{ panelist.name }}" class="w-12 h-12 rounded-lg object-cover flex-shrink-0" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                                    {% else %}
+                                                        <div class="w-12 h-12 rounded-lg bg-accent-100 flex items-center justify-center flex-shrink-0">
+                                                            <svg class="w-6 h-6 text-accent" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        </div>
+                                                    {% endif %}
+                                                    <div>
+                                                        <h4 class="font-semibold text-text-primary text-sm">{{ panelist.name }}</h4>
+                                                        {% if panelist.title %}
+                                                            <p class="text-xs text-text-secondary mb-1">{{ panelist.title }}</p>
+                                                        {% endif %}
+                                                        {% if panelist.bio %}
+                                                            <p class="text-xs text-text-tertiary leading-relaxed">{{ panelist.bio|truncatewords:15 }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Resources -->
+                    <div class="pt-8 border-t border-border">
+                        <h2 class="text-2xl font-headline font-bold text-text-primary mb-6">Resources</h2>
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            {% if webinar.video_url %}
+                                <a href="{{ webinar.video_url }}" target="_blank" rel="noopener noreferrer" class="btn-primary inline-flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                    </svg>
+                                    Watch on YouTube
+                                </a>
+                            {% endif %}
+                            {% if webinar.slides_url %}
+                                <a href="{{ webinar.slides_url }}" target="_blank" rel="noopener noreferrer" class="btn-outline inline-flex items-center justify-center gap-2">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5 3a2 2 0 00-2 2v2H3a1 1 0 000 2h.02a3 3 0 005.956 0H9a1 1 0 000-2H8V5a2 2 0 00-2-2H5zm8-2a1 1 0 011 1v4a1 1 0 11-2 0V2a1 1 0 011-1zm0 8a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1zM5 12a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1z"/>
+                                    </svg>
+                                    Download Slides
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Sidebar (28%) -->
+                <div style="flex: 0 0 28%; max-width: 28%;" class="w-full lg:w-auto">
+                    <!-- Summary Card -->
+                    <div class="card-elevated sticky top-24 p-8 mb-8">
+                        <h3 class="text-xl font-headline font-bold text-text-primary mb-6">Webinar Details</h3>
+                        
+                        <div class="space-y-4">
+                            {% if webinar.type %}
+                                <div class="pb-4 border-b border-border">
+                                    <p class="text-sm font-semibold text-text-tertiary mb-1">TYPE</p>
+                                    <p class="text-text-primary">{{ webinar.get_type_display }}</p>
+                                </div>
+                            {% endif %}
+                            
+                            {% if webinar.recorded_date %}
+                                <div class="pb-4 border-b border-border">
+                                    <p class="text-sm font-semibold text-text-tertiary mb-1">DATE</p>
+                                    <p class="text-text-primary">{{ webinar.recorded_date|date:"F d, Y" }}</p>
+                                </div>
+                            {% endif %}
+                            
+                            {% if webinar.duration %}
+                                <div class="pb-4 border-b border-border">
+                                    <p class="text-sm font-semibold text-text-tertiary mb-1">DURATION</p>
+                                    <p class="text-text-primary">{{ webinar.duration }}</p>
+                                </div>
+                            {% endif %}
+                            
+                            {% if webinar.presenter_name %}
+                                <div class="pb-4 border-b border-border">
+                                    <p class="text-sm font-semibold text-text-tertiary mb-1">PRESENTER</p>
+                                    <p class="text-text-primary">{{ webinar.presenter_name }}</p>
+                                </div>
+                            {% endif %}
+                            
+                            <div class="pt-4">
+                                <a href="{% url 'website:webinars' %}" class="btn-outline w-full text-center">Back to Webinars</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Share Section -->
+                    <div class="card-elevated p-8">
+                        <h3 class="text-lg font-headline font-bold text-text-primary mb-4">Share This Webinar</h3>
+                        <div class="flex gap-3">
+                            <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}" target="_blank" rel="noopener noreferrer" class="flex-1 btn-outline text-center" title="Share on Facebook">
+                                <svg class="w-5 h-5 inline" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M8.29 20v-7.21H5.5V9.25h2.79V7.02c0-2.7 1.65-4.18 4.07-4.18 1.16 0 2.15.09 2.44.13v2.83h-1.68c-1.31 0-1.56.62-1.56 1.53v2h3.1l-.4 3.54h-2.7V20"/>
+                                </svg>
+                            </a>
+                            <a href="https://twitter.com/intent/tweet?url={{ request.build_absolute_uri }}&text={{ webinar.title }}" target="_blank" rel="noopener noreferrer" class="flex-1 btn-outline text-center" title="Share on Twitter">
+                                <svg class="w-5 h-5 inline" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M19.5 3.5c-.7.3-1.5.5-2.3.6.8-.5 1.5-1.2 1.8-2.1-.8.5-1.7.8-2.6 1-.7-.8-1.8-1.3-3-1.3-2.3 0-4.1 1.9-4.1 4.1 0 .3 0 .7.1 1-3.4-.2-6.5-1.8-8.5-4.3-.4.6-.6 1.4-.6 2.2 0 1.4.7 2.7 1.8 3.5-.7 0-1.3-.2-1.9-.5v.1c0 2 1.4 3.7 3.3 4.1-.3.1-.8.1-1.2.1-.3 0-.6 0-.9-.1.6 1.9 2.3 3.3 4.4 3.4-1.4 1.1-3.2 1.7-5.1 1.7-.3 0-.7 0-1-.1 1.8 1.2 4 1.9 6.3 1.9 7.6 0 11.7-6.3 11.7-11.7 0-.2 0-.4 0-.6.8-.6 1.5-1.3 2-2.1"/>
+                                </svg>
+                            </a>
+                            <a href="mailto:?subject={{ webinar.title }}&body={{ request.build_absolute_uri }}" class="flex-1 btn-outline text-center" title="Share via Email">
+                                <svg class="w-5 h-5 inline" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
+                                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/>
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

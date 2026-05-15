@@ -1,0 +1,667 @@
+
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block content %}
+    <!-- Page Hero Section -->
+    <section class="relative bg-gradient-to-br from-primary-50 via-secondary-50 to-accent-50 overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 200C200 150 400 250 600 200C800 150 1000 250 1200 200V400H0V200Z" fill="#E91E63"/>
+                <path d="M0 250C200 200 400 300 600 250C800 200 1000 300 1200 250V400H0V250Z" fill="#1976D2" opacity="0.5"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10 py-16 md:py-20">
+            <div class="max-w-3xl">
+                <div class="inline-flex items-center gap-2 bg-secondary-100 text-secondary-800 px-4 py-2 rounded-full mb-6">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="font-semibold">Stay Informed</span>
+                </div>
+                {% if hero and hero.title %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">{{ hero.title }}</h1>
+                {% else %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">News & Updates</h1>
+                {% endif %}
+                {% if hero and hero.subtitle %}
+                    <p class="text-lg text-text-secondary leading-relaxed mb-8">{{ hero.subtitle }}</p>
+                {% else %}
+                    <p class="text-lg text-text-secondary leading-relaxed mb-8">Stay connected with the latest developments in breast cancer research, society announcements, and medical breakthroughs shaping the future of patient care.</p>
+                {% endif %}
+                {% if call_to_action %}
+                    <div class="mb-8 flex flex-wrap gap-4">
+                        {% if call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            <a href="{{ call_to_action.primary_button_url }}" class="btn-primary inline-block">{{ call_to_action.primary_button_text }}</a>
+                        {% endif %}
+                        {% if call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                            <a href="{{ call_to_action.secondary_button_url }}" class="btn-outline inline-block">{{ call_to_action.secondary_button_text }}</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Breaking News Banner -->
+    <section class="bg-secondary text-white py-4">
+        <div class="container-custom">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full">
+                    <svg class="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="font-semibold text-sm">BREAKING</span>
+                </div>
+                <p class="text-sm md:text-base font-semibold">New clinical trial shows 45% improvement in early-stage detection accuracy using AI-enhanced imaging</p>
+                <a href="javascript:void(0)" class="ml-auto text-sm font-semibold hover:underline whitespace-nowrap">Read More →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Filter and Search Section -->
+    <section class="section-compact bg-surface border-b border-border">
+        <div class="container-custom">
+            <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                <!-- Search Bar -->
+                <div class="relative flex-1 max-w-md w-full">
+                    <input type="text" id="newsSearch" placeholder="Search news and updates..." class="form-input pl-12 pr-4">
+                    <svg class="w-5 h-5 text-text-tertiary absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="flex flex-wrap gap-3">
+                    <button class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-700 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                        </svg>
+                        <span class="text-sm font-semibold">All Categories</span>
+                    </button>
+                    <button class="inline-flex items-center gap-2 px-4 py-2 border-2 border-border text-text-secondary rounded-md hover:border-primary hover:text-primary transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                        </svg>
+                        <span class="text-sm font-semibold">Filters</span>
+                    </button>
+                    <button class="inline-flex items-center gap-2 px-4 py-2 border-2 border-border text-text-secondary rounded-md hover:border-primary hover:text-primary transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span class="text-sm font-semibold">Reset</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Active Filters Display -->
+            <div class="flex flex-wrap gap-2 mt-4">
+                <span class="inline-flex items-center gap-2 bg-primary-50 text-primary px-3 py-1 rounded-full text-sm">
+                    Research Updates
+                    <button class="hover:text-primary-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </span>
+                <span class="inline-flex items-center gap-2 bg-secondary-50 text-secondary px-3 py-1 rounded-full text-sm">
+                    November 2025
+                    <button class="hover:text-secondary-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured News Section -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-3xl font-headline font-bold text-text-primary">Featured Stories</h2>
+                <button class="text-primary font-semibold hover:text-primary-700 transition-colors inline-flex items-center gap-2">
+                    View All
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-8">
+                <!-- Featured Article 1 -->
+                <article class="card-elevated hover-lift hover-shadow group">
+                    <div class="relative mb-6 overflow-hidden rounded-lg">
+                        <img src="https://images.unsplash.com/photo-1701848055770-effbdb148e15" alt="Medical researchers analyzing breast cancer screening data on digital displays in modern laboratory" class="w-full h-80 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://img.rocket.new/generatedImages/rocket_gen_img_165f12c40-1763650256658.png'; this.onerror=null;">
+                        <div class="absolute top-4 left-4 bg-secondary text-white px-4 py-2 rounded-full text-sm font-semibold">
+                            Featured
+                        </div>
+                        <div class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-text-primary">
+                            5 min read
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="inline-flex items-center gap-1 bg-primary-50 text-primary px-3 py-1 rounded-full text-xs font-semibold">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                            </svg>
+                            Research Breakthrough
+                        </span>
+                        <span class="text-sm text-text-secondary">November 18, 2025</span>
+                    </div>
+                    <h3 class="text-2xl font-headline font-bold text-text-primary mb-3 group-hover:text-primary transition-colors">Revolutionary AI Algorithm Achieves 95% Accuracy in Early Detection</h3>
+                    <p class="text-text-secondary mb-4 leading-relaxed">Groundbreaking machine learning system developed by BSBCS researchers demonstrates unprecedented accuracy in identifying early-stage breast cancer, potentially transforming screening protocols across Bangladesh.</p>
+                    <div class="flex items-center gap-4 mb-4 pb-4 border-b border-border">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_141112f52-1763650256663.png" alt="Dr. Nusrat Jahan, lead researcher in breast cancer imaging technology" class="w-12 h-12 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.pexels.com/photos/5215024/pexels-photo-5215024.jpeg?auto=compress&cs=tinysrgb&w=800'; this.onerror=null;">
+                        <div>
+                            <p class="font-semibold text-text-primary">Dr. Nusrat Jahan</p>
+                            <p class="text-sm text-text-secondary">Lead Researcher, Imaging Technology</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors">
+                            Read Full Article
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </a>
+                        <div class="flex items-center gap-3">
+                            <button class="text-text-tertiary hover:text-primary transition-colors" title="Share article">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                                </svg>
+                            </button>
+                            <button class="text-text-tertiary hover:text-secondary transition-colors" title="Save article">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Featured Article 2 -->
+                <article class="card-elevated hover-lift hover-shadow group">
+                    <div class="relative mb-6 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_11dd3be87-1763650256637.png" alt="International medical conference attendees networking and discussing breast cancer treatment innovations" class="w-full h-80 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div class="absolute top-4 left-4 bg-accent text-white px-4 py-2 rounded-full text-sm font-semibold">
+                            Event Announcement
+                        </div>
+                        <div class="absolute top-4 right-4 bg-surface/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-text-primary">
+                            3 min read
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="inline-flex items-center gap-1 bg-accent-50 text-accent px-3 py-1 rounded-full text-xs font-semibold">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                            </svg>
+                            Conference
+                        </span>
+                        <span class="text-sm text-text-secondary">November 15, 2025</span>
+                    </div>
+                    <h3 class="text-2xl font-headline font-bold text-text-primary mb-3 group-hover:text-primary transition-colors">Annual Symposium 2025: Registration Opens with International Keynote Speakers</h3>
+                    <p class="text-text-secondary mb-4 leading-relaxed">Join 500+ medical professionals for three days of cutting-edge research presentations, hands-on workshops, and networking opportunities at Bangladesh's premier breast cancer research conference.</p>
+                    <div class="flex items-center gap-4 mb-4 pb-4 border-b border-border">
+                        <img src="https://images.unsplash.com/photo-1699156246635-98dcc81f1d64" alt="Dr. Ahmed Hassan, conference organizing committee chair" class="w-12 h-12 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div>
+                            <p class="font-semibold text-text-primary">Dr. Ahmed Hassan</p>
+                            <p class="text-sm text-text-secondary">Conference Chair</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors">
+                            View Details & Register
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </a>
+                        <div class="flex items-center gap-3">
+                            <button class="text-text-tertiary hover:text-primary transition-colors" title="Share article">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                                </svg>
+                            </button>
+                            <button class="text-text-tertiary hover:text-secondary transition-colors" title="Save article">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- Latest News Grid -->
+    <section class="section bg-primary-50">
+        <div class="container-custom">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-3xl font-headline font-bold text-text-primary">Latest Updates</h2>
+                <div class="flex items-center gap-3">
+                    <span class="text-sm text-text-secondary">Sort by:</span>
+                    <select class="form-input py-2 text-sm">
+                        <option>Most Recent</option>
+                        <option>Most Popular</option>
+                        <option>Most Relevant</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- News Card 1 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_1307c0592-1763650255662.png" alt="Medical team reviewing patient treatment plans using advanced digital health records system" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.pexels.com/photos/7089401/pexels-photo-7089401.jpeg?auto=compress&cs=tinysrgb&w=800'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            2 days ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-primary-50 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Society News
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">New Member Orientation Program Launches Next Month</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Comprehensive onboarding initiative designed to integrate new members into society activities and research collaborations.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Read More
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+
+                <!-- News Card 2 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_1955f0fac-1763650256657.png" alt="Pharmaceutical research laboratory with scientists conducting breast cancer drug trials" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1582719471384-894fbb16e074?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            3 days ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-secondary-50 text-secondary px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Industry Update
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">FDA Approves Novel Targeted Therapy for HER2-Positive Cases</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Breakthrough medication demonstrates significant efficacy in clinical trials, offering new hope for patients with aggressive subtypes.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Read More
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+
+                <!-- News Card 3 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_1c1439a22-1763650253501.png" alt="Genetic research laboratory analyzing breast cancer biomarkers and molecular pathways" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            1 week ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-accent-50 text-accent px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Research Grant
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">₹5 Crore Research Grant Awarded for Genetic Studies</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Government funding supports comprehensive investigation into genetic predisposition factors among South Asian populations.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Read More
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+
+                <!-- News Card 4 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop" alt="Medical professionals participating in virtual webinar on latest breast cancer treatment protocols" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.pexels.com/photos/3825517/pexels-photo-3825517.jpeg?auto=compress&cs=tinysrgb&w=800'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            1 week ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-warning-light text-warning-dark px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Webinar
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">Free CME Webinar: Advances in Immunotherapy Approaches</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Join leading oncologists for an interactive session exploring latest immunotherapy protocols and patient selection criteria.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Register Now
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+
+                <!-- News Card 5 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_1206142d8-1763650255669.png" alt="Healthcare policy makers discussing national breast cancer screening program implementation" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            2 weeks ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-success-light text-success-dark px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Policy Update
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">National Screening Guidelines Updated for 2025</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Ministry of Health adopts BSBCS recommendations for enhanced early detection protocols across public healthcare facilities.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Read More
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+
+                <!-- News Card 6 -->
+                <article class="card hover-lift hover-shadow group">
+                    <div class="relative mb-4 overflow-hidden rounded-lg">
+                        <img src="https://img.rocket.new/generatedImages/rocket_gen_img_1588a7401-1763650255557.png" alt="Medical journal publication featuring breakthrough breast cancer research findings" class="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                        <div class="absolute top-3 right-3 bg-surface/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-text-primary">
+                            2 weeks ago
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1 bg-primary-50 text-primary px-3 py-1 rounded-full text-xs font-semibold mb-3">
+                        Publication
+                    </span>
+                    <h3 class="text-lg font-headline font-semibold text-text-primary mb-2 group-hover:text-primary transition-colors">BSBCS Journal November Issue Now Available</h3>
+                    <p class="text-sm text-text-secondary mb-4 leading-relaxed">Latest edition features 12 peer-reviewed articles covering surgical innovations, treatment outcomes, and patient quality of life studies.</p>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                        Access Journal
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </article>
+            </div>
+
+            <!-- Load More Button -->
+            <div class="text-center mt-12">
+                <button class="btn-outline">
+                    Load More Articles
+                    <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Press Releases Section -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-3xl font-headline font-bold text-text-primary mb-2">Press Releases</h2>
+                    <p class="text-text-secondary">Official statements and media announcements</p>
+                </div>
+                <a href="javascript:void(0)" class="btn-outline">
+                    View All Releases
+                </a>
+            </div>
+
+            <div class="space-y-6">
+                <!-- Press Release 1 -->
+                <article class="card border-l-4 border-secondary hover-shadow">
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <div class="flex-shrink-0">
+                            <div class="bg-secondary-50 rounded-lg p-6 text-center">
+                                <p class="text-3xl font-bold text-secondary">15</p>
+                                <p class="text-sm font-semibold text-secondary-700">NOV</p>
+                                <p class="text-xs text-text-secondary mt-1">2025</p>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex items-center gap-1 bg-secondary-100 text-secondary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Press Release
+                                </span>
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3">BSBCS Announces Strategic Partnership with International Cancer Research Institute</h3>
+                            <p class="text-text-secondary mb-4 leading-relaxed">Collaborative agreement establishes knowledge exchange program, joint research initiatives, and training opportunities for Bangladeshi oncologists with leading global cancer research institution.</p>
+                            <div class="flex flex-wrap gap-4">
+                                <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                                    Read Full Release
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </a>
+                                <a href="javascript:void(0)" class="inline-flex items-center text-text-secondary text-sm font-semibold hover:text-primary transition-colors">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    Download Media Kit
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Press Release 2 -->
+                <article class="card border-l-4 border-accent hover-shadow">
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <div class="flex-shrink-0">
+                            <div class="bg-accent-50 rounded-lg p-6 text-center">
+                                <p class="text-3xl font-bold text-accent">08</p>
+                                <p class="text-sm font-semibold text-accent-700">NOV</p>
+                                <p class="text-xs text-text-secondary mt-1">2025</p>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex items-center gap-1 bg-accent-100 text-accent-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Press Release
+                                </span>
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3">Society Membership Reaches Historic Milestone of 2,500 Active Members</h3>
+                            <p class="text-text-secondary mb-4 leading-relaxed">BSBCS celebrates unprecedented growth in professional membership, reflecting increasing commitment to collaborative breast cancer research and clinical excellence across Bangladesh's medical community.</p>
+                            <div class="flex flex-wrap gap-4">
+                                <a href="javascript:void(0)" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                                    Read Full Release
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </a>
+                                <a href="javascript:void(0)" class="inline-flex items-center text-text-secondary text-sm font-semibold hover:text-primary transition-colors">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    Download Media Kit
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Subscription Section -->
+    <section class="section bg-gradient-to-br from-primary via-primary-600 to-primary-700 text-white relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="100" fill="white"/>
+                <circle cx="1100" cy="300" r="150" fill="white"/>
+                <circle cx="600" cy="200" r="80" fill="white"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10">
+            <div class="max-w-3xl mx-auto text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-full mb-6">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <h2 class="text-3xl md:text-4xl font-headline font-bold mb-4">Stay Informed with Our Newsletter</h2>
+                <p class="text-lg text-primary-100 mb-8 leading-relaxed">Receive monthly updates on breakthrough research, upcoming events, and clinical insights directly in your inbox.</p>
+                
+                <form class="max-w-xl mx-auto">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <input type="email" placeholder="Enter your email address" class="flex-1 px-6 py-4 rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-white" required>
+                        <button type="submit" class="btn bg-white text-primary hover:bg-primary-50 focus:ring-white whitespace-nowrap">
+                            Subscribe Now
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="text-sm text-primary-100 mt-4">Join 5,000+ healthcare professionals receiving our updates. Unsubscribe anytime.</p>
+                </form>
+
+                <!-- Newsletter Frequency Options -->
+                <div class="flex flex-wrap justify-center gap-4 mt-8">
+                    <label class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/20 transition-colors">
+                        <input type="checkbox" class="form-checkbox rounded text-secondary border-white/30" checked>
+                        <span class="text-sm font-semibold">Weekly Digest</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/20 transition-colors">
+                        <input type="checkbox" class="form-checkbox rounded text-secondary border-white/30">
+                        <span class="text-sm font-semibold">Event Alerts</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/20 transition-colors">
+                        <input type="checkbox" class="form-checkbox rounded text-secondary border-white/30">
+                        <span class="text-sm font-semibold">Research Updates</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Social Media Integration -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl font-headline font-bold text-text-primary mb-4">Follow Our Social Media</h2>
+                <p class="text-lg text-text-secondary">Stay connected with real-time updates and community discussions</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Twitter Feed -->
+                <div class="card-elevated">
+                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+                        <div class="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-headline font-semibold text-text-primary">Twitter</h3>
+                            <p class="text-sm text-text-secondary">@BSBCS_Official</p>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Exciting news! Our AI-powered early detection system has been featured in @MedicalJournal's latest issue. Read more about how technology is transforming breast cancer screening.</p>
+                            <span class="text-xs text-text-tertiary">2 hours ago</span>
+                        </div>
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Registration for our Annual Symposium 2025 is now open! Early bird discount available until December 1st. Don't miss this opportunity to connect with 500+ professionals.</p>
+                            <span class="text-xs text-text-tertiary">5 hours ago</span>
+                        </div>
+                    </div>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors mt-4">
+                        View More Tweets
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <!-- LinkedIn Feed -->
+                <div class="card-elevated">
+                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+                        <div class="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-headline font-semibold text-text-primary">LinkedIn</h3>
+                            <p class="text-sm text-text-secondary">BSBCS Official</p>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Proud to announce our strategic partnership with the International Cancer Research Institute. This collaboration will enhance training opportunities and research capabilities for our members.</p>
+                            <span class="text-xs text-text-tertiary">1 day ago</span>
+                        </div>
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Congratulations to Dr. Fatima Rahman for her groundbreaking research on targeted therapy! Her work continues to inspire our community and advance patient care.</p>
+                            <span class="text-xs text-text-tertiary">2 days ago</span>
+                        </div>
+                    </div>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors mt-4">
+                        View LinkedIn Page
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <!-- Facebook Feed -->
+                <div class="card-elevated">
+                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+                        <div class="w-12 h-12 bg-primary-50 rounded-full flex items-center justify-center">
+                            <svg class="w-6 h-6 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-headline font-semibold text-text-primary">Facebook</h3>
+                            <p class="text-sm text-text-secondary">@BSBCSBangladesh</p>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Join us for a free webinar on advances in immunotherapy approaches. CME credits available! Register now through the link in our bio.</p>
+                            <span class="text-xs text-text-tertiary">3 hours ago</span>
+                        </div>
+                        <div class="p-4 bg-background rounded-lg">
+                            <p class="text-sm text-text-primary mb-2">Thank you to all 2,500+ members who make our community strong! Together, we're advancing breast cancer care and improving patient outcomes across Bangladesh.</p>
+                            <span class="text-xs text-text-tertiary">1 day ago</span>
+                        </div>
+                    </div>
+                    <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors mt-4">
+                        Visit Facebook Page
+                        <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        // Search Functionality
+        const searchInput = document.getElementById('newsSearch');
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            // Implement search filtering logic here
+            console.log('Searching for:', searchTerm);
+        });
+
+        // Newsletter form submission
+        const newsletterForm = document.querySelector('form');
+        newsletterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = e.target.querySelector('input[type="email"]').value;
+            console.log('Newsletter subscription:', email);
+            // Implement newsletter subscription logic here
+            alert('Thank you for subscribing to our newsletter!');
+        });
+    </script>
+{% endblock %}

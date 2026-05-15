@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+
+  <div class="flex justify-center items-center min-h-screen bg-gradient-to-r from-pink-200 to-purple-300">
+      <div class="bg-white rounded-lg shadow-lg p-8 w-96">
+          <div class="flex justify-center mb-4">
+          <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="rounded-full">
+          </div>
+            <h2 class="text-center text-2xl font-bold text-gray-800">{{ event.name }} {{ event.year }}</h2>
+            <h3 class="text-center text-gray-600">Participant Badge</h3>
+          <div class="mt-4">
+                <p class="text-gray-800">Name: <span class="font-semibold">{{ participant.name }}</span></p>
+                <p class="text-gray-800">Department: <span class="font-semibold">{{ participant.department }}</span></p>
+                <p class="text-gray-800">Organization: <span class="font-semibold">{{ participant.organization }}</span></p>
+                <p class="text-gray-800">Country: <span class="font-semibold">{{ participant.country }}</span></p>
+          </div>
+          <div class="mt-4 flex justify-center">
+                <button class="bg-pink-500 text-white py-2 px-6 rounded hover:bg-pink-600 transition duration-200">
+                    Print Badge
+                </button>
+           </div>
+      </div>
+  </div>
+</body>
+</html>

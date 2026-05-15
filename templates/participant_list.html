@@ -1,0 +1,49 @@
+{% extends "gene_base.html" %}
+
+{% block title %}Participants{% endblock %}
+
+{% block content %}
+    <style>
+        .custom-max-width {
+            max-width: 95rem;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+    <div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10">
+        <div class="mx-auto max-w-full text-center px-4">
+            <h1 class="text-4xl sm:text-6xl font-extrabold md-10">Participants of the {{ event.name }} {{ event.year }}</h1>
+            <p class="mt-4 text-lg">{{ event.slogan }}</p>
+        </div>
+    </div>
+    <section id="participants" class="py-10">
+        <div class="custom-max-width px-4 overflow-x-auto py-6">
+            <table class="min-w-full divide-y divide-gray-200 bg-white table-auto">
+                <thead>
+                    <tr class="bg-pink-300">
+                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Name</strong></th>
+                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Degree</strong></th>
+                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Department</strong></th>
+                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Organization</strong></th>
+                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Country</strong></th>
+                    </tr>
+                </thead>
+                <tbody 
+                    id="participant-list" 
+                    hx-get="{% url 'registration:participant_list_partial' event.id %}" 
+                    hx-trigger="load"
+                    hx-target="#participant-list"
+                    hx-swap="innerHTML"
+                    class="bg-white divide-y divide-gray-400">
+                    <tr>
+                        <td colspan="5" class="py-4 text-center">Loading participants...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="text-center mt-8">
+            <a href="{% url 'registration:home' event.id %}" class="inline-block px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">Back to Event Details</a>
+        </div>
+    </section>
+    <br/><br/><br/><br/><br/><br/>
+{% endblock %}

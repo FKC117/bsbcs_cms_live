@@ -1,0 +1,7 @@
+myenv\Scripts\activate
+cd conference
+python manage.py runserver
+python manage.py makemigrations
+python manage.py migrate
+
+ssh bsbcs@163.53.151.197

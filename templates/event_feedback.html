@@ -1,0 +1,127 @@
+{% extends "gene_base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Feedback Form{% endblock %}
+
+{% block content %}
+<br/>
+<section class="min-h-screen bg-pink-100 py-10 mt-10">
+  <div class="container">
+    <!-- Header Section -->
+    <div class="text-center mb-5">
+      <h1 class="text-4xl font-bold text-pink-900">Feedback for {{ event.name }} {{ event.year }}</h1>
+      <p class="text-lg text-gray-700 mt-2">We value your feedback! Please take a moment to share your thoughts.</p>
+    </div>
+
+    <!-- Form Section -->
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-md-10">
+        <div class="card shadow border-1 p-3">
+          <div class="card-body">
+            <form method="POST">
+              {% csrf_token %}
+
+              <!-- Loop through questions -->
+              {% for question in questions %}
+                <div class="mb-4">
+                  <!-- Question Label -->
+                  <label class="form-label fw-bold fs-5 mb-3">
+                    {{ question.question_text }}
+                    {% if question.is_required %}
+                      <span class="text-danger">*</span>
+                    {% endif %}
+                  </label>
+
+                  <!-- Text-based Question -->
+                  {% if question.question_type == 'text' %}
+                    <textarea name="response_{{ question.id }}" 
+                              class="form-control" 
+                              rows="4" 
+                              placeholder="Your response..." 
+                              {% if question.is_required %}required{% endif %}></textarea>
+
+                  <!-- Radio-based Question -->
+                  {% elif question.question_type == 'radio' %}
+                    <div class="d-flex flex-column gap-2">
+                      {% for choice in question.get_columns %}
+                        <div class="form-check">
+                          <input type="radio" 
+                                 name="response_{{ question.id }}" 
+                                 id="response_{{ question.id }}_{{ forloop.counter }}" 
+                                 value="{{ choice }}" 
+                                 class="form-check-input" 
+                                 {% if question.is_required %}required{% endif %}>
+                          <label for="response_{{ question.id }}_{{ forloop.counter }}" 
+                                 class="form-check-label">{{ choice }}</label>
+                        </div>
+                      {% endfor %}
+                    </div>
+
+                  <!-- Matrix-based Question -->
+                  {% elif question.question_type == 'matrix' %}
+                    <div class="table-responsive">
+                      <table class="table table-bordered">
+                        <thead class="bg-light">
+                          <tr>
+                            <th scope="col" class="fw-normal"></th>
+                            {% for column in question.get_columns %}
+                              <th scope="col" class="text-center fw-normal">{{ column }}</th>
+                            {% endfor %}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in question.get_rows %}
+                            <tr>
+                              <th scope="row" class="fw-normal">{{ row }}</th>
+                              {% for column in question.get_columns %}
+                                <td class="text-center">
+                                  <input type="radio" 
+                                         name="response_{{ question.id }}_{{ forloop.parentloop.counter }}" 
+                                         value="{{ column }}" 
+                                         class="form-check-input" 
+                                         {% if question.is_required %}required{% endif %}>
+                                </td>
+                              {% endfor %}
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% endif %}
+                </div>
+                <hr class="my-4">
+              {% endfor %}
+
+              <!-- Submit Button -->
+              <div class="d-grid mt-5">
+                <button type="submit" class="btn btn-pink text-white font-bold py-2 rounded">
+                  Submit Feedback
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Bootstrap CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- Custom Styles -->
+<style>
+  body {
+    font-family: 'Arial', sans-serif;
+    background-color: #fce4ec;
+  }
+  .btn-pink {
+    background-color: #ec407a;
+    border-color: #ec407a;
+  }
+  .btn-pink:hover {
+    background-color: #d81b60;
+    border-color: #d81b60;
+  }
+</style>
+{% endblock %}

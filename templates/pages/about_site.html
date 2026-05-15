@@ -1,0 +1,531 @@
+
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block content %}
+    <!-- Hero Section with Mission Statement -->
+    <section class="relative bg-gradient-to-br from-primary-50 via-secondary-50 to-accent-50 overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 300C200 200 400 400 600 300C800 200 1000 400 1200 300V600H0V300Z" fill="#E91E63"/>
+                <path d="M0 350C200 250 400 450 600 350C800 250 1000 450 1200 350V600H0V350Z" fill="#1976D2" opacity="0.5"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10 py-16 md:py-24">
+            <div class="max-w-4xl mx-auto text-center">
+                <div class="inline-flex items-center gap-2 bg-secondary-100 text-secondary-800 px-4 py-2 rounded-full mb-6">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z"/>
+                    </svg>
+                    <span class="font-semibold">Established 2013</span>
+                </div>
+                {% if hero and hero.title %}
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-headline font-bold text-text-primary mb-6">{{ hero.title }}</h1>
+                {% endif %}
+                {% if hero and hero.subtitle %}
+                    <p class="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed">{{ hero.subtitle }}</p>
+                {% endif %}
+                <div class="flex flex-wrap gap-4 justify-center">
+                    {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                        <a href="{{ call_to_action.primary_button_url }}" class="btn-primary">{{ call_to_action.primary_button_text }}</a>
+                    {% endif %}
+                    {% if call_to_action and call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                        <a href="{{ call_to_action.secondary_button_url }}" class="btn-outline">{{ call_to_action.secondary_button_text }}</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Stats Section -->
+    {% if stats_counters %}
+    <section class="section-compact bg-surface border-y border-border">
+        <div class="container-custom">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+                {% for stat in stats_counters %}
+                    <div class="text-center">
+                        <div class="inline-flex items-center justify-center w-14 h-14 bg-primary-50 rounded-full mb-3">
+                            <svg class="w-7 h-7 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <p class="text-lg font-bold text-primary mb-2">{{ stat.title }}</p>
+                        <p class="text-4xl font-bold text-text-secondary">{{ stat.count_text }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Mission, Vision & Values Section -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Our Foundation</h2>
+                <p class="text-lg text-text-secondary max-w-3xl mx-auto">Guided by principles of compassionate expertise, scientific rigor, and collaborative healing</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Mission Card -->
+                {% if mission %}
+                    <div class="card-elevated hover-lift hover-shadow">
+                        <div class="flex items-center gap-4 mb-6">
+                            {% if mission.icon_svg %}
+                                <div class="p-4 bg-primary-50 rounded-lg">
+                                    <img src="{{ mission.icon_svg.url }}" alt="{{ mission.title }} icon" class="w-8 h-8 object-contain">
+                                </div>
+                            {% else %}
+                                <div class="p-4 bg-primary-50 rounded-lg">
+                                    <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                    </svg>
+                                </div>
+                            {% endif %}
+                            <h3 class="text-2xl font-headline font-semibold text-text-primary">{{ mission.title }}</h3>
+                        </div>
+                        <p class="text-text-secondary leading-relaxed">{{ mission.description }}</p>
+                    </div>
+                {% endif %}
+
+                <!-- Vision Card -->
+                {% if vision %}
+                    <div class="card-elevated hover-lift hover-shadow">
+                        <div class="flex items-center gap-4 mb-6">
+                            {% if vision.icon_svg %}
+                                <div class="p-4 bg-secondary-50 rounded-lg">
+                                    <img src="{{ vision.icon_svg.url }}" alt="{{ vision.title }} icon" class="w-8 h-8 object-contain">
+                                </div>
+                            {% else %}
+                                <div class="p-4 bg-secondary-50 rounded-lg">
+                                    <svg class="w-8 h-8 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                    </svg>
+                                </div>
+                            {% endif %}
+                            <h3 class="text-2xl font-headline font-semibold text-text-primary">{{ vision.title }}</h3>
+                        </div>
+                        <p class="text-text-secondary leading-relaxed">{{ vision.description }}</p>
+                    </div>
+                {% endif %}
+
+                <!-- Values Card -->
+                {% if values %}
+                    <div class="card-elevated hover-lift hover-shadow">
+                        <div class="flex items-center gap-4 mb-6">
+                            <div class="p-4 bg-accent-50 rounded-lg">
+                                {% if values_header_icon_url %}
+                                    <img src="{{ values_header_icon_url }}" alt="{{ values_header_title }} icon" class="w-8 h-8 object-contain">
+                                {% else %}
+                                    <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                    </svg>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-2xl font-headline font-semibold text-text-primary">{{ values_header_title }}</h3>
+                        </div>
+                        <ul class="space-y-3 text-text-secondary">
+                            {% for item in values_items %}
+                                <li class="flex items-start gap-2">
+                                    <svg class="w-5 h-5 text-accent flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span>{{ item }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Timeline Section -->
+    {% if timeline_section and timeline_items %}
+    <section class="section bg-primary-50">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">{{ timeline_section.title }}</h2>
+                {% if timeline_section.intro %}
+                <p class="text-lg text-text-secondary">{{ timeline_section.intro }}</p>
+                {% endif %}
+            </div>
+
+            <div class="max-w-4xl mx-auto">
+                {% for item in timeline_items %}
+                    {% if forloop.counter|divisibleby:3 %}
+                        <!-- Timeline Item - accent color -->
+                        <div class="relative pl-8 {% if not forloop.last %}pb-12{% endif %} border-l-4 border-accent">
+                            <div class="absolute -left-3 top-0 w-6 h-6 bg-accent rounded-full border-4 border-surface"></div>
+                            <div class="card hover-lift hover-shadow">
+                                <div class="flex items-center gap-3 mb-3">
+                                    {% if item.event_date %}
+                                    <span class="text-2xl font-bold text-accent">{{ item.event_date|date:"Y" }}</span>
+                                    {% endif %}
+                                </div>
+                                <h3 class="text-xl font-headline font-semibold text-text-primary mb-2">{{ item.title }}</h3>
+                                {% if item.description %}
+                                <p class="text-text-secondary">{{ item.description }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% elif forloop.counter|divisibleby:2 %}
+                        <!-- Timeline Item - secondary color -->
+                        <div class="relative pl-8 {% if not forloop.last %}pb-12{% endif %} border-l-4 border-secondary">
+                            <div class="absolute -left-3 top-0 w-6 h-6 bg-secondary rounded-full border-4 border-surface"></div>
+                            <div class="card hover-lift hover-shadow">
+                                <div class="flex items-center gap-3 mb-3">
+                                    {% if item.event_date %}
+                                    <span class="text-2xl font-bold text-secondary">{{ item.event_date|date:"Y" }}</span>
+                                    {% endif %}
+                                </div>
+                                <h3 class="text-xl font-headline font-semibold text-text-primary mb-2">{{ item.title }}</h3>
+                                {% if item.description %}
+                                <p class="text-text-secondary">{{ item.description }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <!-- Timeline Item - primary color -->
+                        <div class="relative pl-8 {% if not forloop.last %}pb-12{% endif %} border-l-4 border-primary">
+                            <div class="absolute -left-3 top-0 w-6 h-6 bg-primary rounded-full border-4 border-surface"></div>
+                            <div class="card hover-lift hover-shadow">
+                                <div class="flex items-center gap-3 mb-3">
+                                    {% if item.event_date %}
+                                    <span class="text-2xl font-bold text-primary">{{ item.event_date|date:"Y" }}</span>
+                                    {% endif %}
+                                </div>
+                                <h3 class="text-xl font-headline font-semibold text-text-primary mb-2">{{ item.title }}</h3>
+                                {% if item.description %}
+                                <p class="text-text-secondary">{{ item.description }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+    
+    <!-- Leadership Section -->
+    <section class="section">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Leaders</h2>
+                <p class="text-lg text-text-secondary">Distinguished leaders guiding our mission with expertise and vision</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+                {% for member in board_members %}
+                    <div class="card-elevated hover-lift hover-shadow text-center">
+                        <div class="relative mb-6 inline-block">
+                            {% if forloop.counter|divisibleby:3 %}
+                                <div class="w-32 h-32 rounded-full mx-auto border-4 border-accent bg-accent-50 flex items-center justify-center overflow-hidden">
+                            {% elif forloop.counter|divisibleby:2 %}
+                                <div class="w-32 h-32 rounded-full mx-auto border-4 border-secondary bg-secondary-50 flex items-center justify-center overflow-hidden">
+                            {% else %}
+                                <div class="w-32 h-32 rounded-full mx-auto border-4 border-primary bg-primary-50 flex items-center justify-center overflow-hidden">
+                            {% endif %}
+                                    {% if member.image_url %}
+                                        <img src="{{ member.image_url.url }}" alt="{{ member.name }}" class="w-32 h-32 rounded-full object-cover mx-auto" loading="lazy">
+                                    {% else %}
+                                        <svg class="w-16 h-16 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                        </svg>
+                                    {% endif %}
+                                    <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 {% if forloop.counter|divisibleby:3 %}bg-accent{% elif forloop.counter|divisibleby:2 %}bg-secondary{% else %}bg-primary{% endif %} text-white px-3 py-1 rounded-full text-xs font-semibold">
+                                        {{ member.get_role_display }}
+                                    </div>
+                                </div>
+                        </div>
+                        <h3 class="text-xl font-headline font-semibold text-text-primary mb-1">{{ member.name }}</h3>
+                        {% if member.title %}
+                            <p class="text-sm text-secondary font-semibold mb-3">{{ member.title }}</p>
+                        {% endif %}
+                        {% if member.qualifications %}
+                            <p class="text-sm text-secondary font-semibold mb-2">{{ member.qualifications }}</p>
+                        {% endif %}
+                        {% if member.description %}
+                            <p class="text-sm text-text-secondary mb-4">{{ member.description }}</p>
+                        {% endif %}
+                        <div class="flex justify-center gap-3">
+                            {% if member.social_links and member.social_links.linkedin %}
+                                <a href="{{ member.social_links.linkedin }}" class="text-primary hover:text-primary-700 transition-colors" target="_blank" rel="noopener noreferrer">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                            {% if member.social_links and member.social_links.twitter %}
+                                <a href="{{ member.social_links.twitter }}" class="text-primary hover:text-primary-700 transition-colors" target="_blank" rel="noopener noreferrer">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M23 3a10.9 10.9 0 01-3.14 1.53A4.48 4.48 0 0012 7v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-center text-text-secondary">No leaders have been added yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Committees Section -->
+    {% if committees %}
+    <section class="section bg-surface">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Committees & Working Groups</h2>
+                <p class="text-lg text-text-secondary">Specialized teams driving excellence across all aspects of breast cancer care</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for committee in committees %}
+                    <div class="card hover-lift hover-shadow">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="p-3 {% cycle 'bg-primary-50' 'bg-secondary-50' 'bg-accent-50' %} rounded-lg">
+                                {% if committee.icon_svg %}
+                                    <img src="{{ committee.icon_svg.url }}" alt="{{ committee.name }}" class="w-6 h-6">
+                                {% else %}
+                                    <svg class="w-6 h-6 {% cycle 'text-primary' 'text-secondary' 'text-accent' %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-headline font-semibold text-text-primary mb-1">{{ committee.name }}</h3>
+                                <p class="text-sm text-text-secondary">{{ committee.member_count }} Members</p>
+                            </div>
+                        </div>
+                        <p class="text-text-secondary text-sm mb-4">{{ committee.description }}</p>
+                        {% if committee.link_to_members %}
+                            {% if committee.link_to_members|slice:":4" == "http" or committee.link_to_members|slice:":1" == "/" %}
+                                <a href="{{ committee.link_to_members }}" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                                    View Members
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </a>
+                            {% else %}
+                                <a href="{% url 'website:member_directory' %}" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                                    View Members
+                                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                        {% else %}
+                            <a href="{% url 'website:member_directory' %}" class="inline-flex items-center text-primary text-sm font-semibold hover:text-primary-700 transition-colors">
+                                View Members
+                                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+
+
+    <!-- Partnerships & Recognition Section -->
+    {% if partnerships %}
+    <section class="section bg-primary-50">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Partnerships</h2>
+                <p class="text-lg text-text-secondary">Trusted by leading medical institutions and recognized for excellence</p>
+            </div>
+
+            <!-- Partnership Logos -->
+            <div class="flex justify-center">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+                    {% for partnership in partnerships %}
+                    {% if partnership.link_url %}
+                        <a href="{{ partnership.link_url }}" target="_blank" rel="noopener noreferrer" class="card text-center p-6 hover-lift hover-shadow transition-transform">
+                            {% if partnership.logo %}
+                                <img src="{{ partnership.logo.url }}" alt="{{ partnership.name }} logo" class="h-16 mx-auto mb-3 object-contain" loading="lazy">
+                            {% else %}
+                                <div class="h-16 mx-auto mb-3 flex items-center justify-center">
+                                    <span class="text-sm font-semibold text-text-secondary">{{ partnership.name }}</span>
+                                </div>
+                            {% endif %}
+                            <p class="text-sm font-semibold text-text-primary hover:text-primary-700 transition-colors">{{ partnership.name }}</p>
+                            {% if partnership.description %}
+                                <p class="text-xs text-text-secondary mt-2">{{ partnership.description }}</p>
+                            {% endif %}
+                        </a>
+                    {% else %}
+                        <div class="card text-center p-6 hover-lift hover-shadow">
+                            {% if partnership.logo %}
+                                <img src="{{ partnership.logo.url }}" alt="{{ partnership.name }} logo" class="h-16 mx-auto mb-3 object-contain" loading="lazy">
+                            {% else %}
+                                <div class="h-16 mx-auto mb-3 flex items-center justify-center">
+                                    <span class="text-sm font-semibold text-text-secondary">{{ partnership.name }}</span>
+                                </div>
+                            {% endif %}
+                            <p class="text-sm font-semibold text-text-primary">{{ partnership.name }}</p>
+                            {% if partnership.description %}
+                                <p class="text-xs text-text-secondary mt-2">{{ partnership.description }}</p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Annual Reports Section -->
+    <!-- <section class="section">
+        <div class="container-custom">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Annual Reports & Achievements</h2>
+                <p class="text-lg text-text-secondary">Transparent documentation of our progress and impact</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Annual Report 2024 -->
+                <!--<div class="card hover-lift hover-shadow">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-primary-50 rounded-lg">
+                            <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-headline font-semibold text-text-primary">2024 Report</h3>
+                            <p class="text-xs text-text-secondary">PDF • 8.5 MB</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-text-secondary mb-4">Comprehensive overview of research achievements, educational initiatives, and member growth</p>
+                    <button class="btn-primary w-full text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Download
+                    </button>
+                </div>
+
+                <!-- Annual Report 2023 -->
+                <!--<div class="card hover-lift hover-shadow">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-secondary-50 rounded-lg">
+                            <svg class="w-6 h-6 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-headline font-semibold text-text-primary">2023 Report</h3>
+                            <p class="text-xs text-text-secondary">PDF • 7.8 MB</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-text-secondary mb-4">Breakthrough year featuring AI research initiative and international partnerships</p>
+                    <button class="btn-outline w-full text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Download
+                    </button>
+                </div>
+
+                <!-- Annual Report 2022 -->
+                <!--<div class="card hover-lift hover-shadow">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-accent-50 rounded-lg">
+                            <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-headline font-semibold text-text-primary">2022 Report</h3>
+                            <p class="text-xs text-text-secondary">PDF • 6.9 MB</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-text-secondary mb-4">Expansion of training programs and clinical guideline development</p>
+                    <button class="btn-outline w-full text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Download
+                    </button>
+                </div>
+
+                <!-- Annual Report 2021 -->
+                <!--<div class="card hover-lift hover-shadow">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-3 bg-primary-50 rounded-lg">
+                            <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-headline font-semibold text-text-primary">2021 Report</h3>
+                            <p class="text-xs text-text-secondary">PDF • 6.2 MB</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-text-secondary mb-4">Resilience during pandemic with virtual education and telemedicine initiatives</p>
+                    <button class="btn-outline w-full text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        Download
+                    </button>
+                </div>
+            </div>
+
+            <div class="text-center mt-8">
+                <a href="javascript:void(0)" class="inline-flex items-center text-primary font-semibold hover:text-primary-700 transition-colors">
+                    View Complete Report Archive
+                    <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section> 
+    -->
+
+    <!-- Call to Action Section -->
+    <section class="section bg-gradient-to-br from-secondary via-secondary-600 to-secondary-700 text-white relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="100" fill="white"/>
+                <circle cx="1100" cy="300" r="150" fill="white"/>
+                <circle cx="600" cy="200" r="80" fill="white"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10">
+            <div class="max-w-3xl mx-auto text-center">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold mb-6">Join Our Mission</h2>
+                <p class="text-lg text-secondary-100 mb-8 leading-relaxed">Be part of Bangladesh's premier medical society dedicated to advancing breast cancer care through collaborative excellence, research, and education.</p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                        <a href="{{ call_to_action.primary_button_url }}" class="btn bg-white text-secondary hover:bg-secondary-50 hover:text-secondary-900 focus:ring-white">{{ call_to_action.primary_button_text }}</a>
+                    {% elif call_to_action and call_to_action.primary_button_text %}
+                        <button class="btn bg-white text-secondary" disabled>{{ call_to_action.primary_button_text }}</button>
+                    {% else %}
+                        <button class="btn bg-white text-secondary hover:bg-secondary-50 focus:ring-white">Apply for Membership</button>
+                    {% endif %}
+
+                    {% if call_to_action and call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                        <a href="{{ call_to_action.secondary_button_url }}" class="btn bg-transparent border-2 border-white text-white hover:bg-white/10 focus:ring-white">{{ call_to_action.secondary_button_text }}</a>
+                    {% elif call_to_action and call_to_action.secondary_button_text %}
+                        <button class="btn bg-transparent border-2 border-white text-white" disabled>{{ call_to_action.secondary_button_text }}</button>
+                    {% else %}
+                        <button class="btn bg-transparent border-2 border-white text-white hover:bg-white/10 focus:ring-white">Contact Leadership</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

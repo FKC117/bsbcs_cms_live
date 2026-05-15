@@ -1,0 +1,56 @@
+{% extends "gene_base.html" %}
+
+{% block title %}Sponsors{% endblock %}
+
+{% block content %}
+<style>
+    .custom-max-width {
+        max-width: 95rem; /* Custom width between 7xl and 8xl */
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .category-section {
+        margin-bottom: 2rem;
+    }
+    .centered-grid {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 2rem; /* Adjust the gap as needed */
+    }
+    .sponsor-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+</style>
+<div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10">
+    <div class="mx-auto max-w-full text-center px-4">
+        <h1 class="text-4xl sm:text-6xl font-extrabold md-10">Sponsors of the {{ event.name }} {{ event.year }}</h1>
+        <p class="mt-4 text-lg">{{ event.slogan }}</p>
+    </div>
+</div>
+<section id="sponsors" class="py-10 flex flex-col items-center justify-center">
+    <div class="custom-max-width px-4 py-6">
+        {% for category, sponsors in sponsors_by_category.items %}
+        {% if sponsors %}
+        <div class="category-section text-center">
+            <h3 class="text-2xl sm:text-3xl font-bold text-gray-700 mb-6">{{ category }} Sponsors</h3>
+            <div class="centered-grid">
+                {% for sponsor in sponsors %}
+                <div class="sponsor-card bg-white shadow-lg rounded-lg p-6">
+                    <img src="{{ sponsor.image.url }}" alt="{{ sponsor.name }}" class="mx-auto mb-4 w-full max-w-xs">
+                    <h4 class="text-xl font-semibold text-gray-900">{{ sponsor.name }}</h4>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</section>
+
+{% endblock %}

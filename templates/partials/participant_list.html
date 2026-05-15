@@ -1,0 +1,13 @@
+{% for participant in participants %}
+<tr>
+    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.name }}</td>
+    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.degree }}</td>
+    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.department }}</td>
+    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.organization }}</td>
+    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.country }}</td>
+{% empty %}
+<tr>
+    <td colspan="4" class="py-4 text-center text-gray-500">No approved participants found.</td>
+</tr>
+{% endfor %}
+

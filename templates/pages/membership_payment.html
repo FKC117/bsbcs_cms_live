@@ -1,0 +1,231 @@
+{% extends "gene_base.html" %}
+
+{% load static %}
+{% block title %}Membership Subscription{% endblock %}
+
+{% block content %}
+<!-- Font Import for premium look -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+    body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .glass-effect {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .bkash-btn {
+        background: #D12053;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .bkash-btn:hover {
+        background: #E2136E;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px -5px rgba(226, 19, 110, 0.4);
+    }
+    .custom-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(226, 19, 110, 0.2);
+        border-color: #E2136E;
+    }
+    .floating-label {
+        transition: all 0.2s ease;
+    }
+    select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        background-size: 1.5em;
+    }
+</style>
+
+<div class="min-h-screen bg-[#F8FAFC] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <!-- Animated background elements -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-100/50 blur-3xl"></div>
+        <div class="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-50/50 blur-3xl"></div>
+    </div>
+
+    <div class="max-w-md w-full relative">
+        <!-- Main Card -->
+        <div class="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden border border-gray-100">
+            <!-- Header Section -->
+            <div class="bg-gradient-to-r from-pink-600 to-rose-500 p-10 text-center text-white relative">
+                <div class="absolute top-4 right-6 opacity-20">
+                    <i class="fas fa-shield-alt text-4xl"></i>
+                </div>
+                <h2 class="text-2xl font-extrabold tracking-tight mb-2">Membership</h2>
+                <p class="text-pink-100 text-sm font-medium">Secure Payment Checkout</p>
+            </div>
+
+            <!-- Form Body -->
+            <div class="p-8 sm:p-10">
+                <!-- User Meta -->
+                <div class="flex items-center space-x-4 mb-8 pb-8 border-b border-gray-50">
+                    <div class="w-12 h-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-600">
+                        <i class="fas fa-user-circle text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-gray-900 font-bold leading-tight">{{ member.user_profile.name }}</h3>
+                        <p class="text-gray-500 text-xs">{{ member.user_profile.email }}</p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{% url 'website:membership_payment_init' %}" class="space-y-6">
+                    {% csrf_token %}
+                    
+                    <!-- Membership Type Selection -->
+                    <div class="space-y-2">
+                        <label class="block text-gray-500 text-[11px] font-bold uppercase tracking-wider ml-1">Plan Category</label>
+                        <select name="membership_type" id="membership_type" required
+                                class="w-full bg-gray-50 border-0 ring-1 ring-gray-200 focus:ring-2 focus:ring-pink-500 text-gray-900 text-sm rounded-2xl block p-4 font-semibold transition-all cursor-pointer">
+                            {% for type in membership_types %}
+                            <option value="{{ type.id }}" 
+                                    data-amount="{{ type.amount }}" 
+                                    data-duration="{{ type.duration_years }}"
+                                    data-is-lifetime="{{ type.is_lifetime|yesno:'true,false' }}">
+                                {{ type.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Duration Selection (Dynamic) -->
+                    <div id="years-container" class="space-y-2">
+                        <label class="block text-gray-500 text-[11px] font-bold uppercase tracking-wider ml-1">Subscription Duration</label>
+                        <div class="flex items-center space-x-3">
+                            <input type="number" name="years" id="years" value="1" min="1" max="10" required
+                                   class="w-24 bg-gray-50 border-0 ring-1 ring-gray-200 focus:ring-2 focus:ring-pink-500 text-gray-900 text-sm rounded-2xl block p-4 font-bold transition-all text-center">
+                            <span class="text-gray-400 text-sm font-medium">Year(s)</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Summary Card -->
+                    <div class="mt-10 bg-gray-50 rounded-3xl p-6 border border-gray-100">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-gray-500 text-sm">Total Payable</span>
+                            <span class="text-[10px] bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter">Instant Activation</span>
+                        </div>
+                        <div class="flex items-baseline space-x-1">
+                            <span class="text-gray-400 text-lg font-medium">BDT</span>
+                            <span class="text-4xl font-black text-gray-900 tracking-tight" id="display-total">0.00</span>
+                        </div>
+
+                        <div id="expiry-preview" 
+                             data-current-expiry="{{ member.subscription_expiry_date|date:'Y-m-d'|default:'' }}"
+                             class="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+                            <span class="text-gray-500 text-[10px] font-bold uppercase tracking-wider">Estimated Expiry</span>
+                            <span id="display-expiry" class="text-gray-900 font-black text-xs">--</span>
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-gray-200/50 flex items-center text-gray-400 text-[10px] font-bold uppercase tracking-widest">
+                            <i class="fas fa-lock mr-2 text-green-500"></i> Encrypted Transaction
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="bkash-btn w-full flex justify-center items-center py-5 px-6 rounded-2xl text-white text-lg font-bold shadow-lg mt-8 group">
+                        <img src="https://www.logo.wine/a/logo/BKash/BKash-Logo.wine.svg" alt="bKash" class="h-8 mr-3 invert brightness-0">
+                        Pay with bKash
+                    </button>
+                    
+                    <p class="text-center text-[10px] text-gray-400 font-medium leading-relaxed">
+                        By clicking pay, you agree to our <br> <a href="#" class="underline hover:text-pink-600">Membership Terms & Conditions</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Secondary Info (Optional) -->
+        {% if site_settings.membership_facilities %}
+        <div class="mt-6 px-4">
+            <button type="button" onclick="document.getElementById('facilities-modal').classList.toggle('hidden')" 
+                    class="text-gray-400 hover:text-gray-600 text-xs font-bold uppercase tracking-widest flex items-center justify-center w-full transition-colors">
+                <i class="fas fa-info-circle mr-2"></i> View Member Benefits
+            </button>
+        </div>
+
+        <!-- Simple Overlay for Benefits -->
+        <div id="facilities-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+            <div class="bg-white rounded-[2rem] max-w-sm w-full p-8 shadow-2xl">
+                <div class="flex justify-between items-start mb-6">
+                    <h4 class="text-xl font-black text-gray-900">Member Benefits</h4>
+                    <button onclick="document.getElementById('facilities-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times-circle text-2xl"></i>
+                    </button>
+                </div>
+                <div class="text-sm text-gray-600 whitespace-pre-line leading-relaxed overflow-y-auto max-h-[60vh] pr-2">
+                    {{ site_settings.membership_facilities }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const typeSelect = document.getElementById('membership_type');
+        const yearsInput = document.getElementById('years');
+        const displayTotal = document.getElementById('display-total');
+        const displayExpiry = document.getElementById('display-expiry');
+        const expiryPreview = document.getElementById('expiry-preview');
+        const yearsContainer = document.getElementById('years-container');
+
+        function getFutureDate(yearsToAdd) {
+            const currentExpiryStr = expiryPreview.getAttribute('data-current-expiry');
+            let startDate = new Date();
+            
+            // If there's an existing future expiry, extend from there
+            if (currentExpiryStr) {
+                const existingExpiry = new Date(currentExpiryStr);
+                if (existingExpiry > startDate) {
+                    startDate = existingExpiry;
+                }
+            }
+            
+            const futureDate = new Date(startDate.setFullYear(startDate.getFullYear() + yearsToAdd));
+            return futureDate.toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        function updateTotal() {
+            const selectedOption = typeSelect.options[typeSelect.selectedIndex];
+            const baseAmount = parseFloat(selectedOption.getAttribute('data-amount'));
+            const defaultDuration = parseInt(selectedOption.getAttribute('data-duration'));
+            
+            const isLifetime = selectedOption.getAttribute('data-is-lifetime') === 'true';
+            
+            let years = parseInt(yearsInput.value) || 1;
+            
+            // If Lifetime
+            if (isLifetime || defaultDuration >= 100) {
+                yearsContainer.style.display = 'none';
+                yearsInput.value = 1;
+                years = 1; // For expiry calc
+                const lifetimeDuration = 100; // Use 100 for display calc
+                displayTotal.innerText = `${baseAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                displayExpiry.innerText = "Lifetime";
+            } else {
+                yearsContainer.style.display = 'block';
+                const total = baseAmount * years;
+                displayTotal.innerText = `${total.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                displayExpiry.innerText = getFutureDate(years);
+            }
+        }
+
+        typeSelect.addEventListener('change', updateTotal);
+        yearsInput.addEventListener('input', updateTotal);
+        
+        // Initial calculation
+        updateTotal();
+    });
+</script>
+{% endblock %}

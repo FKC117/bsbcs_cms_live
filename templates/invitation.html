@@ -1,0 +1,58 @@
+{% extends "gene_base.html" %}
+
+{% block title %}Invitation{% endblock %}
+
+{% block content %}
+<div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10">
+    <div class="mx-auto max-w-full text-center px-4">
+        <h1 class="text-4xl sm:text-6xl font-extrabold mb-10">Welcome to the {{ event.name }} {{ event.year }}</h1>
+        <p class="mt-4 text-lg">{{ event.slogan }}</p>
+    </div>
+</div>
+
+<div class="max-w-full py-8">
+    <h2 class="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">Invitations</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-8 px-10">
+        {% for invitation in invitations %}
+        <div class="sm:col-span-3 flex flex-col items-center border-t border-b border-gray-300 first:border-t-0 last:border-b-0 p-4">
+            <img src="{{ invitation.image.url }}" alt="{{ invitation.name }}" class="w-32 h-32 rounded-full">
+            <p class="mt-2 text-xl text-center font-semibold">{{ invitation.name }}</p>
+            <p class="text-sm">{{ invitation.designation }}</p>
+        </div>
+        <div class="sm:col-span-9 flex items-center border-t border-b border-gray-300 first:border-t-0 last:border-b-0 p-4">
+            <p class="text-justify">{{ invitation.message }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="text-center mt-8">
+        <!-- Register Now Button (Shown when event is active) -->
+        {% if event.event_status == 'active' %}
+            <a href="{% url 'registration:registration' event.id %}" 
+               class="inline-block px-8 py-3 bg-blue-500 text-white rounded-lg 
+                      hover:bg-blue-600 transition duration-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                Register Now
+            </a>
+        {% endif %}
+
+        <!-- Provide Feedback Button (Shown when event is closed) -->
+        {% if event.event_status == 'closed' %}
+            {% if user.is_authenticated %}
+                <!-- Show feedback button for logged-in users -->
+                <a href="{% url 'registration:event_feedback' event.id %}" 
+                    class="inline-block px-8 py-3 bg-blue-500 text-white rounded-lg 
+                            hover:bg-blue-600 transition duration-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    Provide Feedback
+                </a>
+            {% else %}
+                <!-- Show feedback button for unauthenticated users with login prompt -->
+                <a href="{% url 'login' %}?next={% url 'registration:event_feedback' event.id %}" 
+                    class="inline-block px-8 py-3 bg-blue-500 text-white rounded-lg 
+                            hover:bg-blue-600 transition duration-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    Provide Feedback
+                </a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

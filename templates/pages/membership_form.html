@@ -1,0 +1,365 @@
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block title %}Membership Form - BSBCS{% endblock %}
+
+{% block extra_head %}
+<style>
+    .form-error {
+        color: #dc2626;
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+        font-weight: 500;
+    }
+    .form-field {
+        margin-bottom: 1.5rem;
+    }
+    .form-label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 0.625rem;
+        color: #1f2937;
+        font-size: 0.95rem;
+        letter-spacing: 0.25px;
+    }
+    .form-input,
+    .form-textarea,
+    .form-select {
+        width: 100%;
+        padding: 0.875rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        background-color: #fafbfc;
+        font-family: inherit;
+    }
+    .form-input:focus,
+    .form-textarea:focus,
+    .form-select:focus {
+        outline: none;
+        border-color: #3b82f6;
+        background-color: #fff;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1), 0 0 0 0 rgba(59, 130, 246, 0.2);
+    }
+    .form-input::placeholder {
+        color: #9ca3af;
+    }
+    .form-textarea {
+        resize: vertical;
+        min-height: 8rem;
+        font-family: inherit;
+    }
+    .checkbox-group {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        border: 2px solid #e5e7eb;
+        padding: 1.25rem;
+        border-radius: 0.875rem;
+        background-color: #f9fafb;
+        transition: all 0.3s ease;
+    }
+    .checkbox-group:focus-within {
+        border-color: #3b82f6;
+        background-color: #f3f4f6;
+    }
+    .checkbox-item {
+        display: flex;
+        align-items: flex-start;
+        padding: 0.5rem;
+    }
+    .checkbox-item input[type="checkbox"] {
+        margin-right: 0.75rem;
+        margin-top: 0.25rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: 2px solid #d1d5db;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        accent-color: #3b82f6;
+    }
+    .checkbox-item input[type="checkbox"]:hover {
+        border-color: #3b82f6;
+    }
+    .checkbox-item input[type="checkbox"]:checked {
+        background-color: #3b82f6;
+        border-color: #3b82f6;
+    }
+    .checkbox-item label {
+        cursor: pointer;
+        margin: 0;
+        font-weight: 500;
+        color: #374151;
+        user-select: none;
+    }
+    .help-text {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-top: 0.5rem;
+        font-style: italic;
+    }
+    .btn-submit {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 0.875rem 2.5rem;
+        border: 2px solid transparent;
+        border-radius: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+        letter-spacing: 0.5px;
+    }
+    .btn-submit:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+    }
+    .btn-submit:active {
+        transform: translateY(0);
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+    }
+    .alert {
+        padding: 1.25rem;
+        border-radius: 0.875rem;
+        margin-bottom: 1.5rem;
+        border: 2px solid #fecaca;
+        background-color: #fef2f2;
+    }
+    .alert-error {
+        background-color: #fef2f2;
+        color: #7f1d1d;
+    }
+    .form-container {
+        border: 2px solid #e5e7eb;
+        border-radius: 1.25rem;
+        background-color: #fff;
+        transition: all 0.3s ease;
+    }
+    .form-container:hover {
+        border-color: #d1d5db;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section with Gradient Background -->
+<div class="relative bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 text-white py-20 sm:py-24">
+    <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+        <div class="absolute -bottom-8 left-20 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
+    </div>
+    <div class="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        {% if hero %}
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight">
+            {{ hero.title|default:"Join Our Community" }}
+        </h1>
+        {% if hero.subtitle %}
+        <p class="text-lg sm:text-xl text-blue-100 max-w-2xl mx-auto">{{ hero.subtitle }}</p>
+        {% endif %}
+        {% else %}
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight">
+            Join Our Community
+        </h1>
+        <p class="text-lg sm:text-xl text-blue-100 max-w-2xl mx-auto">
+            Share your expertise and contribute to our growing network of professionals
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="pt-12 pb-12">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+
+        <!-- Form Section -->
+        <div class="form-container shadow-xl p-8 rounded-2xl bg-white relative z-10 transform -translate-y-20 ml-6 sm:ml-8 lg:ml-12">
+            {% if form.non_field_errors %}
+            <div class="alert alert-error rounded-lg mb-6">
+                <div class="flex items-start">
+                    <svg class="h-6 w-6 text-red-600 mr-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <strong class="text-red-800 block font-semibold">Please fix the following errors:</strong>
+                        <ul class="mt-2 text-red-700 space-y-1">
+                            {% for error in form.non_field_errors %}
+                            <li class="flex items-center"><span class="mr-2">•</span>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+                <div class="px-4 sm:px-6 lg:px-8">
+
+                <!-- User identity (read-only) -->
+                <div class="form-field">
+                    <label class="form-label">Name</label>
+                    <div class="form-input" style="background:transparent;border:none;padding:0;">
+                        {{ user_profile.name }}
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label class="form-label">Email</label>
+                    <div class="form-input" style="background:transparent;border:none;padding:0;">
+                        {{ user_profile.email }}
+                    </div>
+                </div>
+
+                <!-- Institution & Position -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-field">
+                        <label for="{{ form.institution.id_for_label }}" class="form-label">
+                            {{ form.institution.label }}
+                        </label>
+                        {{ form.institution }}
+                        {% if form.institution.errors %}
+                            <div class="form-error">
+                                {{ form.institution.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-field">
+                        <label for="{{ form.position.id_for_label }}" class="form-label">
+                            {{ form.position.label }}
+                        </label>
+                        {{ form.position }}
+                        {% if form.position.errors %}
+                            <div class="form-error">
+                                {{ form.position.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Profile Description -->
+                <div class="form-field">
+                    <label for="{{ form.profile_description.id_for_label }}" class="form-label">
+                        {{ form.profile_description.label }}
+                    </label>
+                    {{ form.profile_description }}
+                    <div class="help-text">
+                        Share information about your background, expertise, and interests
+                    </div>
+                    {% if form.profile_description.errors %}
+                        <div class="form-error">
+                            {{ form.profile_description.errors.0 }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Profile Image -->
+                <div class="form-field">
+                    <label for="{{ form.image.id_for_label }}" class="form-label">
+                        {{ form.image.label }}
+                    </label>
+                    {{ form.image }}
+                    <div class="help-text">
+                        Upload a professional photo (JPG, PNG, max 5MB)
+                    </div>
+                    {% if form.image.errors %}
+                        <div class="form-error">
+                            {{ form.image.errors.0 }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Specialties -->
+                <div class="form-field">
+                    <label class="form-label">
+                        {{ form.specialties.label }}
+                    </label>
+                    {% if form.specialties.help_text %}
+                        <div class="help-text mb-3">
+                            {{ form.specialties.help_text }}
+                        </div>
+                    {% endif %}
+                    <div class="checkbox-group">
+                        {% for choice_value, choice_label in form.specialties.field.choices %}
+                        <div class="checkbox-item">
+                            <input 
+                                type="checkbox" 
+                                id="id_specialties_{{ forloop.counter }}" 
+                                name="specialties" 
+                                value="{{ choice_value }}"
+                                {% if choice_value in form.specialties.value %}checked{% endif %}
+                            >
+                            <label for="id_specialties_{{ forloop.counter }}">
+                                {{ choice_label }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.specialties.errors %}
+                        <div class="form-error">
+                            {{ form.specialties.errors.0 }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Research Interest Areas -->
+                <div class="form-field">
+                    <label class="form-label">
+                        {{ form.research_interest_areas.label }}
+                    </label>
+                    {% if form.research_interest_areas.help_text %}
+                        <div class="help-text mb-3">
+                            {{ form.research_interest_areas.help_text }}
+                        </div>
+                    {% endif %}
+                    <div class="checkbox-group">
+                        {% for choice_value, choice_label in form.research_interest_areas.field.choices %}
+                        <div class="checkbox-item">
+                            <input 
+                                type="checkbox" 
+                                id="id_research_interest_areas_{{ forloop.counter }}" 
+                                name="research_interest_areas" 
+                                value="{{ choice_value }}"
+                                {% if choice_value in form.research_interest_areas.value %}checked{% endif %}
+                            >
+                            <label for="id_research_interest_areas_{{ forloop.counter }}">
+                                {{ choice_label }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.research_interest_areas.errors %}
+                        <div class="form-error">
+                            {{ form.research_interest_areas.errors.0 }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-center pt-4">
+                    <button type="submit" class="btn-submit">
+                        Submit Membership Application
+                    </button>
+                </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Info Box -->
+        <div class="mt-8 bg-blue-50 border-l-4 border-blue-400 p-6 rounded">
+            <h3 class="text-lg font-semibold text-blue-900 mb-2">
+                What happens next?
+            </h3>
+            <p class="text-blue-800">
+                Your membership application will be reviewed by our team. 
+                You'll receive a confirmation email once your profile is approved and live on our member directory.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="min-h-screen flex items-center justify-center bg-gray-900">
+        <div class="bg-white p-8 rounded-lg shadow-md max-w-sm ml-5 mr-5">
+            <h1 class="text-2xl font-bold {% if error_message %}text-red-600{% else %}text-green-600{% endif %} mb-4">
+                {{ title }}
+            </h1>
+            
+            {% if error_message %}
+                <p class="text-red-500 mb-4">{{ error_message }}</p>
+            {% endif %}
+
+            <h2 class="text-1xl font-bold text-gray-900 mb-4">Payment Details</h2>
+            <ul class="mb-4 text-gray-700 list-inside">
+                <li>Transaction ID: {{ payment_details.trxID|default:"Not available" }}</li>
+                <li>Amount: {{ payment_details.amount|default:"Not available" }}</li>
+                <li>Merchant Invoice Number: {{ payment_details.merchantInvoiceNumber|default:"Not available" }}</li>
+                <li>Status: {{ payment_details.transactionStatus|default:"Not available" }}</li>
+            </ul>
+
+            <a href="{% url 'index' %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-4 ml-auto text-center">
+                {% if error_message %}Retry Payment{% else %}Go to Event Page{% endif %}
+            </a>
+
+            {% if debug %}
+                <pre class="bg-gray-100 text-sm p-4 rounded-lg">
+                    {{ payment_details|safe }}
+                </pre>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

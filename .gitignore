@@ -1,0 +1,13 @@
+.env
+django.log*
+*.log
+*.gz
+venv/
+__pycache__/
+*.pyc
+media/
+staticfiles/
+tmp/
+*.sqlite3
+static/charts/
+*.pdf

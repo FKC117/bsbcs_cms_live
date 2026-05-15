@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
+  <h1 class="text-4xl font-bold text-center mb-6">Abstract Submitted Successfully!</h1>
+  <p class="text-lg text-center mb-8">Thank you for Submitting your abstract! You will be notified once your abstract is approved.</p>
+  <div class="bg-white shadow-lg rounded-lg p-8">
+    <h2 class="text-2xl font-semibold mb-4">Next Steps:</h2>
+    <ul class="list-disc list-inside mb-6">
+      <li>Check your email for an approval notice or text messages on your registered phone.</li>
+      <li>Upon approval notice, you will be asked to present your abstract at the conference either as a presentation or as a poster.</li>
+      <li>For any issues, please contact the organizer.</li>
+    </ul>
+      <a href="{% url 'index' %}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Go to Conference Page
+      </a>
+  </div>
+</div>
+</body>
+</html>

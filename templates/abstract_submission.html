@@ -1,0 +1,175 @@
+{% extends "gene_base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Abstract Submission{% endblock %}
+
+{% block content %}
+<br/>
+<section class="min-h-screen bg-pink-100 py-10 mt-10">
+  <div class="container">
+    <!-- Header Section -->
+    <div class="text-center mb-5">
+      <h1 class="text-4xl font-bold text-pink-900">Submit Abstract for {{ event.name }} {{ event.year }}</h1>
+      <p class="text-lg text-gray-700 mt-2">Submit abstract and be part of our community supporting awareness, early detection, and research.</p>
+    </div>
+
+    <!-- Two-Column Layout -->
+    <div class="row justify-content-center">
+      <!-- First Column (30%) -->
+      <div class="col-lg-4">
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title text-center text-black font-bold">Guidelines</h5>
+            <ul>
+              <li>Submit only original research.</li>
+              <li>Do not submit abstracts that have been previously published.</li>
+              <li>Do not submit abstracts that are not related to breast cancer.</li>
+              <li>Total Word limits should not cross 600 words; title, authors, institution excluded.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Second Column (70%) -->
+      <div class="col-lg-8">
+        <div class="card shadow border-2 p-3">
+          <div class="card-body">
+            <h2 class="text-center text-black font-bold mb-4">Abstract Submission</h2>
+            <form id="abstract-form" action="{% url 'registration:abstract_submission' event.id %}" method="post" enctype="multipart/form-data">
+              {% csrf_token %}
+              
+              <!-- Crispy Form Rendering -->
+              {{ form|crispy }}
+              <div class="card shadow border-2 p-1">
+                <div class="card-body">
+                  <div class="word-count-container">
+                    <div id='introduction-word-count' class="word-count">Introduction word count: 0</div>
+                    <div class="separator">|</div>
+                    <div id="methods-word-count" class="word-count">Methods word count: 0</div>
+                    <div class="separator">|</div>
+                    <div id="results-word-count" class="word-count">Results word count: 0</div>
+                    <div class="separator">|</div>
+                    <div id="conclusion-word-count" class="word-count">Conclusion word count: 0</div>
+                    <div class="separator">|</div>
+                    <div id="total-word-count" class="word-count">Total word count: 0</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <div class="d-grid mt-3">
+                <button type="submit" class="btn btn-pink text-white font-bold py-2 rounded">
+                  Submit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body {
+    font-family: 'Arial', sans-serif;
+    background-color: #fce4ec;
+  }
+  .btn-pink {
+    background-color: #ec407a;
+    border-color: #ec407a;
+  }
+  .btn-pink:hover {
+    background-color: #d81b60;
+    border-color: #d81b60;
+  }
+  .word-count-container {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    text-align: center;
+  }
+  .word-count {
+    color: #555;
+  }
+  .word-count-error {
+    color: red;
+  }
+  .separator {
+    margin: 0 0.25rem;
+  }
+
+  /* Mobile-Friendly Layout */
+  @media (max-width: 767px) {
+    .word-count-container {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .separator {
+      display: none;
+    }
+  }
+</style>
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const introductionField = document.getElementById('id_introduction');
+        const methodsField = document.getElementById('id_methods');
+        const resultsField = document.getElementById('id_results');
+        const conclusionField = document.getElementById('id_conclusion');
+        const introductionWordCount = document.getElementById('introduction-word-count');
+        const methodsWordCount = document.getElementById('methods-word-count');
+        const resultsWordCount = document.getElementById('results-word-count');
+        const conclusionWordCount = document.getElementById('conclusion-word-count');
+        const totalWordCount = document.getElementById('total-word-count');
+        const form = document.getElementById('abstract-form');
+
+        const updateWordCount = () => {
+            const introductionWords = introductionField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const methodsWords = methodsField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const resultsWords = resultsField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const conclusionWords = conclusionField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const totalWords = introductionWords + methodsWords + resultsWords + conclusionWords;
+
+            introductionWordCount.textContent = `Introduction word count: ${introductionWords}`;
+            methodsWordCount.textContent = `Methods word count: ${methodsWords}`;
+            resultsWordCount.textContent = `Results word count: ${resultsWords}`;
+            conclusionWordCount.textContent = `Conclusion word count: ${conclusionWords}`;
+            totalWordCount.textContent = `Total word count: ${totalWords}`;
+
+            if (totalWords > 600) {
+                totalWordCount.classList.add('word-count-error');
+                totalWordCount.textContent += ' (exceeds limit)';
+                form.querySelector('button[type="submit"]').disabled = true;
+            } else {
+                totalWordCount.classList.remove('word-count-error');
+                form.querySelector('button[type="submit"]').disabled = false;
+            }
+        };
+
+        introductionField.addEventListener('input', updateWordCount);
+        methodsField.addEventListener('input', updateWordCount);
+        resultsField.addEventListener('input', updateWordCount);
+        conclusionField.addEventListener('input', updateWordCount);
+
+        form.addEventListener('submit', function (e) {
+            const introductionWords = introductionField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const methodsWords = methodsField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const resultsWords = resultsField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const conclusionWords = conclusionField.value.split(/\s+/).filter(word => word.length > 0).length;
+            const totalWords = introductionWords + methodsWords + resultsWords + conclusionWords;
+
+            if (totalWords > 600) {
+                e.preventDefault();
+                alert('The total word count for Introduction, Methods, Results, and Conclusion should not exceed 600 words.');
+            }
+        });
+
+        updateWordCount();  // Initial call to set word counts on page load
+    });
+</script>
+{% endblock %}

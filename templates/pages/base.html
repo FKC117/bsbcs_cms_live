@@ -1,0 +1,593 @@
+
+{% load static site_tags %}
+{% get_site_settings as site_settings %}
+{% get_navigation_links as navigation_links %}
+{% get_call_to_action_current as call_to_action %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Bangladesh Society of Breast Cancer Studies - Authoritative digital hub for breast cancer research, education, and clinical excellence">
+    <title>{% block title %}BSBCS Portal - Bangladesh Society of Breast Cancer Studies{% endblock %}</title>
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% if site_settings and site_settings.favicon %}
+        <link rel="icon" href="{{ site_settings.favicon.url }}" />
+    {% endif %}
+    <script type="module" async src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fbsbcsport8213back.builtwithrocket.new&_be=https%3A%2F%2Fapplication.rocket.new&_v=0.1.10"></script>
+    <script type="module" defer src="https://static.rocket.new/rocket-shot.js?v=0.0.1"></script>
+    {% block extra_head %}{% endblock %}
+    <style>
+        /* Dropdown Styles */
+        .nav-item-dropdown {
+            position: relative;
+            padding-bottom: 1rem;
+            margin-bottom: -1rem;
+        }
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            min-width: 220px;
+            background-color: white;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            padding: 0.75rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50;
+            border: 1px solid var(--border);
+        }
+        .nav-item-dropdown:hover .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        .dropdown-item {
+            display: block;
+            padding: 0.625rem 1rem;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .dropdown-item:hover {
+            background-color: var(--background);
+            color: var(--primary);
+            padding-left: 1.25rem;
+        }
+        .mobile-dropdown-content {
+            padding-left: 1.5rem;
+            border-left: 2px solid var(--border);
+            margin-left: 0.5rem;
+            margin-top: 0.5rem;
+            display: none;
+        }
+        .mobile-dropdown-content.active {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-background">
+    <!-- Navigation Header -->
+    <header class="nav-floating sticky top-0 z-fixed">
+        <nav class="container-custom">
+            <div class="flex items-center justify-between py-4">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    {% if site_settings and site_settings.logo %}
+                        <a href="{% url 'website:homepage' %}" class="flex items-center gap-3">
+                            <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="w-12 h-12 object-contain">
+                            <div>
+                                <h1 class="text-xl font-headline font-bold text-primary">{{ site_settings.site_name|default:'BSBCS' }}</h1>
+                                <p class="text-xs text-text-secondary">{{ site_settings.abbreviation|default:'Breast Cancer Studies' }}</p>
+                            </div>
+                        </a>
+                    {% else %}
+                        <a href="{% url 'website:homepage' %}" class="flex items-center gap-3">
+                            <svg class="w-12 h-12" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M24 4C20.5 4 17.5 6.5 17.5 10C17.5 12 18.5 13.8 20 15C15 16 11 20.5 11 26C11 32.6 16.4 38 23 38H25C31.6 38 37 32.6 37 26C37 20.5 33 16 28 15C29.5 13.8 30.5 12 30.5 10C30.5 6.5 27.5 4 24 4Z" fill="#E91E63"/>
+                                <path d="M24 40C24 40 20 42 20 44C20 45.1 20.9 46 22 46H26C27.1 46 28 45.1 28 44C28 42 24 40 24 40Z" fill="#1976D2"/>
+                                <circle cx="24" cy="24" r="3" fill="#00695C"/>
+                            </svg>
+                            <div>
+                                <h1 class="text-xl font-headline font-bold text-primary">BSBCS</h1>
+                                <p class="text-xs text-text-secondary">Bangladesh Society for Breast Cancer Study</p>
+                            </div>
+                        </a>
+                    {% endif %}
+                </div>
+
+                <!-- Desktop Navigation -->
+                <div class="hidden lg:flex items-center gap-8">
+                    {% if navigation_links %}
+                        {% for nav in navigation_links %}
+                            {% if nav.sub_links %}
+                                <div class="nav-item-dropdown">
+                                    <a href="{{ nav.url }}" class="flex items-center gap-1 text-text-secondary hover:text-primary transition-colors font-medium">
+                                        {{ nav.label }}
+                                        <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </a>
+                                    <div class="dropdown-menu">
+                                        {% for sub in nav.sub_links %}
+                                            <a href="{{ sub.url }}" class="dropdown-item">{{ sub.label }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <a href="{{ nav.url }}" class="text-text-secondary hover:text-primary transition-colors font-medium">{{ nav.label }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <a href="{% url 'website:homepage' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">Home</a>
+                        <a href="{% url 'website:about' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">About</a>
+                        <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">Members</a>
+                    {% endif %}
+                </div>
+
+                <!-- Auth / Profile links (Desktop) -->
+                <div class="hidden lg:flex items-center gap-4">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'user_profile' %}" class="text-text-secondary hover:text-primary transition-colors">Profile</a>
+                        <span class="ext-sm font-semibold leading-6 text-gray-900">|</span>
+                        <a href="{% url 'logout' %}" class="text-text-secondary hover:text-primary transition-colors">Logout</a>
+                    {% else %}
+                        <a href="{% url 'create_profile' %}" class="text-text-secondary hover:text-primary transition-colors">Create Profile</a>
+                        <span class="text-sm font-semibold leading-6 text-gray-900">|</span>
+                        <a href="{% url 'login' %}" class="text-text-secondary hover:text-primary transition-colors">Login</a>
+                    {% endif %}
+                    
+                    <!-- Join Society CTA Button (Conditional: Hide for Active Members) -->
+                    {% if not user|is_active_member %}
+                        {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            {# Smart Override: If the button text is 'Join Society', always use the internal membership_form URL #}
+                            {% if call_to_action.primary_button_text == "Join Society" %}
+                                <a href="{% url 'website:membership_form' %}" class="btn-primary">{{ call_to_action.primary_button_text }}</a>
+                            {% else %}
+                                <a href="{{ call_to_action.primary_button_url }}" class="btn-primary">{{ call_to_action.primary_button_text }}</a>
+                            {% endif %}
+                        {% else %}
+                            <a href="{% url 'website:membership_form'%}" class="btn-primary">Join Society</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button id="mobileMenuBtn" class="lg:hidden p-2 text-primary">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Mobile Navigation -->
+            <div id="mobileMenu" class="hidden lg:hidden pb-4 border-t border-border mt-4 pt-4">
+                <div class="flex flex-col gap-4">
+                    {% if navigation_links %}
+                        {% for nav in navigation_links %}
+                            {% if nav.sub_links %}
+                                <div>
+                                    <div class="flex items-center justify-between w-full border-b border-border/10">
+                                        <a href="{{ nav.url }}" class="flex-grow text-text-secondary hover:text-primary transition-colors py-2 font-medium">
+                                            {{ nav.label }}
+                                        </a>
+                                        <button onclick="this.parentElement.nextElementSibling.classList.toggle('active'); this.querySelector('svg').classList.toggle('rotate-180')" class="p-2 text-text-secondary hover:text-primary transition-all">
+                                            <svg class="w-4 h-4 opacity-50 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                        </button>
+                                    </div>
+                                    <div class="mobile-dropdown-content">
+                                        {% for sub in nav.sub_links %}
+                                            <a href="{{ sub.url }}" class="text-text-secondary hover:text-primary transition-colors py-2 ml-4">{{ sub.label }}</a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <a href="{{ nav.url }}" class="text-text-secondary hover:text-primary transition-colors py-2 font-medium">{{ nav.label }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <a href="{% url 'website:homepage' %}" class="text-text-secondary hover:text-primary transition-colors">Home</a>
+                        <a href="{% url 'website:about' %}" class="text-text-secondary hover:text-primary transition-colors">About</a>
+                        <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors">Members</a>
+                        <a href="{% url 'website:research_and_publications' %}" class="text-text-secondary hover:text-primary transition-colors">Research</a>
+                        <a href="{% url 'website:knowledge_center' %}" class="text-text-secondary hover:text-primary transition-colors">Resources</a>
+                        <a href="{% url 'website:events' %}" class="text-text-secondary hover:text-primary transition-colors">Events</a>
+                        <a href="{% url 'website:webinars' %}" class="text-text-secondary hover:text-primary transition-colors">Webinars</a>
+                    {% endif %}
+                    
+                    <!-- Mobile Auth Links -->
+                    <div class="border-t border-border pt-4">
+                        {% if user.is_authenticated %}
+                            <div class="flex flex-col gap-2">
+                                {% if user_profile and user_profile.name %}
+                                    <span class="text-sm font-semibold text-text-secondary">Welcome, {{ user_profile.name }}</span>
+                                {% else %}
+                                    <span class="text-sm font-semibold text-text-secondary">Welcome, {{ user.get_full_name|default:user.username }}</span>
+                                {% endif %}
+                                <a href="{% url 'user_profile' %}" class="text-sm text-text-secondary hover:text-primary transition-colors py-2">Profile</a>
+                                <a href="{% url 'logout' %}" class="text-sm text-text-secondary hover:text-primary transition-colors py-2">Logout</a>
+                            </div>
+                        {% else %}
+                            <div class="flex flex-col gap-2">
+                                <a href="{% url 'create_profile' %}" class="text-sm text-text-secondary hover:text-primary transition-colors py-2">Create Profile</a>
+                                <a href="{% url 'login' %}" class="text-sm text-text-secondary hover:text-primary transition-colors py-2">Login</a>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- CTA Button (Conditional: Hide for Active Members) -->
+                    {% if not user|is_active_member %}
+                        <div class="border-t border-border pt-4">
+                            {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                                {# Smart Override: If the button text is 'Join Society', always use the internal membership_form URL #}
+                                {% if call_to_action.primary_button_text == "Join Society" %}
+                                    <a href="{% url 'website:membership_form' %}" class="btn-primary w-full">{{ call_to_action.primary_button_text }}</a>
+                                {% else %}
+                                    <a href="{{ call_to_action.primary_button_url }}" class="btn-primary w-full">{{ call_to_action.primary_button_text }}</a>
+                                {% endif %}
+                            {% else %}
+                                <a href="{% url 'website:membership_form' %}" class="btn-primary w-full">Join Society</a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content Block -->
+    <main>
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-text-primary text-white">
+        <div class="container-custom py-12">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-8">
+                <!-- Footer Column 1: Logo & description -->
+                <div>
+                    <div class="flex items-center gap-3 mb-4">
+                        {% if site_settings and site_settings.logo %}
+                            <a href="{% url 'website:homepage' %}" class="flex items-center gap-3">
+                                <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="w-10 h-10 object-contain">
+                                <div>
+                                    <h3 class="text-lg font-headline font-bold text-white">{{ site_settings.site_name|default:'BSBCS' }}</h3>
+                                    <p class="text-xs text-gray-400">{{ site_settings.abbreviation|default:'Breast Cancer Studies' }}</p>
+                                </div>
+                            </a>
+                        {% else %}
+                            <a href="{% url 'website:homepage' %}" class="flex items-center gap-3">
+                                <svg class="w-10 h-10" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M24 4C20.5 4 17.5 6.5 17.5 10C17.5 12 18.5 13.8 20 15C15 16 11 20.5 11 26C11 32.6 16.4 38 23 38H25C31.6 38 37 32.6 37 26C37 20.5 33 16 28 15C29.5 13.8 30.5 12 30.5 10C30.5 6.5 27.5 4 24 4Z" fill="#E91E63"/>
+                                    <path d="M24 40C24 40 20 42 20 44C20 45.1 20.9 46 22 46H26C27.1 46 28 45.1 28 44C28 42 24 40 24 40Z" fill="#1976D2"/>
+                                    <circle cx="24" cy="24" r="3" fill="#00695C"/>
+                                </svg>
+                                <div>
+                                    <h3 class="text-lg font-headline font-bold text-white">{{ site_settings.site_name|default:'BSBCS' }}</h3>
+                                    <p class="text-xs text-gray-400">{{ site_settings.abbreviation|default:'Breast Cancer Studies' }}</p>
+                                </div>
+                            </a>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-400 leading-relaxed">{{ site_settings.footer_content|default:'Advancing breast cancer care through collaborative excellence, research, and education.' }}</p>
+                </div>
+
+                <div>
+                    <h4 class="font-headline font-semibold mb-4 text-white text-sm">Menu</h4>
+                    <ul class="space-y-2 text-sm">
+                        {% if navigation_links %}
+                            {% for nav in navigation_links %}
+                                <li><a href="{{ nav.url }}" class="text-gray-400 hover:text-white transition-colors">{{ nav.label }}</a></li>
+                            {% endfor %}
+                        {% else %}
+                            <li><a href="{% url 'website:homepage' %}" class="text-gray-400 hover:text-white transition-colors">Home</a></li>
+                            <li><a href="{% url 'website:about' %}" class="text-gray-400 hover:text-white transition-colors">About</a></li>
+                            <li><a href="{% url 'website:member_directory' %}" class="text-gray-400 hover:text-white transition-colors">Members</a></li>
+                            <li><a href="{% url 'website:research_and_publications' %}" class="text-gray-400 hover:text-white transition-colors">Research</a></li>
+                            <li><a href="{% url 'website:knowledge_center' %}" class="text-gray-400 hover:text-white transition-colors">Resources</a></li>
+                            <li><a href="{% url 'website:events' %}" class="text-gray-400 hover:text-white transition-colors">Events</a></li>
+                            <li><a href="{% url 'website:webinars' %}" class="text-gray-400 hover:text-white transition-colors">Webinars</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <!-- Footer Column 2 -->
+                <div>
+                    <h4 class="font-headline font-semibold mb-4 text-white text-sm">Contact</h4>
+                    <ul class="space-y-3 text-sm text-gray-400">
+                        {% if site_settings and site_settings.location %}
+                            <li class="flex items-start gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                <span>{{ site_settings.location }}</span>
+                            </li>
+                        {% else %}
+                            <li class="flex items-start gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                <span>Dhaka Medical College, Dhaka, Bangladesh</span>
+                            </li>
+                        {% endif %}
+                        {% if site_settings and site_settings.contact_mail %}
+                            <li class="flex items-center gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                <span>{{ site_settings.contact_mail }}</span>
+                            </li>
+                        {% else %}
+                            <li class="flex items-center gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                <span>info@bsbcs.org.bd</span>
+                            </li>
+                        {% endif %}
+                        {% if site_settings and site_settings.phone_number %}
+                            <li class="flex items-center gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                                </svg>
+                                <span>{{ site_settings.phone_number }}</span>
+                            </li>
+                        {% else %}
+                            <li class="flex items-center gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                                </svg>
+                                <span>+880 2 123 4567</span>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <!-- Footer Column 4: Sitemap (human-readable + XML) -->
+                <div>
+                    <h4 class="font-headline font-semibold mb-4 text-white text-sm">Sitemap</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="{% url 'website:sitemap_table' %}" class="text-gray-400 hover:text-white transition-colors">HTML sitemap</a></li>
+                        <li><a href="/sitemap.xml" class="text-gray-400 hover:text-white transition-colors">XML sitemap</a></li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <!-- Footer Bottom -->
+            <div class="border-t border-gray-700 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                <p class="text-sm text-white">{{ site_settings.footer_copyright|default:'© 2025 Bangladesh Society of Breast Cancer Studies. All Rights Reserved.' }}</p>
+                <div class="flex gap-4 items-center">
+                    {% if site_settings and site_settings.facebook_url %}
+                        <a href="{{ site_settings.facebook_url }}" class="text-white hover:text-gray-300 transition-colors" target="_blank" rel="noopener noreferrer">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                    {% if site_settings and site_settings.twitter_url %}
+                        <a href="{{ site_settings.twitter_url }}" class="text-white hover:text-gray-300 transition-colors" target="_blank" rel="noopener noreferrer">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                    {% if site_settings and site_settings.linkedin_url %}
+                        <a href="{{ site_settings.linkedin_url }}" class="text-white hover:text-gray-300 transition-colors" target="_blank" rel="noopener noreferrer">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                    {% if site_settings and site_settings.instagram_url %}
+                        <a href="{{ site_settings.instagram_url }}" class="text-white hover:text-gray-300 transition-colors" target="_blank" rel="noopener noreferrer">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.117.6c-.88.266-1.5.578-2.122 1.2-.622.622-.934 1.242-1.2 2.122-.266.78-.468 1.65-.528 2.928C.015 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.528 2.927.266.88.578 1.5 1.2 2.122.622.622 1.242.934 2.122 1.2.78.266 1.651.468 2.928.528C8.333 23.985 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.927-.528.88-.266 1.5-.578 2.122-1.2.622-.622.934-1.242 1.2-2.122.266-.78.468-1.651.528-2.928.057-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.148-.528-2.927-.266-.88-.578-1.5-1.2-2.122-.622-.622-1.242-.934-2.122-1.2-.78-.266-1.651-.468-2.928-.528C15.667.015 15.26 0 12 0zm0 2.16c3.203 0 3.585.009 4.849.07 1.171.054 1.805.244 2.227.414.56.217.96.477 1.382.896.419.42.679.822.896 1.381.171.422.36 1.057.413 2.227.061 1.264.07 1.646.07 4.849 0 3.203-.009 3.585-.07 4.849-.054 1.171-.244 1.805-.414 2.227-.217.56-.477.96-.896 1.382-.42.419-.822.679-1.381.896-.422.171-1.057.36-2.227.413-1.264.061-1.646.07-4.849.07-3.203 0-3.585-.009-4.849-.07-1.171-.054-1.805-.244-2.227-.414-.56-.217-.96-.477-1.382-.896-.419-.42-.679-.822-.896-1.381-.171-.422-.36-1.057-.413-2.227-.061-1.264-.07-1.646-.07-4.849 0-3.203.009-3.585.07-4.849.054-1.171.244-1.805.414-2.227.217-.56.477-.96.896-1.382.42-.419.822-.679 1.381-.896.422-.171 1.057-.36 2.227-.413 1.264-.061 1.646-.07 4.849-.07zM5.838 12a6.162 6.162 0 1 1 12.324 0 6.162 6.162 0 0 1-12.324 0zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm4.965-10.322a1.44 1.44 0 1 1 2.881.001 1.44 1.44 0 0 1-2.881-.001z"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                    {% if site_settings and site_settings.youtube_url %}
+                        <a href="{{ site_settings.youtube_url }}" class="text-white hover:text-gray-300 transition-colors" target="_blank" rel="noopener noreferrer">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                    {% if call_to_action and call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                        <a href="{{ call_to_action.secondary_button_url }}" class="btn bg-white text-secondary hover:text-secondary-900">{{ call_to_action.secondary_button_text }}</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile Menu Toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+
+        mobileMenuBtn.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.card, .card-elevated').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+            observer.observe(el);
+        });
+    </script>
+
+        <!-- Vanilla hero carousel initializer -->
+        <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            function initHeroCarousel(container) {
+                const interval = parseInt(container.dataset.interval) || 5000;
+                const track = container.querySelector('.carousel-track');
+                const slides = Array.from(container.querySelectorAll('.carousel-item'));
+                if (!slides.length) return;
+
+                // Ensure track is a flex-row and slides occupy full width
+                track.style.display = 'flex';
+                track.style.willChange = 'transform';
+                slides.forEach((s, i) => {
+                    s.style.flex = '0 0 100%';
+                    s.style.position = 'relative';
+                    s.setAttribute('aria-label', `Slide ${i+1} of ${slides.length}`);
+                });
+
+                let current = slides.findIndex(s => s.classList.contains('active'));
+                if (current < 0) current = 0;
+
+                const indicatorsWrap = container.querySelector('.carousel-indicators');
+                function buildIndicators() {
+                    if (!indicatorsWrap) return;
+                    indicatorsWrap.innerHTML = '';
+                    slides.forEach((_, i) => {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.dataset.index = i;
+                        if (i === current) btn.classList.add('active');
+                        btn.addEventListener('click', () => goTo(i, true));
+                        indicatorsWrap.appendChild(btn);
+                    });
+                }
+                buildIndicators();
+
+                const prevBtn = container.querySelector('.carousel-prev');
+                const nextBtn = container.querySelector('.carousel-next');
+                function updateUI() {
+                    const x = -current * 100;
+                    track.style.transform = `translateX(${x}%)`;
+                    if (indicatorsWrap) {
+                        Array.from(indicatorsWrap.children).forEach((b,i) => b.classList.toggle('active', i === current));
+                    }
+                    slides.forEach((s,i) => {
+                        const hidden = i === current ? 'false' : 'true';
+                        s.setAttribute('aria-hidden', hidden);
+                    });
+                }
+
+                function goTo(index, user=false) {
+                    current = (index + slides.length) % slides.length;
+                    updateUI();
+                    if (user) restartAuto();
+                }
+                function next(user=false){ goTo(current+1, user); }
+                function prev(user=false){ goTo(current-1, user); }
+
+                if (nextBtn) nextBtn.addEventListener('click', ()=> next(true));
+                if (prevBtn) prevBtn.addEventListener('click', ()=> prev(true));
+
+                // Keyboard support
+                container.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') { prev(true); e.preventDefault(); }
+                    if (e.key === 'ArrowRight') { next(true); e.preventDefault(); }
+                });
+
+                // Simple touch support
+                let startX = null;
+                if (track) {
+                    track.addEventListener('pointerdown', (e)=> { startX = e.clientX; });
+                    track.addEventListener('pointerup', (e)=> {
+                        if (startX === null) return;
+                        const dx = e.clientX - startX;
+                        if (Math.abs(dx) > 40) { if (dx > 0) prev(true); else next(true); }
+                        startX = null;
+                    });
+                }
+
+                // Auto-play
+                let timer = null;
+                function startAuto() { if (interval > 0) timer = setInterval(()=> next(false), interval); }
+                function stopAuto() { if (timer) { clearInterval(timer); timer = null; } }
+                function restartAuto(){ stopAuto(); startAuto(); }
+
+                container.addEventListener('mouseenter', stopAuto);
+                container.addEventListener('mouseleave', startAuto);
+                container.addEventListener('focusin', stopAuto);
+                container.addEventListener('focusout', startAuto);
+
+                updateUI();
+                startAuto();
+            }
+
+            // Defensive: remove duplicate hero-carousel instances (keeps first)
+            const _carousels = Array.from(document.querySelectorAll('.hero-carousel'));
+            if (_carousels.length > 1) {
+                console.warn('Multiple .hero-carousel instances detected. Keeping the first and removing duplicates.', _carousels.length);
+                _carousels.forEach((el, idx) => { if (idx > 0 && el && el.parentNode) el.parentNode.removeChild(el); });
+            }
+
+                // Ensure each carousel has only one active slide (keep first)
+                document.querySelectorAll('.hero-carousel').forEach(container => {
+                    const slides = Array.from(container.querySelectorAll('.carousel-item'));
+                    console.log('hero-carousel init: slides=', slides.length);
+                    const activeSlides = slides.filter(s => s.classList.contains('active'));
+                    if (activeSlides.length > 1) {
+                        activeSlides.forEach((s, i) => { if (i > 0) s.classList.remove('active'); });
+                        console.warn('Removed extra active class from carousel slides.');
+                    }
+                    // Pre-set first slide to visible so no blank canvas on load
+                    if (slides.length > 0) {
+                        slides[0].setAttribute('aria-hidden', 'false');
+                        slides.forEach((s, i) => {
+                            if (i > 0) s.setAttribute('aria-hidden', 'true');
+                            s.dataset.slideIndex = i;
+                        });
+                    }
+                });            // Observe for dynamic insertions (e.g., htmx or async scripts) and remove duplicate carousels
+            const observer = new MutationObserver((mutations) => {
+                const carousels = Array.from(document.querySelectorAll('.hero-carousel'));
+                if (carousels.length > 1) {
+                    console.warn('MutationObserver: duplicate .hero-carousel found. Removing extras.');
+                    carousels.forEach((el, idx) => { if (idx > 0 && el && el.parentNode) el.parentNode.removeChild(el); });
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+
+            document.querySelectorAll('.hero-carousel').forEach(initHeroCarousel);
+        });
+        </script>
+    {% block extra_js %}{% endblock %}
+    
+</body>
+</html>

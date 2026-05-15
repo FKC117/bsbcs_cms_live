@@ -1,0 +1,59 @@
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import path, include, reverse_lazy
+from django.contrib.auth import views as auth_views
+from django.contrib.sitemaps.views import sitemap
+from django.views.generic import TemplateView, RedirectView
+from registration.sitemaps import (
+    EventSitemap,
+    StaticViewSitemap,
+    PublicationSitemap,
+    WebsiteStaticSitemap,
+    WebinarSitemap,
+    PastEventSitemap,
+)
+from registration import views
+from registration.views import global_dashboard
+
+sitemaps = {
+    'events': EventSitemap,
+    'static': StaticViewSitemap,
+    'publications': PublicationSitemap,
+    'website': WebsiteStaticSitemap,
+    'webinars': WebinarSitemap,
+    'past_events': PastEventSitemap,
+}
+
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('dashboard/', global_dashboard, name='global_dashboard'),
+    path('', include(('website.urls', 'website'), namespace='website')),
+    path('index/', views.index, name='index'),
+
+    path('create-profile/', views.create_profile,name='create_profile'),
+    path('event/', include(('registration.urls', 'registration'), namespace='registration')),
+
+    path('profile/', views.user_profile, name='user_profile'),
+
+    #universal login system
+    path('accounts/login/', views.user_login, name='login'),  # Universal login
+    path('accounts/logout/', views.user_logout, name='logout'),  # Universal logout
+    path('accounts/password_change/', views.CustomPasswordChangeView.as_view(), name='password_change'),  # Universal password change
+    path('accounts/password_change/done/', auth_views.PasswordChangeDoneView.as_view(template_name='password_change_done.html'), name='password_change_done'),  # Universal password change done
+    path('accounts/password_reset/', views.CustomPasswordResetView.as_view(), name='password_reset'),  # Universal password reset
+    path('accounts/password_reset/done/', auth_views.PasswordResetDoneView.as_view(template_name='password_reset_done.html'), name='password_reset_done'),  # Universal password reset done
+    path('accounts/reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(template_name='password_reset_confirm.html', success_url=reverse_lazy('password_reset_complete')), name='password_reset_confirm'),  # Universal password reset confirm
+    path('accounts/reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='password_reset_complete.html'), name='password_reset_complete'),  # Universal password reset complete
+    #Bkash Payment Urls
+    # path('initiate-payment/<int:event_id>/', initiate_payment, name='initiate_payment'),
+    # path('payment-success/', payment_success, name='payment_success'),
+    # path('payment-failure/', payment_failure, name='payment_failure'),
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='django.contrib.sitemaps.views.sitemap'),
+    path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain'), name='robots_txt'),
+    path('favicon.ico', RedirectView.as_view(url='/media/site_settings/favicon.ico', permanent=True)),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

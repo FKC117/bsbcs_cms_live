@@ -1,0 +1,125 @@
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block title %}Past Events - BSBCS{% endblock %}
+
+{% block content %}
+<div class="px-6 py-12 max-w-7xl mx-auto">
+    <!-- Header Section -->
+    <div class="mb-12 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent-blue mb-4">
+            Past Events Archive
+        </h1>
+        <p class="text-text-secondary text-lg max-w-2xl mx-auto">
+            Explore our history of conferences, workshops, and symposiums dedicated to breast cancer awareness and research.
+        </p>
+    </div>
+
+    <!-- Events Grid -->
+    {% if reg_events or manual_events %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {% for event in reg_events %}
+                <div class="group bg-surface-light border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all duration-300">
+                    <!-- Image Container -->
+                    <div class="relative h-48 overflow-hidden">
+                        {% if event.event_logo %}
+                            <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif event.event_hero_image %}
+                            <img src="{{ event.event_hero_image.url }}" alt="{{ event.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% else %}
+                            <div class="w-full h-full bg-surface flex items-center justify-center">
+                                <i class="fas fa-calendar-alt text-4xl text-primary/20"></i>
+                            </div>
+                        {% endif %}
+                        <div class="absolute top-4 right-4 px-3 py-1 bg-surface-dark/80 backdrop-blur-md rounded-full text-xs font-semibold text-primary border border-primary/20">
+                            {{ event.year }}
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
+                            {{ event.name }} {{ event.year }}
+                        </h3>
+                        <p class="text-text-secondary text-sm mb-4 line-clamp-2">
+                            {{ event.slogan|default:"Empowering Survivors, Education & Support" }}
+                        </p>
+                        
+                        <div class="flex items-center gap-4 text-sm text-text-muted mb-6">
+                            <span class="flex items-center gap-1">
+                                <i class="far fa-calendar text-primary"></i>
+                                {{ event.start_date|date:"M Y" }}
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <i class="fas fa-map-marker-alt text-accent-blue"></i>
+                                {{ event.location|default:"Dhaka, Bangladesh"|truncatechars:20 }}
+                            </span>
+                        </div>
+
+                        <a href="{% url 'registration:home' event.id %}" 
+                           class="inline-flex items-center gap-2 px-6 py-2 bg-surface text-primary border border-primary/30 rounded-full hover:bg-primary hover:text-white transition-all duration-300 w-full justify-center font-medium">
+                            View Archive
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+
+            {% for event in manual_events %}
+                <div class="group bg-surface-light border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all duration-300">
+                    <!-- Image Container -->
+                    <div class="relative h-48 overflow-hidden">
+                        {% if event.logo %}
+                            <img src="{{ event.logo.url }}" alt="{{ event.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif event.hero_image %}
+                            <img src="{{ event.hero_image.url }}" alt="{{ event.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% else %}
+                            <div class="w-full h-full bg-surface flex items-center justify-center">
+                                <i class="fas fa-calendar-alt text-4xl text-primary/20"></i>
+                            </div>
+                        {% endif %}
+                        <div class="absolute top-4 right-4 px-3 py-1 bg-surface-dark/80 backdrop-blur-md rounded-full text-xs font-semibold text-primary border border-primary/20">
+                            {{ event.year }}
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
+                            {{ event.title }} {{ event.year }}
+                        </h3>
+                        <p class="text-text-secondary text-sm mb-4 line-clamp-2">
+                            {{ event.slogan|default:event.description|striptags|truncatechars:100 }}
+                        </p>
+                        
+                        <div class="flex items-center gap-4 text-sm text-text-muted mb-6">
+                            <span class="flex items-center gap-1">
+                                <i class="far fa-calendar text-primary"></i>
+                                {{ event.date_text }}
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <i class="fas fa-map-marker-alt text-accent-blue"></i>
+                                {{ event.location|default:event.venue|truncatechars:20 }}
+                            </span>
+                        </div>
+
+                        <a href="{% url 'website:past_event_detail' event.slug %}" 
+                           class="inline-flex items-center gap-2 px-6 py-2 bg-surface text-primary border border-primary/30 rounded-full hover:bg-primary hover:text-white transition-all duration-300 w-full justify-center font-medium">
+                            View Archive
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-20 bg-surface-light rounded-3xl border border-dashed border-border">
+            <div class="mb-4">
+                <i class="fas fa-history text-5xl text-text-muted opacity-20"></i>
+            </div>
+            <h3 class="text-xl font-semibold text-text-secondary">No past events found</h3>
+            <p class="text-text-muted mt-2">Check back later for archived conference materials.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

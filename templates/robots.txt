@@ -1,0 +1,29 @@
+# Allow all crawlers by default but explicitly disallow sensitive paths
+User-agent: *
+Disallow: /admin/
+Disallow: /accounts/
+Disallow: /manage/
+Disallow: /dashboard/
+Disallow: /secret/
+Disallow: /private/
+Disallow: /config/
+Disallow: /cgi-bin/
+Disallow: /backup/
+Disallow: /backups/
+Disallow: /database/
+Disallow: /db/
+Disallow: /.git/
+Disallow: /.env
+Disallow: /*.sql$
+Disallow: /venv/
+Disallow: /__pycache__/
+Disallow: /env/
+Disallow: /node_modules/
+# Media and uploaded files often contain sensitive documents; disallow if you want to avoid indexing
+Disallow: /media/
+
+# Keep static assets crawlable if you want search engines to fetch CSS/JS/images
+# Allow: /static/
+
+# Point to the canonical XML sitemap for crawlers
+Sitemap: /sitemap.xml

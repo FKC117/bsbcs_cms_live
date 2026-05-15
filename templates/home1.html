@@ -1,0 +1,77 @@
+{% extends "gene_base.html" %}
+
+{% block content %}
+<style>
+  .column-border {
+      border-left: 1px solid #d1d5db; /* Tailwind's border-gray-300 color */
+      border-right: 1px solid #d1d5db;
+  }
+  .center-text {
+      text-align: center; /* Center the paragraph text */
+  }
+</style>
+
+
+
+<div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-16 pb-10">
+    <div class="mx-auto max-w-6xl text-center">
+      <h1 class="text-4xl sm:text-6xl font-extrabold mt-10">Join Us for the Bangladesh Breast Cancer Conference 2025</h1>
+      <p class="mt-4 text-lg">Empowering Survivors, Education & Support</p>
+      <a href="{% url 'registration' %}" class="mt-10 inline-block px-8 py-3 bg-white text-gray-900 rounded-lg hover:bg-blue-500 transition duration-300">Register Now</a>
+    </div>
+</div>
+  
+<section id="about" class="py-10">
+    <div class="mx-auto max-w-full text-center px-10 items-center">
+      <h2 class="text-3xl sm:text-4xl font-bold text-gray-900">{{ about_conference.title }}</h2>
+      <div class="text-justify">
+        <p class="mt-4 text-lg text-gray-700">{{ about_conference.description }}.</p>
+    </div>
+    </div>
+</section>
+
+<section id="speakers" class="py-20 bg-gray-500">
+    <div class="mx-auto max-w-6xl text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold text-gray-900">Featured Speakers</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-10 mt-8">
+            {% for speaker in speakers %}
+            <div class="bg-white shadow-lg rounded-lg p-6">
+                <img src="{{ speaker.image.url }}" alt=" {{ speaker.name }}" class="rounded-full w-32 h-32 mx-auto">
+                <h3 class="mt-4 text-xl font-semibold">{{ speaker.name }}</h3>
+                <p class="mt-2 text-gray-600">{{ speaker.speciality }}</p>
+                <p class="mt-2 text-gray-600">{{ speaker.institution }}</p>
+                
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+
+<div class="max-w-full mx-4 py-8">
+  <h2 class="text-3xl sm:text-4xl font-bold text-gray-900 text-center mb-4">Invitations</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-12 gap-8 px-10">
+    {% for invitation in invitations %}
+    <div class="sm:col-span-3 flex flex-col items-center border-t border-b border-gray-300 column-border first:border-t-0 last:border-b-0 p-4">
+        <img src="{{ invitation.image.url }}" alt="{{ invitation.name }}" class="w-32 h-32 rounded-full">
+        <p class="mt-2 text-xl text-center font-semibold">{{ invitation.name }}</p>
+        <p class="text-sm">{{ invitation.designation }}</p>
+    </div>
+    <div class="sm:col-span-9 flex items-center border-t border-b border-gray-300 column-border first:border-t-0 last:border-b-0 p-4">
+        <p class="center-text">{{ invitation.message }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+
+<section id="registration" class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-24 pb-16">
+    <div class="mx-auto max-w-6xl text-center">
+      <h2 class="text-3xl sm:text-4xl font-bold text-white-900">Register Now</h2>
+      <p class="mt-4 text-lg text-white-700">Secure your spot for the conference today.</p>
+      <a href="{% url 'registration' %}" class="mt-10 inline-block px-8 py-3 bg-white text-gray-900 rounded-lg hover:bg-blue-500 transition duration-300">Register Now</a>
+    </div>
+</section>
+
+
+{% endblock %}

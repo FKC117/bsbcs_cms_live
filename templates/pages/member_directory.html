@@ -1,0 +1,578 @@
+
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block content %}
+    <!-- Page Header -->
+    <section class="bg-gradient-to-br from-primary-50 via-secondary-50 to-accent-50 py-12 md:py-16 relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="200" cy="100" r="120" fill="#E91E63"/>
+                <circle cx="1000" cy="300" r="150" fill="#1976D2"/>
+                <circle cx="600" cy="200" r="100" fill="#00695C"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10">
+            <div class="max-w-3xl">
+
+                {% if hero and hero.title %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-4">{{ hero.title }}</h1>
+                {% else %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-4">Member Directory</h1>
+                {% endif %}
+                {% if hero and hero.subtitle %}
+                    <p class="text-lg text-text-secondary leading-relaxed mb-8">{{ hero.subtitle }}</p>
+                {% else %}
+                    <p class="text-lg text-text-secondary leading-relaxed mb-8">Connect with Bangladesh's leading breast cancer specialists, researchers, and healthcare professionals. Build collaborations, share knowledge, and advance patient care together.</p>
+                {% endif %}
+                {% if call_to_action %}
+                    <div class="mb-8 flex flex-wrap gap-4">
+                        {% if call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            <a href="{{ call_to_action.primary_button_url }}" class="btn-primary inline-block">{{ call_to_action.primary_button_text }}</a>
+                        {% endif %}
+                        {% if call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                            <a href="{{ call_to_action.secondary_button_url }}" class="btn bg-white text-secondary hover:bg-secondary-50 hover:text-secondary-900 focus:ring-white inline-block">{{ call_to_action.secondary_button_text }}</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Search and Filter Section -->
+    <section class="section-compact bg-surface border-b border-border sticky top-20 z-sticky">
+        <div class="container-custom">
+            <div class="flex flex-col lg:flex-row gap-4">
+                <!-- Search Bar -->
+                <div class="flex-1">
+                    <div class="relative">
+                        <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Search by name, specialty, institution..." class="form-input pl-12 pr-4">
+                    </div>
+                </div>
+
+                <!-- Filter Button -->
+                <button id="filterToggle" class="btn-outline flex items-center gap-2 whitespace-nowrap">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                    </svg>
+                    Advanced Filters
+                    <span id="filterCount" class="hidden bg-primary text-white text-xs px-2 py-1 rounded-full">0</span>
+                </button>
+
+                <!-- Reset Filters -->
+                <button id="resetFilters" class="btn-ghost hidden">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Advanced Filter Panel -->
+            <div id="filterPanel" class="hidden mt-6 p-6 bg-primary-50 rounded-lg border border-primary-200">
+                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Specialty Filter -->
+                    <div>
+                        <label class="form-label">Specialty</label>
+                        <select id="specialtyFilter" class="form-input">
+                            <option value="">All Specialties</option>
+                            {% for s in specialities %}
+                                <option value="{{ s.name|slugify }}">{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Location Filter -->
+                    <div>
+                        <label class="form-label">Location</label>
+                        <select id="locationFilter" class="form-input">
+                            <option value="">All Locations</option>
+                            <option value="dhaka">Dhaka</option>
+                            <option value="chittagong">Chittagong</option>
+                            <option value="sylhet">Sylhet</option>
+                            <option value="rajshahi">Rajshahi</option>
+                            <option value="khulna">Khulna</option>
+                            <option value="barisal">Barisal</option>
+                            <option value="rangpur">Rangpur</option>
+                        </select>
+                    </div>
+
+                    <!-- Experience Filter -->
+                    <div>
+                        <label class="form-label">Years of Experience</label>
+                        <select id="experienceFilter" class="form-input">
+                            <option value="">Any Experience</option>
+                            <option value="0-5">0-5 years</option>
+                            <option value="5-10">5-10 years</option>
+                            <option value="10-15">10-15 years</option>
+                            <option value="15-20">15-20 years</option>
+                            <option value="20+">20+ years</option>
+                        </select>
+                    </div>
+
+                    <!-- Research Interest Filter -->
+                    <div>
+                        <label class="form-label">Research Interest</label>
+                        <select id="researchFilter" class="form-input">
+                            <option value="">All Research Areas</option>
+                            {% for ra in research_areas %}
+                                <option value="{{ ra.name|slugify }}">{{ ra.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4 mt-6">
+                    <button id="clearFilters" class="btn-ghost">Clear All</button>
+                    <button id="applyFilters" class="btn-primary">Apply Filters</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Summary -->
+    <section class="section-compact bg-background">
+        <div class="container-custom">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <p class="text-text-secondary">
+                    Showing <span id="resultCount" class="font-semibold text-text-primary">{{ members|length }}</span> members
+                </p>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm text-text-secondary">Sort by:</label>
+                    <select id="sortBy" class="form-input py-2">
+                        <option value="name">Name (A-Z)</option>
+                        <option value="specialty">Specialty</option>
+                        <option value="experience">Experience</option>
+                        <option value="recent">Recently Joined</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Member Grid -->
+    <section class="section">
+        <div class="container-custom">
+            <div id="memberGrid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for member in members %}
+                <div class="card hover-lift hover-shadow member-card" data-specialty="{% for s in member.specialties.all %}{{ s.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" data-location="{{ member.location|lower|default:'' }}" data-experience="{{ member.years_of_experience|default:'' }}" data-research="{% for ra in member.research_interest_areas.all %}{{ ra.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" style="{% if forloop.counter > 9 %}display: none;{% endif %}">
+                    <div class="flex items-start gap-4 mb-4">
+                        {% if member.image %}
+                            <img src="{{ member.image.url }}" alt="{{ member.user_profile.name }}{% if member.specialties.all %}, {% for s in member.specialties.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if member.years_of_experience %} with {{ member.years_of_experience }} years experience{% endif %}" class="w-20 h-20 rounded-full object-cover border-2 border-primary-200" loading="lazy">
+                        {% else %}
+                            <img src="{% static 'img/default-avatar.png' %}" alt="{{ member.user_profile.name }}" class="w-20 h-20 rounded-full object-cover border-2 border-primary-200" loading="lazy">
+                        {% endif %}
+                        <div class="flex-1">
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-1">{{ member.user_profile.name }}</h3>
+                            {% if member.specialties.all %}
+                                <p class="text-sm text-secondary font-semibold mb-2">{% for s in member.specialties.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+                            {% endif %}
+                            <div class="flex items-center gap-2 text-xs text-text-secondary">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                {% if member.years_of_experience %}<span>{{ member.years_of_experience }} years experience</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                            <p class="text-sm text-text-secondary mb-4 leading-relaxed">{{ member.profile_description }}</p>
+                    
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        {% if member.location %}
+                        <span class="inline-flex items-center gap-1 bg-accent-50 text-accent-800 px-3 py-1 rounded-full text-xs font-semibold">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                            </svg>
+                            {{ member.location }}
+                        </span>
+                        {% endif %}
+                        {% for research_area in member.research_interest_areas.all %}
+                        <span class="inline-flex items-center gap-1 bg-primary-50 text-primary-800 px-3 py-1 rounded-full text-xs font-semibold">
+                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3z"/>
+                            </svg>
+                            {{ research_area.name }}
+                        </span>
+                        {% endfor %}
+                        {# tags removed from Member model - no tag badges to display #}
+                    </div>
+
+                    <div class="border-t border-border pt-4 flex items-center justify-between">
+                        <div class="text-xs text-text-secondary">
+                            {% if member.institution %}<p class="font-semibold text-text-primary">{{ member.institution }}</p>{% endif %}
+                            {% if member.position %}<p>{{ member.position }}</p>{% endif %}
+                        </div>
+                        {% if member.profile_url %}
+                            <a href="{{ member.profile_url }}" data-profile-url="{{ member.profile_url }}" class="viewProfileBtn btn-ghost text-sm py-2 px-4">View Profile</a>
+                        {% else %}
+                            <button type="button" class="viewProfileBtn btn-ghost text-sm py-2 px-4">View Profile</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-center text-text-secondary">No members have been added yet.</p>
+                {% endfor %}
+            </div>
+
+            <!-- Load More Button -->
+            <div class="text-center mt-12">
+                <button id="loadMoreBtn" class="btn-outline" {% if members|length <= 9 %}style="display: none;"{% endif %}>
+                    Load More Members
+                    <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Membership Benefits CTA -->
+    <section class="section bg-gradient-to-br from-secondary via-secondary-600 to-secondary-700 text-white relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="100" fill="white"/>
+                <circle cx="1100" cy="300" r="150" fill="white"/>
+                <circle cx="600" cy="200" r="80" fill="white"/>
+            </svg>
+        </div>
+        
+        <div class="container-custom relative z-10">
+            <div class="max-w-3xl mx-auto text-center">
+                <h2 class="text-3xl md:text-4xl font-headline font-bold mb-6">Join Our Professional Network</h2>
+                <p class="text-lg text-secondary-100 mb-8 leading-relaxed">Connect with breast cancer specialists, access exclusive research, participate in collaborative studies, and advance your professional development.</p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                {% if call_to_action %}
+                    <div class="mb-8 flex flex-wrap gap-4">
+                        {% if call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            <a href="{{ call_to_action.primary_button_url }}" class="btn-primary inline-block">{{ call_to_action.primary_button_text }}</a>
+                        {% endif %}
+                        {% if call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                            <a href="{{ call_to_action.secondary_button_url }}" class="btn bg-white text-secondary hover:bg-secondary-50 hover:text-secondary-900 focus:ring-white inline-block">{{ call_to_action.secondary_button_text }}</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        // Member profile modal logic (fixed-position overlay to avoid layout issues)
+        const createMemberModal = () => {
+            // return existing modal if already created
+            const existing = document.getElementById('memberModal');
+            if (existing) return existing;
+
+            const modal = document.createElement('div');
+            modal.id = 'memberModal';
+            // ensure fixed positioning at viewport level regardless of parent stacking contexts
+            modal.style.cssText = 'position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999;';
+
+            modal.innerHTML = `
+                <div id="memberModalOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);"></div>
+                <div role="dialog" aria-modal="true" aria-labelledby="modalName" style="position:relative;background:white;border-radius:0.5rem;width:100%;max-width:900px;margin:1rem;overflow:auto;max-height:90vh;box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+                    <button id="modalCloseTop" style="position:absolute;right:0.75rem;top:0.5rem;background:transparent;border:none;padding:0.5rem;cursor:pointer;color:#374151;" aria-label="Close">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                    <div style="padding:1.25rem;">
+                        <div style="display:flex;flex-direction:column;gap:1rem;">
+                            <div style="display:flex;gap:1rem;flex-direction:row;align-items:flex-start;">
+                                <div style="flex:0 0 10rem;">
+                                    <img id="modalImage" src="" alt="" style="width:10rem;height:10rem;border-radius:9999px;object-fit:cover;border:2px solid rgba(99,102,241,0.2);display:block;margin:0 auto;">
+                                </div>
+                                <div style="flex:1;">
+                                    <h2 id="modalName" style="font-size:1.5rem;font-weight:700;color:#0f172a;margin:0 0 0.25rem 0;"></h2>
+                                    <p id="modalSpecialties" style="margin:0 0 0.5rem 0;color:#6b7280;font-weight:600;font-size:0.9rem;"></p>
+                                    <div id="modalMeta" style="color:#6b7280;font-size:0.85rem;margin-bottom:0.5rem"></div>
+                                    <p id="modalDescription" style="color:#374151;font-size:0.95rem;margin-bottom:0.75rem"></p>
+                                    <div id="modalBadges" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem"></div>
+                                    <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;">
+                                        <a id="modalProfileLink" href="#" target="_blank" style="display:none;padding:0.5rem 0.75rem;background:#4338ca;color:white;border-radius:0.375rem;text-decoration:none;">Open Profile</a>
+                                        <button id="modalCloseBottom" style="padding:0.5rem 0.75rem;background:transparent;border:1px solid #e5e7eb;border-radius:0.375rem;">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            return modal;
+        };
+
+        const memberModal = createMemberModal();
+
+        const openModal = (data) => {
+            document.getElementById('modalName').textContent = data.name || '';
+            const img = document.getElementById('modalImage');
+            if (data.image) { img.src = data.image; img.alt = data.name || ''; img.style.display = 'block'; } else { img.src=''; img.alt=''; img.style.display = 'none'; }
+            document.getElementById('modalSpecialties').textContent = data.specialties_display || '';
+            const metaParts = [];
+            if (data.institution) metaParts.push(data.institution);
+            if (data.position) metaParts.push(data.position);
+            if (data.location) metaParts.push(data.location);
+            if (data.experience) metaParts.push((data.experience || '') + (data.experience ? ' years experience' : ''));
+            document.getElementById('modalMeta').textContent = metaParts.filter(Boolean).join(' • ');
+            document.getElementById('modalDescription').textContent = data.description || '';
+
+            // badges for research areas
+            const badges = document.getElementById('modalBadges');
+            badges.innerHTML = '';
+            (data.research_areas || []).forEach(name => {
+                const span = document.createElement('span');
+                span.style.cssText = 'display:inline-flex;align-items:center;gap:0.25rem;background:#eef2ff;color:#3730a3;padding:0.25rem 0.5rem;border-radius:9999px;font-size:0.75rem;font-weight:600;';
+                span.textContent = name;
+                badges.appendChild(span);
+            });
+
+            const profileLink = document.getElementById('modalProfileLink');
+            if (data.profile_url) { profileLink.href = data.profile_url; profileLink.style.display = 'inline-block'; } else { profileLink.href = '#'; profileLink.style.display = 'none'; }
+
+            memberModal.style.display = 'flex';
+            memberModal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+            // focus close button for immediate keyboard access
+            const closeTop = document.getElementById('modalCloseTop'); if (closeTop) closeTop.focus();
+        };
+
+        const closeModal = () => {
+            memberModal.style.display = 'none';
+            memberModal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        };
+
+        // overlay close
+        const overlay = () => document.getElementById('memberModalOverlay');
+        memberModal.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'memberModalOverlay') closeModal();
+        });
+
+        // wire close buttons and ESC
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'modalCloseTop') closeModal();
+            if (e.target && e.target.id === 'modalCloseBottom') closeModal();
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+        // attach click handlers to view buttons
+        document.querySelectorAll('.viewProfileBtn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const card = btn.closest('.member-card');
+                if (!card) return;
+                const name = card.querySelector('h3') ? card.querySelector('h3').textContent.trim() : '';
+                const imageEl = card.querySelector('img');
+                const image = imageEl ? imageEl.src : '';
+                const specialtiesEl = card.querySelector('.text-sm.text-secondary');
+                const specialties_display = specialtiesEl ? specialtiesEl.textContent.trim() : '';
+                const researchEls = Array.from(card.querySelectorAll('div.flex.flex-wrap span'));
+                const research_areas = researchEls.map(s => s.textContent.trim());
+                const location = card.dataset.location || '';
+                const experience = card.dataset.experience || '';
+                const institutionEl = card.querySelector('.font-semibold.text-text-primary');
+                const institution = institutionEl ? institutionEl.textContent.trim() : '';
+                const positionEl = Array.from(card.querySelectorAll('div.text-xs p')).find(p => p.textContent && !p.classList.contains('font-semibold'));
+                const position = positionEl ? positionEl.textContent.trim() : '';
+                const descriptionEl = card.querySelector('p.text-sm.text-text-secondary');
+                const description = descriptionEl ? descriptionEl.textContent.trim() : '';
+                const profile_url = btn.dataset.profileUrl || btn.getAttribute('href') || '';
+
+                openModal({ name, image, specialties_display, research_areas, location, experience, institution, position, description, profile_url });
+            });
+        });
+
+        const ITEMS_PER_PAGE = 9;
+        let currentPage = 1;
+        
+        // Get all DOM elements first
+        const filterToggle = document.getElementById('filterToggle');
+        const filterPanel = document.getElementById('filterPanel');
+        const resetFilters = document.getElementById('resetFilters');
+        const clearFilters = document.getElementById('clearFilters');
+        const applyFilters = document.getElementById('applyFilters');
+        const filterCount = document.getElementById('filterCount');
+        const searchInput = document.getElementById('searchInput');
+        const memberCards = document.querySelectorAll('.member-card');
+        const resultCount = document.getElementById('resultCount');
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        const specialtyFilter = document.getElementById('specialtyFilter');
+        const locationFilter = document.getElementById('locationFilter');
+        const experienceFilter = document.getElementById('experienceFilter');
+        const researchFilter = document.getElementById('researchFilter');
+        const sortBy = document.getElementById('sortBy');
+        const memberGrid = document.getElementById('memberGrid');
+
+        // Filter Panel Toggle
+        filterToggle.addEventListener('click', () => {
+            filterPanel.classList.toggle('hidden');
+        });
+
+        function getVisibleMembers() {
+            return Array.from(memberCards).filter(card => {
+                const text = card.textContent.toLowerCase();
+                const searchMatch = text.includes(searchInput.value.toLowerCase());
+                
+                const specialty = card.dataset.specialty || '';
+                const location = card.dataset.location;
+                const experience = parseInt(card.dataset.experience) || 0;
+                const research = card.dataset.research || '';
+                
+                // Specialty filter (case-insensitive)
+                const selectedSpecialty = specialtyFilter.value;
+                const specialtyMatch = !selectedSpecialty || specialty.includes(selectedSpecialty);
+                
+                // Location filter (case-insensitive)
+                const selectedLocation = locationFilter.value.toLowerCase();
+                const locationMatch = !locationFilter.value || location === selectedLocation;
+                
+                // Experience filter (range matching)
+                let experienceMatch = !experienceFilter.value;
+                if (experienceFilter.value) {
+                    if (experienceFilter.value === '0-5' && experience >= 0 && experience <= 5) experienceMatch = true;
+                    else if (experienceFilter.value === '5-10' && experience > 5 && experience <= 10) experienceMatch = true;
+                    else if (experienceFilter.value === '10-15' && experience > 10 && experience <= 15) experienceMatch = true;
+                    else if (experienceFilter.value === '15-20' && experience > 15 && experience <= 20) experienceMatch = true;
+                    else if (experienceFilter.value === '20+' && experience > 20) experienceMatch = true;
+                }
+                
+                // Research Interest filter (case-insensitive)
+                const selectedResearch = researchFilter.value;
+                const researchMatch = !selectedResearch || research.includes(selectedResearch);
+                
+                return searchMatch && specialtyMatch && locationMatch && experienceMatch && researchMatch;
+            });
+        }
+
+        function updatePagination() {
+            const visibleMembers = getVisibleMembers();
+            
+            // First, hide all cards
+            memberCards.forEach(card => {
+                card.style.display = 'none';
+            });
+            
+            // Then show only the visible members that match current page
+            visibleMembers.forEach((card, index) => {
+                if (index < currentPage * ITEMS_PER_PAGE) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Show total matching results
+            resultCount.textContent = visibleMembers.length;
+            
+            // Show/hide load more button
+            if (visibleMembers.length > currentPage * ITEMS_PER_PAGE) {
+                loadMoreBtn.style.display = 'block';
+            } else {
+                loadMoreBtn.style.display = 'none';
+            }
+        }
+
+        searchInput.addEventListener('input', (e) => {
+            currentPage = 1;
+            updatePagination();
+        });
+
+        // Load More Button
+        loadMoreBtn.addEventListener('click', () => {
+            currentPage++;
+            updatePagination();
+        });
+
+        function updateFilterCount() {
+            let count = 0;
+            if (specialtyFilter.value) count++;
+            if (locationFilter.value) count++;
+            if (experienceFilter.value) count++;
+            if (researchFilter.value) count++;
+
+            if (count > 0) {
+                filterCount.textContent = count;
+                filterCount.classList.remove('hidden');
+                resetFilters.classList.remove('hidden');
+            } else {
+                filterCount.classList.add('hidden');
+                resetFilters.classList.add('hidden');
+            }
+        }
+
+        function applyFilterLogic() {
+            currentPage = 1;
+            updatePagination();
+            updateFilterCount();
+        }
+
+        // Auto-apply filters when dropdowns change
+        specialtyFilter.addEventListener('change', applyFilterLogic);
+        locationFilter.addEventListener('change', applyFilterLogic);
+        experienceFilter.addEventListener('change', applyFilterLogic);
+
+        applyFilters.addEventListener('click', () => {
+            applyFilterLogic();
+            filterPanel.classList.add('hidden');
+        });
+
+        clearFilters.addEventListener('click', () => {
+            specialtyFilter.value = '';
+            locationFilter.value = '';
+            experienceFilter.value = '';
+            researchFilter.value = '';
+            applyFilterLogic();
+        });
+
+        resetFilters.addEventListener('click', () => {
+            specialtyFilter.value = '';
+            locationFilter.value = '';
+            experienceFilter.value = '';
+            researchFilter.value = '';
+            searchInput.value = '';
+            currentPage = 1;
+            updateFilterCount();
+            updatePagination();
+        });
+
+        // Sort Functionality
+        sortBy.addEventListener('change', (e) => {
+            const sortValue = e.target.value;
+            const cardsArray = Array.from(memberCards);
+
+            cardsArray.sort((a, b) => {
+                if (sortValue === 'name') {
+                    const nameA = a.querySelector('h3').textContent;
+                    const nameB = b.querySelector('h3').textContent;
+                    return nameA.localeCompare(nameB);
+                } else if (sortValue === 'specialty') {
+                    const specA = a.dataset.specialty;
+                    const specB = b.dataset.specialty;
+                    return specA.localeCompare(specB);
+                } else if (sortValue === 'experience') {
+                    const expA = parseInt(a.dataset.experience) || 0;
+                    const expB = parseInt(b.dataset.experience) || 0;
+                    return expB - expA;
+                } else if (sortValue === 'recent') {
+                    // Sort by card order (recent = appears first in HTML)
+                    return Array.from(memberCards).indexOf(a) - Array.from(memberCards).indexOf(b);
+                }
+                return 0;
+            });
+
+            memberGrid.innerHTML = '';
+            cardsArray.forEach(card => memberGrid.appendChild(card));
+            currentPage = 1;
+            updatePagination();
+        });
+
+        // Initialize pagination on page load
+        updatePagination();
+    </script>
+{% endblock %}

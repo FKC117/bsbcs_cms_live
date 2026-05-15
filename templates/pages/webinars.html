@@ -1,0 +1,622 @@
+
+{% extends "pages/base.html" %}
+{% load static %}
+{% load site_tags %}
+
+{% block content %}
+    <!-- Hero Section -->
+    <section class="relative bg-gradient-to-br from-primary-50 via-accent-50 to-secondary-50 overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <svg class="w-full h-full" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 200C200 100 400 300 600 200C800 100 1000 300 1200 200V400H0V200Z" fill="#1976D2"/>
+                <path d="M0 250C200 150 400 350 600 250C800 150 1000 350 1200 250V400H0V250Z" fill="#00695C" opacity="0.5"/>
+            </svg>
+        </div>
+        <div class="container-custom relative z-10 py-16 md:py-20">
+            <div class="max-w-4xl">
+                {% if hero and hero.icon %}
+                    <div class="inline-flex items-center gap-2 bg-accent-100 text-accent-800 px-4 py-2 rounded-full mb-6">
+                        {% if hero.icon %}
+                            <img src="{{ hero.icon.url }}" alt="Icon" class="w-5 h-5" loading="lazy">
+                        {% else %}
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                            </svg>
+                        {% endif %}
+                        <span class="font-semibold">{{ hero.category|default:"Webinars Library" }}</span>
+                    </div>
+                {% else %}
+                    <div class="inline-flex items-center gap-2 bg-accent-100 text-accent-800 px-4 py-2 rounded-full mb-6">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+                        </svg>
+                        <span class="font-semibold">Webinars Library</span>
+                    </div>
+                {% endif %}
+                {% if hero and hero.title %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">{{ hero.title }}</h1>
+                {% else %}
+                    <h1 class="text-4xl md:text-5xl font-headline font-bold text-text-primary mb-6">Webinars & Learning Programs</h1>
+                {% endif %}
+                {% if hero and hero.subtitle %}
+                    <p class="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed">{{ hero.subtitle }}</p>
+                {% else %}
+                    <p class="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed">Access on-demand webinars, mentorship programs, and collaborative international initiatives in breast cancer care and research.</p>
+                {% endif %}
+                {% if call_to_action %}
+                    <div class="mb-8 flex flex-wrap gap-4">
+                        {% if call_to_action.primary_button_text and call_to_action.primary_button_url %}
+                            <a href="{{ call_to_action.primary_button_url }}" class="btn-primary inline-block">{{ call_to_action.primary_button_text }}</a>
+                        {% endif %}
+                        {% if call_to_action.secondary_button_text and call_to_action.secondary_button_url %}
+                            <a href="{{ call_to_action.secondary_button_url }}" class="btn-outline inline-block">{{ call_to_action.secondary_button_text }}</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Webinar Archives -->
+    <section class="section bg-secondary-50" id="webinars-section">
+        <div class="container-custom">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Webinar Archives</h2>
+                    <p class="text-lg text-text-secondary">On-demand access to educational webinars and expert presentations</p>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                {% if webinars.object_list %}
+                    {% for webinar in webinars.object_list %}
+                        <a href="{% url 'website:webinar_detail' webinar.pk %}" class="card-elevated hover-lift hover-shadow group cursor-pointer transition-all duration-300">
+                            <div class="relative mb-6 overflow-hidden rounded-lg">
+                                {% if webinar.video_url|youtube_thumbnail %}
+                                    <img src="{{ webinar.video_url|youtube_thumbnail }}" alt="{{ webinar.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                {% else %}
+                                    <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop" alt="{{ webinar.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
+                                {% endif %}
+                                <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                    <div class="flex items-center gap-2 text-white">
+                                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+                                        </svg>
+                                        {% if webinar.duration %}
+                                            <span class="font-semibold">{{ webinar.duration }}</span>
+                                        {% else %}
+                                            <span class="font-semibold">On Demand</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex items-center gap-1 bg-success-light text-success-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/>
+                                    </svg>
+                                    {{ webinar.get_type_display }}
+                                </span>
+                                {% if webinar.recorded_date %}
+                                    <span class="text-xs text-text-tertiary">{{ webinar.recorded_date|date:"M d, Y" }}</span>
+                                {% else %}
+                                    <span class="text-xs text-text-tertiary">Recently Added</span>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">{{ webinar.title }}</h3>
+                            {% if webinar.description %}
+                                <p class="text-text-secondary mb-4 leading-relaxed line-clamp-2">{{ webinar.description }}</p>
+                            {% endif %}
+                            {% if webinar.presenter_name %}
+                                <div class="flex items-center gap-4 mb-4">
+                                    {% if webinar.presenter_image %}
+                                        <img src="{{ webinar.presenter_image.url }}" alt="{{ webinar.presenter_name }}" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                    {% else %}
+                                        <div class="w-10 h-10 rounded-full bg-secondary-100 flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-secondary" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <p class="font-semibold text-text-primary text-sm">{{ webinar.presenter_name }}</p>
+                                        <p class="text-xs text-text-secondary">Presenter</p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="flex gap-3">
+                                <span class="btn-primary flex-1 text-center">View Details</span>
+                                {% if webinar.slides_url %}
+                                    <button class="btn-outline" onclick="event.preventDefault(); event.stopPropagation(); window.open('{{ webinar.slides_url }}', '_blank');">
+                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M5 3a2 2 0 00-2 2v2H3a1 1 0 000 2h.02a3 3 0 005.956 0H9a1 1 0 000-2H8V5a2 2 0 00-2-2H5zm8-2a1 1 0 011 1v4a1 1 0 11-2 0V2a1 1 0 011-1zm0 8a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1zM5 12a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1z"/>
+                                        </svg>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="col-span-3 text-center py-12">
+                        <svg class="w-16 h-16 text-text-tertiary mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        <p class="text-text-secondary">No webinars available at this time.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Pagination for Webinar Archives -->
+            {% if webinars.has_other_pages %}
+                <div class="mt-12 flex justify-center items-center gap-4">
+                    {% if webinars.has_previous %}
+                        <a href="?webinars_page=1&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ request.GET.gci_page|default:1 }}#webinars-section" class="btn-outline px-4 py-2" onclick="scrollToSection('webinars-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            First
+                        </a>
+                        <a href="?webinars_page={{ webinars.previous_page_number }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ request.GET.gci_page|default:1 }}#webinars-section" class="btn-outline px-4 py-2" onclick="scrollToSection('webinars-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Previous
+                        </a>
+                    {% endif %}
+                    
+                    <div class="flex gap-2">
+                        {% for num in webinars.paginator.page_range %}
+                            {% if webinars.number == num %}
+                                <span class="px-4 py-2 bg-primary text-white rounded-lg font-semibold">{{ num }}</span>
+                            {% else %}
+                                <a href="?webinars_page={{ num }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ request.GET.gci_page|default:1 }}#webinars-section" class="px-4 py-2 btn-outline hover:bg-primary hover:text-white transition-colors" onclick="scrollToSection('webinars-section')">{{ num }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {% if webinars.has_next %}
+                        <a href="?webinars_page={{ webinars.next_page_number }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ request.GET.gci_page|default:1 }}#webinars-section" class="btn-outline px-4 py-2" onclick="scrollToSection('webinars-section')">
+                            Next
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                        <a href="?webinars_page={{ webinars.paginator.num_pages }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ request.GET.gci_page|default:1 }}#webinars-section" class="btn-outline px-4 py-2" onclick="scrollToSection('webinars-section')">
+                            Last
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- Preceptorship Program -->
+    <section class="section bg-primary-50" id="preceptorship-section">
+        <div class="container-custom">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Preceptorship Program</h2>
+                    <p class="text-lg text-text-secondary">Mentorship opportunities and professional development for breast cancer specialists</p>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                {% if preceptorship_webinars.object_list %}
+                    {% for webinar in preceptorship_webinars.object_list %}
+                        <a href="{% url 'website:webinar_detail' webinar.pk %}" class="card-elevated hover-lift hover-shadow group cursor-pointer transition-all duration-300">
+                            <div class="relative mb-6 overflow-hidden rounded-lg">
+                                {% if webinar.video_url|youtube_thumbnail %}
+                                    <img src="{{ webinar.video_url|youtube_thumbnail }}" alt="{{ webinar.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                {% else %}
+                                    <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop" alt="{{ webinar.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
+                                {% endif %}
+                                <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                    <div class="flex items-center gap-2 text-white">
+                                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10.5 1.5H5.75A2.25 2.25 0 003.5 3.75v12.5A2.25 2.25 0 005.75 18.5h8.5a2.25 2.25 0 002.25-2.25V6.5m-12 0h12M7 6.5v11"/>
+                                        </svg>
+                                        {% if webinar.duration %}
+                                            <span class="font-semibold">{{ webinar.duration }}</span>
+                                        {% else %}
+                                            <span class="font-semibold">Program</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex items-center gap-1 bg-accent-light text-accent-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                                    </svg>
+                                    {{ webinar.get_type_display }}
+                                </span>
+                                {% if webinar.recorded_date %}
+                                    <span class="text-xs text-text-tertiary">{{ webinar.recorded_date|date:"M d, Y" }}</span>
+                                {% else %}
+                                    <span class="text-xs text-text-tertiary">Starting Soon</span>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">{{ webinar.title }}</h3>
+                            {% if webinar.description %}
+                                <p class="text-text-secondary mb-4 leading-relaxed line-clamp-2">{{ webinar.description }}</p>
+                            {% endif %}
+                            {% if webinar.presenter_name %}
+                                <div class="flex items-center gap-4 mb-4">
+                                    {% if webinar.presenter_image %}
+                                        <img src="{{ webinar.presenter_image.url }}" alt="{{ webinar.presenter_name }}" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                    {% else %}
+                                        <div class="w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-accent" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <p class="font-semibold text-text-primary text-sm">{{ webinar.presenter_name }}</p>
+                                        <p class="text-xs text-text-secondary">Presenter</p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="flex gap-3">
+                                <span class="btn-primary flex-1 text-center">View Details</span>
+                                {% if webinar.slides_url %}
+                                    <button class="btn-outline" onclick="event.preventDefault(); event.stopPropagation(); window.open('{{ webinar.slides_url }}', '_blank');">
+                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M5 3a2 2 0 00-2 2v2H3a1 1 0 000 2h.02a3 3 0 005.956 0H9a1 1 0 000-2H8V5a2 2 0 00-2-2H5zm8-2a1 1 0 011 1v4a1 1 0 11-2 0V2a1 1 0 011-1zm0 8a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1zM5 12a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1z"/>
+                                        </svg>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <!-- Preceptorship Card 1 (Fallback) -->
+                    <div class="card-elevated hover-lift hover-shadow">
+                        <div class="relative mb-6 overflow-hidden rounded-lg">
+                            <img src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop" alt="Experienced mentor guiding junior clinician in surgical procedure" class="w-full h-48 object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                <div class="flex items-center gap-2 text-white">
+                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.5 1.5H5.75A2.25 2.25 0 003.5 3.75v12.5A2.25 2.25 0 005.75 18.5h8.5a2.25 2.25 0 002.25-2.25V6.5m-12 0h12M7 6.5v11"/>
+                                    </svg>
+                                    <span class="font-semibold">6-Month Program</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="inline-flex items-center gap-1 bg-accent-light text-accent-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                                </svg>
+                                Expert Mentorship
+                            </span>
+                            <span class="text-xs text-text-tertiary">Starting: Jan 2026</span>
+                        </div>
+                        <h3 class="text-xl font-headline font-semibold text-text-primary mb-3">Surgical Technique Preceptorship</h3>
+                        <p class="text-text-secondary mb-4 leading-relaxed">One-on-one mentoring in breast-conserving surgery and oncoplastic techniques with senior surgeons.</p>
+                        <div class="flex items-center gap-4 mb-4">
+                            <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop" alt="Dr. Fatema Khan, mentor" class="w-10 h-10 rounded-full object-cover" loading="lazy">
+                            <div>
+                                <p class="font-semibold text-text-primary text-sm">Dr. Fatema Khan</p>
+                                <p class="text-xs text-text-secondary">Lead Mentor</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button class="btn-primary flex-1">Apply Now</button>
+                            <button class="btn-outline">View Details</button>
+                        </div>
+                    </div>
+
+                    <!-- Preceptorship Card 2 (Fallback) -->
+                    <div class="card-elevated hover-lift hover-shadow">
+                        <div class="relative mb-6 overflow-hidden rounded-lg">
+                            <img src="https://images.unsplash.com/photo-1576091160672-112b161ef63d?q=80&w=2940&auto=format&fit=crop" alt="Clinical team discussing case studies and pathology reports" class="w-full h-48 object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                <div class="flex items-center gap-2 text-white">
+                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10.5 1.5H5.75A2.25 2.25 0 003.5 3.75v12.5A2.25 2.25 0 005.75 18.5h8.5a2.25 2.25 0 002.25-2.25V6.5m-12 0h12M7 6.5v11"/>
+                                    </svg>
+                                    <span class="font-semibold">3-Month Program</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="inline-flex items-center gap-1 bg-secondary-light text-secondary-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                                </svg>
+                                Clinical Rounds
+                            </span>
+                            <span class="text-xs text-text-tertiary">Starting: Feb 2026</span>
+                        </div>
+                        <h3 class="text-xl font-headline font-semibold text-text-primary mb-3">Medical Oncology Preceptorship</h3>
+                        <p class="text-text-secondary mb-4 leading-relaxed">Immersive clinical experience in systemic therapy decision-making and patient management strategies.</p>
+                        <div class="flex items-center gap-4 mb-4">
+                            <img src="https://images.unsplash.com/photo-1559839734335-3ec28a7fe52e?q=80&w=2940&auto=format&fit=crop" alt="Dr. Reza Ahmed, mentor" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div>
+                                <p class="font-semibold text-text-primary text-sm">Dr. Reza Ahmed</p>
+                                <p class="text-xs text-text-secondary">Lead Mentor</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button class="btn-primary flex-1">Apply Now</button>
+                            <button class="btn-outline">View Details</button>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Pagination for Preceptorship Program -->
+            {% if preceptorship_webinars.has_other_pages %}
+                <div class="mt-12 flex justify-center items-center gap-4">
+                    {% if preceptorship_webinars.has_previous %}
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page=1&gci_page={{ request.GET.gci_page|default:1 }}#preceptorship-section" class="btn-outline px-4 py-2" onclick="scrollToSection('preceptorship-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            First
+                        </a>
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ preceptorship_webinars.previous_page_number }}&gci_page={{ request.GET.gci_page|default:1 }}#preceptorship-section" class="btn-outline px-4 py-2" onclick="scrollToSection('preceptorship-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Previous
+                        </a>
+                    {% endif %}
+                    
+                    <div class="flex gap-2">
+                        {% for num in preceptorship_webinars.paginator.page_range %}
+                            {% if preceptorship_webinars.number == num %}
+                                <span class="px-4 py-2 bg-primary text-white rounded-lg font-semibold">{{ num }}</span>
+                            {% else %}
+                                <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ num }}&gci_page={{ request.GET.gci_page|default:1 }}#preceptorship-section" class="px-4 py-2 btn-outline hover:bg-primary hover:text-white transition-colors" onclick="scrollToSection('preceptorship-section')">{{ num }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {% if preceptorship_webinars.has_next %}
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ preceptorship_webinars.next_page_number }}&gci_page={{ request.GET.gci_page|default:1 }}#preceptorship-section" class="btn-outline px-4 py-2" onclick="scrollToSection('preceptorship-section')">
+                            Next
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ preceptorship_webinars.paginator.num_pages }}&gci_page={{ request.GET.gci_page|default:1 }}#preceptorship-section" class="btn-outline px-4 py-2" onclick="scrollToSection('preceptorship-section')">
+                            Last
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+    <section class="section bg-secondary-50" id="gci-section">
+        <div class="container-custom">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-headline font-bold text-text-primary mb-4">Global Cancer Institute</h2>
+                    <p class="text-lg text-text-secondary">Collaborative international projects advancing breast cancer care and research</p>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                {% if gci_webinars.object_list %}
+                    {% for gci in gci_webinars.object_list %}
+                        <a href="{% url 'website:webinar_detail' gci.pk %}" class="card-elevated hover-lift hover-shadow group cursor-pointer transition-all duration-300">
+                            <div class="relative mb-6 overflow-hidden rounded-lg">
+                                {% if gci.video_url|youtube_thumbnail %}
+                                    <img src="{{ gci.video_url|youtube_thumbnail }}" alt="{{ gci.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                {% else %}
+                                    <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop" alt="{{ gci.title }}" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy">
+                                {% endif %}
+                                <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                    <div class="flex items-center gap-2 text-white">
+                                        {% if gci.duration %}
+                                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                            </svg>
+                                            <span class="font-semibold">{{ gci.duration }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-flex items-center gap-1 bg-warning-light text-warning-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" clip-rule="evenodd"/>
+                                    </svg>
+                                    {{ gci.get_type_display }}
+                                </span>
+                                {% if gci.recorded_date %}
+                                    <span class="text-xs text-text-tertiary">{{ gci.recorded_date|date:"M d, Y" }}</span>
+                                {% else %}
+                                    <span class="text-xs text-text-tertiary">Ongoing</span>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">{{ gci.title }}</h3>
+                            {% if gci.description %}
+                                <p class="text-text-secondary mb-4 leading-relaxed line-clamp-2">{{ gci.description }}</p>
+                            {% endif %}
+                            {% if gci.presenter_name %}
+                                <div class="flex items-center gap-4 mb-4">
+                                    {% if gci.presenter_image %}
+                                        <img src="{{ gci.presenter_image.url }}" alt="{{ gci.presenter_name }}" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                                    {% else %}
+                                        <div class="w-10 h-10 rounded-full bg-warning-100 flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-warning" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <p class="font-semibold text-text-primary text-sm">{{ gci.presenter_name }}</p>
+                                        <p class="text-xs text-text-secondary">Presenter</p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="flex gap-3">
+                                <span class="btn-primary flex-1 text-center">View Details</span>
+                                {% if gci.slides_url %}
+                                    <button class="btn-outline" onclick="event.preventDefault(); event.stopPropagation(); window.open('{{ gci.slides_url }}', '_blank');">
+                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M5 3a2 2 0 00-2 2v2H3a1 1 0 000 2h.02a3 3 0 005.956 0H9a1 1 0 000-2H8V5a2 2 0 00-2-2H5zm8-2a1 1 0 011 1v4a1 1 0 11-2 0V2a1 1 0 011-1zm0 8a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1zM5 12a1 1 0 011 1v4a1 1 0 11-2 0v-4a1 1 0 011-1z"/>
+                                        </svg>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <!-- GCI Card 1 (Fallback) -->
+                    <a href="#" class="card-elevated hover-lift hover-shadow group cursor-pointer transition-all duration-300">
+                        <div class="relative mb-6 overflow-hidden rounded-lg">
+                            <img src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2940&auto=format&fit=crop" alt="International collaboration meeting with healthcare professionals from multiple countries" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                <div class="flex items-center gap-2 text-white">
+                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span class="font-semibold">19 Countries</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="inline-flex items-center gap-1 bg-warning-light text-warning-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" clip-rule="evenodd"/>
+                                </svg>
+                                GCI
+                            </span>
+                            <span class="text-xs text-text-tertiary">Ongoing</span>
+                        </div>
+                        <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">Breast Cancer Registry & Data Analytics</h3>
+                        <p class="text-text-secondary mb-4 leading-relaxed line-clamp-2">International multi-center registry collecting standardized data on breast cancer outcomes and treatment patterns across diverse populations.</p>
+                        <div class="flex items-center gap-4 mb-4">
+                            <img src="https://images.unsplash.com/photo-1559839734335-3ec28a7fe52e?q=80&w=2940&auto=format&fit=crop" alt="Dr. Amina Hassan, coordinator" class="w-10 h-10 rounded-full object-cover" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div>
+                                <p class="font-semibold text-text-primary text-sm">Dr. Amina Hassan</p>
+                                <p class="text-xs text-text-secondary">Program Coordinator</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="btn-primary flex-1 text-center">View Details</span>
+                        </div>
+                    </a>
+
+                    <!-- GCI Card 2 (Fallback) -->
+                    <a href="#" class="card-elevated hover-lift hover-shadow group cursor-pointer transition-all duration-300">
+                        <div class="relative mb-6 overflow-hidden rounded-lg">
+                            <img src="https://images.unsplash.com/photo-1576091160672-112b161ef63d?q=80&w=2940&auto=format&fit=crop" alt="Research collaboration and data sharing between institutions" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?q=80&w=2940&auto=format&fit=crop'; this.onerror=null;">
+                            <div class="absolute inset-0 bg-gradient-to-t from-text-primary/80 to-transparent flex items-end p-6">
+                                <div class="flex items-center gap-2 text-white">
+                                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span class="font-semibold">32 Sites</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="inline-flex items-center gap-1 bg-success-light text-success-dark px-3 py-1 rounded-full text-xs font-semibold">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.3A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" clip-rule="evenodd"/>
+                                </svg>
+                                GCI
+                            </span>
+                            <span class="text-xs text-text-tertiary">Active</span>
+                        </div>
+                        <h3 class="text-xl font-headline font-semibold text-text-primary mb-3 group-hover:text-primary transition-colors">Precision Oncology Collaborative</h3>
+                        <p class="text-text-secondary mb-4 leading-relaxed line-clamp-2">Multi-institutional research initiative focused on genomic profiling, biomarker discovery, and personalized treatment strategies.</p>
+                        <div class="flex items-center gap-4 mb-4">
+                            <img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=2940&auto=format&fit=crop" alt="Dr. Sohail Rahman, lead investigator" class="w-10 h-10 rounded-full object-cover" loading="lazy">
+                            <div>
+                                <p class="font-semibold text-text-primary text-sm">Dr. Sohail Rahman</p>
+                                <p class="text-xs text-text-secondary">Lead Investigator</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <span class="btn-primary flex-1 text-center">View Details</span>
+                        </div>
+                    </a>
+                {% endif %}
+            </div>
+
+            <!-- Pagination for GCI -->
+            {% if gci_webinars.has_other_pages %}
+                <div class="mt-12 flex justify-center items-center gap-4">
+                    {% if gci_webinars.has_previous %}
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page=1#gci-section" class="btn-outline px-4 py-2" onclick="scrollToSection('gci-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            First
+                        </a>
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ gci_webinars.previous_page_number }}#gci-section" class="btn-outline px-4 py-2" onclick="scrollToSection('gci-section')">
+                            <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Previous
+                        </a>
+                    {% endif %}
+                    
+                    <div class="flex gap-2">
+                        {% for num in gci_webinars.paginator.page_range %}
+                            {% if gci_webinars.number == num %}
+                                <span class="px-4 py-2 bg-primary text-white rounded-lg font-semibold">{{ num }}</span>
+                            {% else %}
+                                <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ num }}#gci-section" class="px-4 py-2 btn-outline hover:bg-primary hover:text-white transition-colors" onclick="scrollToSection('gci-section')">{{ num }}</a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {% if gci_webinars.has_next %}
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ gci_webinars.next_page_number }}#gci-section" class="btn-outline px-4 py-2" onclick="scrollToSection('gci-section')">
+                            Next
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                        <a href="?webinars_page={{ request.GET.webinars_page|default:1 }}&preceptorship_page={{ request.GET.preceptorship_page|default:1 }}&gci_page={{ gci_webinars.paginator.num_pages }}#gci-section" class="btn-outline px-4 py-2" onclick="scrollToSection('gci-section')">
+                            Last
+                            <svg class="w-5 h-5 inline ml-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+    <section class="section bg-gradient-to-r from-primary to-primary-700 text-white">
+        <div class="container-custom">
+            <div class="max-w-3xl mx-auto text-center">
+                <svg class="w-16 h-16 mx-auto mb-6 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                <h2 class="text-3xl md:text-4xl font-headline font-bold mb-6">Stay Updated with Latest Webinars</h2>
+                <p class="text-lg text-primary-100 mb-8 leading-relaxed">Subscribe to receive notifications about new Webinars, Perceptorship, and GCI events.</p>
+                <div class="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto">
+                    <input type="email" placeholder="Enter your email address" class="flex-1 px-6 py-4 rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-white">
+                    <button class="btn bg-white text-primary hover:bg-primary-50 focus:ring-white px-8 py-4">Subscribe</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        function scrollToSection(sectionId) {
+            // Smooth scroll to the section after page loads
+            const section = document.getElementById(sectionId);
+            if (section) {
+                setTimeout(() => {
+                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        }
+    </script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <h1>Send Email</h1>
+  <form method="post" style="width: 100%;">{% csrf_token %}
+    <label for="group_name">Select Email Group:</label>
+    <select name="group_name" id="group_name" style="width: 300px;"> <!-- Widened field -->
+      {% for group in email_groups %}
+        <option value="{{ group.name }}">{{ group.name }}</option>
+      {% endfor %}
+    </select>
+    <br><br>
+    <label for="bulk_email_id">Select Bulk Email:</label>
+    <select name="bulk_email_id" id="bulk_email_id" style="width: 300px;"> <!-- Widened field -->
+      {% for email in bulk_emails %}
+        <option value="{{ email.id }}">{{ email.subject }}</option>
+      {% endfor %}
+    </select>
+    <br><br>
+    <button type="submit" class="button">Send Email</button>
+  </form>
+{% endblock %}

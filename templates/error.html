@@ -1,0 +1,23 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attention Required!</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="min-h-screen flex items-center justify-center bg-gray-900">
+        <div class="bg-white p-8 rounded-lg shadow-md max-w-sm ml-5 mr-5">
+            <h1 class="text-2xl font-bold text-red-600 mb-4">Attention Required!</h1>
+            <p class="text-gray-700">{{ message }}</p><br>
+            {% if participant %}
+                <button class="bg-blue-500 text-white py-2 px-4 rounded w-full mt-4 ml-auto" onclick="window.location.href = '{% url 'registration:payment' event.id participant.id %}'">Make the Payment</button>
+            {% else %}
+                <a href="{% url 'registration:registration' event.id %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-15 ml-auto text-center">Register for the event</a>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

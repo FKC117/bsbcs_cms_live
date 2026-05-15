@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Reminder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            color: #0056b3;
+        }
+        p {
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 15px;
+            color: rgb(255, 255, 255); /* Text color is now white */
+            background-color:rgb(6, 58, 34);
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .button:hover {
+            background-color: #004494;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Payment Reminder</h1>
+        <p>Dear {{ participant.name }},</p>
+        <p>
+            We noticed that your payment for the <strong>{{ event.name }} {{ event.year }}</strong>
+            event is still pending. To confirm your participation, please complete your payment using the link below:
+        </p>
+        <p>
+            <a href="{{ payment_url }}" 
+                style="display: inline-block; 
+                    padding: 10px 15px; 
+                    color: #ffffff; 
+                    background-color: #0056b3; 
+                    text-decoration: none; 
+                    border-radius: 5px; 
+                    font-weight: bold;">
+                Complete Payment
+            </a>
+     
+        </p>
+        <p>
+            If you’ve already made the payment, please ignore this reminder. For any queries,
+            feel free to contact us.
+        </p>
+        <p>Thank you, and we look forward to seeing you at the event!</p>
+        <p>Best regards,<br>{{ event.name }} {{ event.year }}Team</p>
+    </div>
+</body>
+</html>

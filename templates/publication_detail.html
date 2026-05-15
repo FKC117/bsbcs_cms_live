@@ -1,0 +1,66 @@
+{% extends "gene_base.html" %}
+
+{% block title %}{{ publication.title }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto py-10 px-4 sm:px-6 lg:px-8">
+    <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div class="px-4 py-6 sm:px-6 lg:px-8 bg-gradient-to-r from-red-500 to-pink-500 text-white">
+            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3">{{ publication.title }}</h1>
+            <p class="text-md sm:text-lg"><strong>Authors:</strong> {{ publication.authors }}</p>
+            <p class="text-md sm:text-lg"><strong>Institution:</strong> {{ publication.institution }}</p>
+        </div>
+        <div class="px-4 py-6 sm:px-6 lg:px-8">
+            <div class="mb-6">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-3">Introduction</h2>
+                <p class="text-gray-700 text-justify">{{ publication.introduction }}</p>
+            </div>
+            <div class="mb-6">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-3">Methods</h2>
+                <p class="text-gray-700 text-justify">{{ publication.methods }}</p>
+            </div>
+            <div class="mb-6">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-3">Results</h2>
+                <p class="text-gray-700 text-justify">{{ publication.results }}</p>
+            </div>
+            <div class="mb-6">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-3">Conclusion</h2>
+                <p class="text-gray-700 text-justify">{{ publication.conclusion }}</p>
+            </div>
+            {% if publication.image %}
+                <div class="mb-6 flex justify-center">
+                    <img id="image" src="{{ publication.image.url }}" alt="{{ publication.title }}" class="mt-6 max-w-full rounded-lg shadow-2xl">
+                </div>
+            {% endif %}
+            <div class="mt-6 text-center space-x-4">
+                <h3 class="text-lg sm:text-xl font-semibold text-gray-800 mb-3">Share this publication:</h3>
+                <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}" target="_blank" class="text-blue-600"><i class="fab fa-facebook fa-2x"></i></a>
+                <a href="https://twitter.com/intent/tweet?url={{ request.build_absolute_uri }}&text={{ publication.title }}" target="_blank" class="text-blue-400 ml-4"><i class="fab fa-twitter fa-2x"></i></a>
+                <a href="https://www.linkedin.com/shareArticle?url={{ request.build_absolute_uri }}&title={{ publication.title }}" target="_blank" class="text-blue-700 ml-4"><i class="fab fa-linkedin fa-2x"></i></a>
+            </div>
+            <!-- Separate download button -->
+            {% if publication.presentation_file %}
+                <div class="mt-8 text-center">
+                    <a href="{{ publication.presentation_file.url }}" 
+                    class="text-white bg-green-600 hover:bg-green-800 font-semibold py-3 px-6 rounded-lg shadow-lg"
+                    download>
+                        Download Presentation
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('image').onclick = function() {
+        if (this.style.transform === "scale(2)") {
+            this.style.transform = "scale(1)";
+        } else {
+            this.style.transform = "scale(2)";
+        }
+        this.style.transition = "transform 0.25s ease";
+    };
+</script>
+
+
+{% endblock %}

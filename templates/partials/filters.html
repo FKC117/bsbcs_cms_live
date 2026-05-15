@@ -1,0 +1,22 @@
+<form class="row g-2 mb-4">
+    <div class="col-md-6">
+        <label class="form-label">Filter by Event</label>
+        <select name="event" class="form-select">
+            <option value="">All Events</option>
+            {% for event in all_events %}
+                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>
+                    {{ event.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Filter by Status</label>
+        <select name="event_status" class="form-select">
+            <option value="">All Statuses</option>
+            <option value="upcoming" {% if current_filters.event_status == "upcoming" %}selected{% endif %}>Upcoming</option>
+            <option value="ongoing" {% if current_filters.event_status == "ongoing" %}selected{% endif %}>Ongoing</option>
+            <option value="past" {% if current_filters.event_status == "past" %}selected{% endif %}>Past</option>
+        </select>
+    </div>
+</form>

@@ -1,0 +1,71 @@
+{% extends "gene_base.html" %}
+
+
+
+{% load registration_filters %}
+{% block title %} Gallery{% endblock %}
+
+{%block content %}
+
+<div class="bg-gray-100 pt-16">
+    <header class="bg-white shadow p-4">
+        <h1 class="text-3xl font-bold text-center">{{ event.name }} {{ event.year }} Gallery</h1>
+    </header>
+
+    <div class="container mx-auto my-8">
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <!-- Images Section -->
+            <section id="images">
+                <h2 class="text-2xl font-bold mb-4">Images</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {% for image in images %}
+                        <div class="bg-gray-200 p-4 rounded-lg shadow">
+                            <img src="{{ image.image.url }}" alt="{{ image.caption }}" class="image w-full h-auto">
+                            {% if image.caption %}
+                                <p class="mt-2 text-center text-gray-700">{{ image.caption }}</p>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <p>No images available.</p>
+                    {% endfor %}
+                </div>
+            </section>
+            
+            
+            <!-- Videos Section -->
+            <section id="videos" class="mt-8">
+                <h2 class="text-2xl font-bold mb-4">Videos</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {% for video in videos %}
+                        <div class="bg-gray-200 p-4 rounded-lg shadow">
+                            <iframe width="100%" height="215" src="{{ video.youtube_url|youtube_embed }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="no-referrer-when-downgrade" loading="lazy"></iframe>
+                            {% if video.caption %}
+                                <p class="mt-2 text-center text-gray-700">{{ video.caption }}</p>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <p>No videos available.</p>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% comment %} <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let images = document.querySelectorAll('.image');
+        
+        images.forEach(function(image) {
+            image.addEventListener('click', function() {
+                if (this.style.transform === "scale(2)") {
+                    this.style.transform = "scale(1)";
+                } else {
+                    this.style.transform = "scale(2)";
+                }
+                this.style.transition = "transform 0.25s ease";
+            });
+        });
+    });
+</script> {% endcomment %}
+
+{% endblock %}

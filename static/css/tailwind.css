@@ -1,0 +1,304 @@
+/* BSBCS Portal - Medical Authority Modernism Design System */
+/* Generated: 2025-11-20 14:35:10 */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Primary Colors - Medical Authority and Trust Foundation */
+    --color-primary: #1976D2; /* blue-700 */
+    --color-primary-50: #E3F2FD; /* blue-50 */
+    --color-primary-100: #BBDEFB; /* blue-100 */
+    --color-primary-200: #90CAF9; /* blue-200 */
+    --color-primary-300: #64B5F6; /* blue-300 */
+    --color-primary-400: #42A5F5; /* blue-400 */
+    --color-primary-500: #2196F3; /* blue-500 */
+    --color-primary-600: #1976D2; /* blue-600 */
+    --color-primary-700: #1565C0; /* blue-700 */
+    --color-primary-800: #0D47A1; /* blue-800 */
+    --color-primary-900: #0A3D91; /* blue-900 */
+
+    /* Secondary Colors - Breast Cancer Awareness Accent Moments */
+    --color-secondary: #E91E63; /* pink-600 */
+    --color-secondary-50: #FCE4EC; /* pink-50 */
+    --color-secondary-100: #F8BBD0; /* pink-100 */
+    --color-secondary-200: #F48FB1; /* pink-200 */
+    --color-secondary-300: #F06292; /* pink-300 */
+    --color-secondary-400: #EC407A; /* pink-400 */
+    --color-secondary-500: #E91E63; /* pink-500 */
+    --color-secondary-600: #D81B60; /* pink-600 */
+    --color-secondary-700: #C2185B; /* pink-700 */
+    --color-secondary-800: #AD1457; /* pink-800 */
+    --color-secondary-900: #880E4F; /* pink-900 */
+
+    /* Accent Colors - Success States and Progress Indicators */
+    --color-accent: #00695C; /* teal-800 */
+    --color-accent-50: #E0F2F1; /* teal-50 */
+    --color-accent-100: #B2DFDB; /* teal-100 */
+    --color-accent-200: #80CBC4; /* teal-200 */
+    --color-accent-300: #4DB6AC; /* teal-300 */
+    --color-accent-400: #26A69A; /* teal-400 */
+    --color-accent-500: #009688; /* teal-500 */
+    --color-accent-600: #00897B; /* teal-600 */
+    --color-accent-700: #00796B; /* teal-700 */
+    --color-accent-800: #00695C; /* teal-800 */
+    --color-accent-900: #004D40; /* teal-900 */
+
+    /* Background Colors - Clean Research Environment Canvas */
+    --color-background: #FAFAFA; /* gray-50 */
+    --color-surface: #FFFFFF; /* white */
+
+    /* Text Colors */
+    --color-text-primary: #212121; /* gray-900 - Extended reading and medical content */
+    --color-text-secondary: #616161; /* gray-700 - Supporting information and metadata */
+    --color-text-tertiary: #9E9E9E; /* gray-500 */
+    --color-text-disabled: #BDBDBD; /* gray-400 */
+
+    /* Semantic Colors */
+    --color-success: #2E7D32; /* green-800 - Positive confirmations and achievements */
+    --color-success-light: #A5D6A7; /* green-200 */
+    --color-success-dark: #1B5E20; /* green-900 */
+
+    --color-warning: #F57C00; /* orange-700 - Important notices without alarm */
+    --color-warning-light: #FFE0B2; /* orange-100 */
+    --color-warning-dark: #E65100; /* orange-900 */
+
+    --color-error: #C62828; /* red-800 - Clear problem identification and guidance */
+    --color-error-light: #FFCDD2; /* red-100 */
+    --color-error-dark: #B71C1C; /* red-900 */
+
+    /* Border Colors */
+    --color-border: #E0E0E0; /* gray-300 */
+    --color-border-light: #F5F5F5; /* gray-100 */
+    --color-border-dark: #BDBDBD; /* gray-400 */
+
+    /* Shadow Values - Minimal elevation for floating elements */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.15);
+
+    /* Typography Scale */
+    --font-headline: 'Inter', sans-serif;
+    --font-body: 'Source Sans Pro', sans-serif;
+    --font-cta: 'Inter', sans-serif;
+    --font-accent: 'Source Serif Pro', serif;
+
+    /* Spacing Scale */
+    --spacing-xs: 0.25rem; /* 4px */
+    --spacing-sm: 0.5rem; /* 8px */
+    --spacing-md: 1rem; /* 16px */
+    --spacing-lg: 1.5rem; /* 24px */
+    --spacing-xl: 2rem; /* 32px */
+    --spacing-2xl: 3rem; /* 48px */
+    --spacing-3xl: 4rem; /* 64px */
+
+    /* Border Radius */
+    --radius-sm: 0.25rem; /* 4px */
+    --radius-md: 0.5rem; /* 8px */
+    --radius-lg: 0.75rem; /* 12px */
+    --radius-xl: 1rem; /* 16px */
+
+    /* Transition Timing - Smooth 300ms ease-out for responsive feedback */
+    --transition-fast: 150ms ease-out;
+    --transition-base: 300ms ease-out;
+    --transition-slow: 500ms ease-out;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-text-primary font-body;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline font-semibold text-text-primary;
+    line-height: 1.2;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl font-bold;
+  }
+
+  h2 {
+    @apply text-3xl md:text-4xl lg:text-5xl font-bold;
+  }
+
+  h3 {
+    @apply text-2xl md:text-3xl lg:text-4xl font-semibold;
+  }
+
+  h4 {
+    @apply text-xl md:text-2xl lg:text-3xl font-semibold;
+  }
+
+  h5 {
+    @apply text-lg md:text-xl lg:text-2xl font-semibold;
+  }
+
+  h6 {
+    @apply text-base md:text-lg lg:text-xl font-semibold;
+  }
+
+  p {
+    @apply text-base leading-relaxed;
+  }
+
+  a {
+    @apply text-primary hover:text-primary-700 transition-colors duration-300;
+  }
+
+  button {
+    @apply font-cta font-semibold transition-all duration-300;
+  }
+}
+
+@layer components {
+  /* Card Components - Content containers with clean borders */
+  .card {
+    @apply bg-surface rounded-lg border border-border p-6 shadow-sm;
+  }
+
+  .card-elevated {
+    @apply bg-surface rounded-lg border border-border p-6 shadow-md;
+  }
+
+  /* Button Components - Professional action hierarchy */
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-md font-cta font-semibold transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary-700 focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-white hover:bg-secondary-700 focus:ring-secondary-500;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-white hover:bg-accent-700 focus:ring-accent-500;
+  }
+
+  .btn-outline {
+    @apply btn bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-white focus:ring-primary-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-primary hover:bg-primary-50 focus:ring-primary-500;
+  }
+
+  /* Form Components - Professional application feel */
+  .form-input {
+    @apply w-full px-4 py-3 border border-border rounded-md bg-surface text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-300;
+  }
+
+  .form-label {
+    @apply block text-sm font-semibold text-text-primary mb-2;
+  }
+
+  .form-error {
+    @apply text-sm text-error mt-1;
+  }
+
+  .form-helper {
+    @apply text-sm text-text-secondary mt-1;
+  }
+
+  /* Highlight Components - Strategic colored left borders */
+  .highlight-primary {
+    @apply border-l-4 border-primary pl-4;
+  }
+
+  .highlight-secondary {
+    @apply border-l-4 border-secondary pl-4;
+  }
+
+  .highlight-accent {
+    @apply border-l-4 border-accent pl-4;
+  }
+
+  /* Alert Components - Clear problem identification */
+  .alert {
+    @apply p-4 rounded-md border;
+  }
+
+  .alert-success {
+    @apply alert bg-success-light border-success text-success-dark;
+  }
+
+  .alert-warning {
+    @apply alert bg-warning-light border-warning text-warning-dark;
+  }
+
+  .alert-error {
+    @apply alert bg-error-light border-error text-error-dark;
+  }
+
+  /* Navigation Components - Floating elements with subtle shadows */
+  .nav-floating {
+    @apply bg-surface shadow-md border-b border-border;
+  }
+
+  /* Content Sections - Strategic white space */
+  .section {
+    @apply py-12 md:py-16 lg:py-20;
+  }
+
+  .section-compact {
+    @apply py-8 md:py-10 lg:py-12;
+  }
+
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Typography Utilities */
+  .text-accent-serif {
+    @apply font-accent font-semibold;
+  }
+
+  /* Hover Effects - Responsive feedback without distraction */
+  .hover-lift {
+    @apply transition-transform duration-300 hover:-translate-y-1;
+  }
+
+  .hover-shadow {
+    @apply transition-shadow duration-300 hover:shadow-lg;
+  }
+}
+
+@layer utilities {
+  /* Custom Utility Classes */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .transition-base {
+    transition: all 300ms ease-out;
+  }
+
+  .transition-fast {
+    transition: all 150ms ease-out;
+  }
+
+  .transition-slow {
+    transition: all 500ms ease-out;
+  }
+
+  /* Focus Visible Utilities */
+  .focus-visible-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
+  }
+}

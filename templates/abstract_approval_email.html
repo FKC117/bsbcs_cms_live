@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Abstract Approval Notification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .content {
+            max-width: 600px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>Abstract Approval Notification</h1>
+        <p>Dear Participant,</p>
+
+        <p>We are pleased to inform you that your abstract titled "<strong>{{ abstract.title }}</strong>" has been approved for {{ approval_type }}.</p>
+
+        <p>Event: <strong>{{ abstract.event.name }} {{ abstract.event.year }}</strong></p>
+        <p>We look forward to your participation.</p>
+
+        <p>Best regards,</p>
+        <p>The {{ abstract.event.name }} {{ abstract.event.year }} Team</p>
+    </div>
+</body>
+</html>

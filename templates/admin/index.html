@@ -1,0 +1,12 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block content %}
+    <div class="module filtered" id="quick-links">
+        <h2>Quick Links</h2>
+        <ul style="padding-left: 20px;">
+            <li><a href="{% url 'global_dashboard' %}">📊 Dashboard</a></li>
+        </ul>
+    </div>
+    {{ block.super }}
+{% endblock %}

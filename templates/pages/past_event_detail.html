@@ -1,0 +1,547 @@
+{% extends "pages/base.html" %}
+{% load static %}
+
+{% block title %}{{ event.name }} {{ event.year }} | BSBCS{% endblock %}
+
+{% block extra_head %}
+<!-- Ensure design consistency for Past Event Detail -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<style>
+    .column-border {
+        border-top: 1px solid #d1d5db;
+        border-bottom: 1px solid #d1d5db;
+    }
+
+    .center-text {
+        text-align: justify;
+    }
+
+    .custom-max-width {
+        max-width: 95rem;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .hero-overlay {
+        background: linear-gradient(to bottom,
+                rgba(0, 0, 0, 0.7) 0%,
+                rgba(0, 0, 0, 0.3) 60%,
+                rgba(0, 0, 0, 0.8) 100%);
+    }
+
+    @keyframes slow-zoom {
+        0% {
+            transform: scale(1);
+        }
+
+        100% {
+            transform: scale(1.05);
+        }
+    }
+
+    .animate-slow-zoom {
+        animation: slow-zoom 20s linear infinite alternate;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero Section (Combined approach) -->
+<!-- Hero Section (Combined approach) -->
+<div class="relative flex items-center justify-center overflow-hidden" style="min-height: 90vh;">
+    <!-- Immersive Background -->
+    <div class="absolute inset-0 z-0">
+        {% if is_manual %}
+        {% if event.hero_image %}
+        <img src="{{ event.hero_image.url }}" class="w-full h-full object-cover animate-slow-zoom"
+            alt="{{ event.name }}">
+        {% else %}
+        <div class="w-full h-full bg-gradient-to-br from-pink-500 to-red-500"></div>
+        {% endif %}
+        {% else %}
+        {% if event.event_hero_image %}
+        <img src="{{ event.event_hero_image.url }}" class="w-full h-full object-cover animate-slow-zoom"
+            alt="{{ event.name }}">
+        {% else %}
+        <div class="w-full h-full bg-gradient-to-br from-pink-500 to-red-500"></div>
+        {% endif %}
+        {% endif %}
+        <div class="absolute inset-0 hero-overlay"></div>
+    </div>
+
+    <!-- Content -->
+    <div class="relative z-10 container mx-auto px-4 text-center">
+        <span
+            class="inline-block px-4 py-1 mb-6 text-sm font-bold tracking-widest text-white uppercase bg-pink-600 rounded-full">
+            Archive: {{ event.year }}
+        </span>
+        <h1 class="text-4xl md:text-7xl font-extrabold text-white mb-6 drop-shadow-2xl">
+            {{ event.name }}
+        </h1>
+        <p class="text-xl md:text-2xl text-white max-w-3xl mx-auto font-medium mb-10 opacity-90">
+            {{ event.slogan }}
+        </p>
+
+        <!-- Dates/Venue Glass Card -->
+        <div class="flex flex-wrap justify-center gap-6 mt-12">
+            <div class="bg-pink-600 rounded-2xl px-10 py-5 shadow-2xl transform hover:scale-105 transition-transform border border-pink-500">
+                <p class="text-xs uppercase tracking-widest text-pink-100 font-bold mb-1 opacity-80">Date</p>
+                <p class="text-xl font-bold text-white">
+                    {% if is_manual %}
+                    {{ event.year }}
+                    {% else %}
+                    {{ event.start_date|date:"d M" }} - {{ event.end_date|date:"d M, Y" }}
+                    {% endif %}
+                </p>
+            </div>
+            {% if event.location %}
+            <div class="bg-pink-600 rounded-2xl px-10 py-5 shadow-2xl transform hover:scale-105 transition-transform border border-pink-500">
+                <p class="text-xs uppercase tracking-widest text-pink-100 font-bold mb-1 opacity-80">Venue</p>
+                <p class="text-xl font-bold text-white">{{ event.location }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- All-in-One Content Wrapper -->
+<div class="bg-white">
+
+    <!-- About Section (Modeled after about.html) -->
+    {% if about_conference %}
+    <section id="about" class="py-20">
+        <div class="mx-auto max-w-7xl px-4 sm:px-10 flex flex-col md:flex-row items-center gap-12">
+            <div class="w-full md:w-1/3">
+                <div class="relative">
+                    <div class="absolute -inset-4 bg-pink-100 rounded-3xl -z-10 rotate-3"></div>
+                    {% if is_manual %}
+                    {% if event.about_image %}
+                    <img src="{{ event.about_image.url }}" alt="{{ event.name }}"
+                        class="relative z-10 w-full aspect-[4/3] object-cover rounded-2xl shadow-2xl">
+                    {% elif event.hero_image %}
+                    <img src="{{ event.hero_image.url }}" alt="{{ event.name }}"
+                        class="relative z-10 w-full aspect-[4/3] object-cover rounded-2xl shadow-2xl">
+                    {% endif %}
+                    {% else %}
+                    {% if about_conference.image %}
+                    <img src="{{ about_conference.image.url }}" alt="{{ about_conference.title }}"
+                        class="w-full h-auto rounded-2xl shadow-2xl">
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="w-full md:w-2/3">
+                <h2 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-6">
+                    {% if is_manual %}About this Event{% else %}{{ about_conference.title }}{% endif %}
+                </h2>
+                <div class="prose prose-lg text-gray-700 max-w-none">
+                    {% if is_manual %}
+                    {{ event.description|linebreaks }}
+                    {% else %}
+                    <p class="font-semibold mb-4">{{ about_conference.short_description }}</p>
+                    {{ about_conference.description|linebreaks }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Speakers Section (Modeled after speakers.html) -->
+    {% if speakers %}
+    <section id="speakers" class="py-20 bg-gray-50">
+        <div class="mx-auto max-w-7xl px-4">
+            <h2 class="text-3xl sm:text-5xl font-bold text-center text-gray-900 mb-16">Distinguished Speakers</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {% for speaker in speakers %}
+                <!-- Speaker Card -->
+                <div class="bg-white rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all group cursor-pointer border border-gray-100 flex flex-col items-center text-center"
+                    onclick="openSpeakerModal('speaker-{{ forloop.counter }}')">
+
+                    <div class="relative mb-6">
+                        <div
+                            class="absolute inset-0 bg-pink-500 rounded-full scale-110 opacity-0 group-hover:opacity-10 transition-opacity">
+                        </div>
+                        {% if speaker.image %}
+                        <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}"
+                            class="w-40 h-40 rounded-full object-cover border-4 border-white shadow-md">
+                        {% else %}
+                        <div
+                            class="w-40 h-40 rounded-full bg-pink-100 flex items-center justify-center border-4 border-white shadow-md">
+                            <i class="fas fa-user text-pink-300 text-5xl"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">{{ speaker.name }}</h3>
+                    <p class="text-pink-600 font-bold mb-4 uppercase tracking-wider text-sm">{{ speaker.designation }}
+                    </p>
+
+                    {% if speaker.institution %}
+                    <p class="text-gray-500 text-sm mb-8 line-clamp-2">{{ speaker.institution }}</p>
+                    {% endif %}
+
+                    <div class="mt-auto">
+                        <button
+                            class="inline-flex items-center text-pink-600 font-black text-sm uppercase tracking-widest hover:text-pink-700 transition-colors">
+                            View Biography <i class="fas fa-plus-circle ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Speaker Lightbox Modal (stays the same, just inside the loop) -->
+                <div id="speaker-{{ forloop.counter }}"
+                    class="fixed inset-0 hidden items-center justify-center p-4 bg-black/95 backdrop-blur-lg speaker-modal"
+                    style="z-index: 10000;">
+                    <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative"
+                        onclick="event.stopPropagation()">
+                        <button onclick="closeSpeakerModal('speaker-{{ forloop.counter }}')"
+                            class="absolute top-6 right-6 text-gray-400 hover:text-pink-600 transition-colors z-20">
+                            <i class="fas fa-times text-2xl"></i>
+                        </button>
+
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-10 p-8 md:p-12">
+                            <div class="md:col-span-4">
+                                <div class="md:sticky md:top-0">
+                                    {% if speaker.image %}
+                                    <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}"
+                                        class="w-full aspect-square rounded-2xl object-cover shadow-2xl mb-8">
+                                    {% endif %}
+                                    <h3 class="text-2xl font-bold text-gray-900 mb-1">{{ speaker.name }}</h3>
+                                    <p class="text-pink-600 font-bold mb-4">{{ speaker.designation }}</p>
+                                </div>
+                            </div>
+                            <div class="md:col-span-8">
+                                <h4 class="text-xs uppercase tracking-[0.2em] text-gray-400 font-black mb-6 text-left">
+                                    Expert Biography</h4>
+                                <div class="prose prose-lg text-gray-700 max-w-none text-justify leading-relaxed">
+                                    {{ speaker.bio|linebreaks }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // Move modals to body end to avoid stacking context issues
+        document.addEventListener('DOMContentLoaded', function () {
+            const modals = document.querySelectorAll('.speaker-modal');
+            modals.forEach(modal => {
+                document.body.appendChild(modal);
+            });
+        });
+
+        function openSpeakerModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                document.body.style.overflow = 'hidden'; // Prevent scrolling
+            }
+        }
+
+        function closeSpeakerModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.body.style.overflow = ''; // Restore scrolling
+            }
+        }
+
+        // Close on escape key
+        document.addEventListener('keydown', function (event) {
+            if (event.key === "Escape") {
+                const modals = document.querySelectorAll('.speaker-modal');
+                modals.forEach(m => {
+                    if (!m.classList.contains('hidden')) {
+                        m.classList.add('hidden');
+                        m.classList.remove('flex');
+                        document.body.style.overflow = '';
+                    }
+                });
+            }
+        });
+
+        // Close on click outside
+        window.addEventListener('click', function (event) {
+            const modals = document.querySelectorAll('.speaker-modal');
+            modals.forEach(m => {
+                if (event.target === m) {
+                    m.classList.add('hidden');
+                    m.classList.remove('flex');
+                    document.body.style.overflow = '';
+                }
+            });
+        });
+    </script>
+    {% endif %}
+
+    <!-- Scientific Program Section (Modeled after schedule.html) -->
+    {% if scientific_program %}
+    <section id="program" class="py-20">
+        <div class="custom-max-width px-4">
+            <h2 class="text-3xl sm:text-5xl font-bold text-center text-gray-900 mb-16">Scientific Program</h2>
+
+            {% for day in scientific_program %}
+            <div class="mb-16">
+                <h3 class="text-2xl font-bold text-white bg-pink-500 py-3 px-6 rounded-t-xl inline-block">
+                    {{ day.day_name }}{% if day.date %} - {{ day.date|date:"d M, Y" }}{% endif %}
+                </h3>
+
+                <!-- Desktop Table View (Hidden on Mobile) -->
+                <div class="hidden md:block overflow-x-auto shadow-xl rounded-b-xl rounded-tr-xl border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 bg-white table-auto">
+                        <thead>
+                            <tr class="bg-pink-300">
+                                <th class="py-4 px-4 text-center text-xs font-bold text-gray-900 uppercase tracking-wider">Time</th>
+                                <th class="py-4 px-4 text-center text-xs font-bold text-gray-900 uppercase tracking-wider">Session/Title</th>
+                                {% if not is_manual %}
+                                <th class="py-4 px-4 text-center text-xs font-bold text-gray-900 uppercase tracking-wider">Hall Room</th>
+                                {% endif %}
+                                <th class="py-4 px-4 text-center text-xs font-bold text-gray-900 uppercase tracking-wider">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% if is_manual %}
+                            {% for session in day.sessions %}
+                            <tr class="hover:bg-pink-50 transition-colors">
+                                <td class="py-6 px-4 whitespace-nowrap text-center text-gray-900 font-medium">
+                                    {{ session.time_range }}
+                                </td>
+                                <td class="py-6 px-4 text-center">
+                                    <div class="font-bold text-lg text-gray-900">{{ session.session_name }}</div>
+                                    <div class="mt-4 text-xs space-y-2">
+                                        {% if session.chairmen %}
+                                        <div class="flex flex-col items-center">
+                                            <span class="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Chairmen</span>
+                                            <p class="text-gray-700">{{ session.chairmen }}</p>
+                                        </div>
+                                        {% endif %}
+                                        {% if session.moderators %}
+                                        <div class="flex flex-col items-center">
+                                            <span class="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Moderators</span>
+                                            <p class="text-gray-700">{{ session.moderators }}</p>
+                                        </div>
+                                        {% endif %}
+                                        {% if session.panelists %}
+                                        <div class="flex flex-col items-center">
+                                            <span class="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Panelists</span>
+                                            <p class="text-gray-700">{{ session.panelists }}</p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="py-6 px-4">
+                                    <div class="grid grid-cols-1 gap-4">
+                                        {% for activity in session.activities.all %}
+                                        <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-pink-500 text-left">
+                                            <div class="flex justify-between items-start gap-4">
+                                                <div class="text-pink-700 font-bold text-lg">{{ activity.topic }}</div>
+                                                {% if activity.time %}
+                                                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{ activity.time }}</span>
+                                                {% endif %}
+                                            </div>
+                                            {% if activity.speaker_name %}
+                                            <div class="text-md font-semibold text-gray-800 mt-2">
+                                                <i class="fas fa-user-tie text-pink-500 mr-2"></i>{{ activity.speaker_name }}
+                                            </div>
+                                            {% endif %}
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-sm">
+                                                {% if False and activity.chairmen %}
+                                                <div>
+                                                    <span class="font-bold text-gray-900 block mb-1">Chairmen:</span>
+                                                    <p class="text-gray-600">{{ activity.chairmen }}</p>
+                                                </div>
+                                                {% endif %}
+                                                {% if False and activity.moderators %}
+                                                <div>
+                                                    <span class="font-bold text-gray-900 block mb-1">Moderators:</span>
+                                                    <p class="text-gray-600">{{ activity.moderators }}</p>
+                                                </div>
+                                                {% endif %}
+                                                {% if False and activity.panelists %}
+                                                <div class="sm:col-span-2">
+                                                    <span class="font-bold text-gray-900 block mb-1">Panelists:</span>
+                                                    <p class="text-gray-600">{{ activity.panelists }}</p>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            {% for slot in day.timeslots %}
+                            {% for schedule in slot.schedules.all %}
+                            <tr class="hover:bg-pink-50 transition-colors">
+                                <td class="py-6 px-4 whitespace-nowrap text-center text-gray-900 font-medium">
+                                    {{ slot.start_time|time:"P" }} - {{ slot.end_time|time:"P" }}
+                                </td>
+                                <td class="py-6 px-4 text-center">
+                                    <div class="font-bold text-lg text-gray-900">{{ schedule.title }}</div>
+                                    <div class="text-sm text-pink-600 mt-1">{{ schedule.presenter }}</div>
+                                </td>
+                                <td class="py-6 px-4 text-center text-gray-600">
+                                    {{ slot.hall_room }}
+                                </td>
+                                <td class="py-6 px-4 text-sm text-gray-600">
+                                    {% if schedule.chairperson %}
+                                    <div><span class="font-bold text-gray-900">Chair:</span> {{ schedule.chairperson }}</div>
+                                    {% endif %}
+                                    {% if schedule.moderator %}
+                                    <div class="mt-1"><span class="font-bold text-gray-900">Moderator:</span> {{ schedule.moderator }}</div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Card View (Hidden on Desktop) -->
+                <div class="md:hidden space-y-6">
+                    {% if is_manual %}
+                    {% for session in day.sessions %}
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                        <div class="bg-pink-50 p-4 border-b border-pink-100">
+                            <div class="flex items-center text-pink-600 font-bold mb-1">
+                                <i class="fas fa-clock mr-2"></i> {{ session.time_range }}
+                            </div>
+                            <h4 class="text-xl font-extrabold text-gray-900">{{ session.session_name }}</h4>
+                            <div class="mt-3 grid grid-cols-1 gap-2 text-xs">
+                                {% if session.chairmen %}
+                                <div>
+                                    <span class="text-gray-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Chairmen</span>
+                                    <p class="text-gray-700 font-bold">{{ session.chairmen }}</p>
+                                </div>
+                                {% endif %}
+                                {% if session.moderators %}
+                                <div>
+                                    <span class="text-gray-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Moderators</span>
+                                    <p class="text-gray-700 font-bold">{{ session.moderators }}</p>
+                                </div>
+                                {% endif %}
+                                {% if session.panelists %}
+                                <div>
+                                    <span class="text-gray-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Panelists</span>
+                                    <p class="text-gray-700 font-bold">{{ session.panelists }}</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            {% for activity in session.activities.all %}
+                            <div class="bg-gray-50 p-4 rounded-xl border-l-4 border-pink-500">
+                                <div class="flex justify-between items-start mb-3">
+                                    <h5 class="text-pink-700 font-bold text-lg leading-tight">{{ activity.topic }}</h5>
+                                    {% if activity.time %}
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-tighter shrink-0 ml-2 py-1 px-2 bg-gray-100 rounded">{{ activity.time }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if activity.speaker_name %}
+                                <div class="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                                    <i class="fas fa-user-circle text-pink-500 mr-2 text-lg"></i> {{ activity.speaker_name }}
+                                </div>
+                                {% endif %}
+                                <div class="grid grid-cols-1 gap-3 text-xs">
+                                    <!-- Activity level details hidden as they are now at session level -->
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <!-- Registration app mobile view -->
+                    {% for slot in day.timeslots %}
+                    {% for schedule in slot.schedules.all %}
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-100 p-4">
+                        <div class="flex items-center text-pink-600 font-bold mb-2">
+                            <i class="fas fa-clock mr-2"></i> {{ slot.start_time|time:"P" }} - {{ slot.end_time|time:"P" }}
+                        </div>
+                        <h4 class="text-lg font-extrabold text-gray-900 mb-1">{{ schedule.title }}</h4>
+                        <p class="text-pink-600 font-bold text-sm mb-3">{{ schedule.presenter }}</p>
+                        <div class="text-xs text-gray-500 space-y-1">
+                            {% if slot.hall_room %}
+                            <div><span class="font-bold text-gray-700">Room:</span> {{ slot.hall_room }}</div>
+                            {% endif %}
+                            {% if schedule.chairperson %}
+                            <div><span class="font-bold text-gray-700">Chair:</span> {{ schedule.chairperson }}</div>
+                            {% endif %}
+                            {% if schedule.moderator %}
+                            <div><span class="font-bold text-gray-700">Moderator:</span> {{ schedule.moderator }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Partner Organizations (Sponsors) -->
+    {% if sponsors or event.sponsors.all %}
+    <section id="sponsors" class="py-20 bg-gray-50">
+        <div class="mx-auto max-w-7xl px-4 text-center">
+            <h2 class="text-3xl sm:text-5xl font-bold text-gray-900 mb-16">Partner Organizations</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8">
+                {% if is_manual %}
+                {% for sponsor in event.sponsors.all %}
+                <div class="group bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all">
+                    <img src="{{ sponsor.logo.url }}" alt="{{ sponsor.name }}"
+                        class="max-h-16 mx-auto filter grayscale group-hover:grayscale-0 transition-all duration-300">
+                    <p
+                        class="mt-3 text-xs font-semibold text-gray-400 group-hover:text-pink-600 uppercase tracking-tighter">
+                        {{ sponsor.name }}</p>
+                </div>
+                {% endfor %}
+                {% else %}
+                <!-- Logic for registration event sponsors if they exist -->
+                {% endif %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Gallery Call to Action -->
+    <section class="py-20 bg-gradient-to-br from-pink-600 to-red-600 text-white text-center">
+        <div class="mx-auto max-w-4xl px-4">
+            <h2 class="text-3xl md:text-5xl font-extrabold mb-8">Relive the Memories</h2>
+            <p class="text-xl opacity-90 mb-12">Browse through our extensive gallery of photos and videos from this
+                spectacular event.</p>
+            <a href="{% url 'website:media_gallery' %}"
+                class="inline-block px-10 py-4 bg-white text-pink-600 font-bold rounded-full hover:bg-gray-100 transition shadow-2xl">
+                View Event Gallery
+            </a>
+        </div>
+    </section>
+
+</div>
+
+<!-- Navigation Back -->
+<div class="bg-gray-900 py-6 border-t border-gray-800">
+    <div class="container mx-auto px-4 text-center">
+        <a href="{% url 'website:past_events_list' %}"
+            class="text-gray-400 hover:text-pink-500 transition font-bold uppercase tracking-widest text-sm">
+            &larr; Back to Archives
+        </a>
+    </div>
+</div>
+
+{% endblock %}

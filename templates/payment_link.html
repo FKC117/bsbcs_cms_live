@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Link for {{ event.name }} {{ event.year }}</title>
+</head>
+<body>
+    <p>Dear {{ participant.name }},</p>
+    <p>Thank you for registering for the {{ event.name }} {{ event.year }}.</p>
+    <p>Please click the button below to complete your payment and confirm your registration.</p>
+    <a href="{{ payment_url }}" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Complete Payment</a>
+    <p>Thank you,<br>The {{ event.name }} Team</p>
+</body>
+</html>

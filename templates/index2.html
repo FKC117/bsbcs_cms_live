@@ -1,0 +1,158 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Current Events</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .centered-grid {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="fixed inset-x-0 top-0 z-50 bg-white shadow">
+        <nav class="flex items-center justify-between p-6 lg:px-8">
+            <div class="flex lg:flex-1">
+                <a href="{% url 'index' %}" class="-m-0.5 p-0.5">
+                    <span class="sr-only">BSBCS Events</span>
+                    <img src="{% static 'images/BSBCS-logo-1-1.png' %}" alt="Logo" class="h-12 w-12 mr-3">
+                </a>
+            </div>
+            <div class="flex lg:hidden">
+                <span class ="text-xl font-bold text_gray-800">
+                    <a href="{% url 'index' %}">BSBCS Events</a>
+                </span>
+            </div>
+            {% comment %} <div class="hidden lg:flex lg:gap-x-10">
+                <a href="{% url 'create_profile' %}" class="text-sm font-semibold leading-4 text-gray-900">Create Profile</a>
+                <a href="{% url 'login' %}" class="text-sm font-semibold leading-4 text-gray-900">Login</a>
+            </div> {% endcomment %}
+            <div class="hidden lg:flex lg:flex-1 lg:justify-end">
+                {% if user.is_authenticated %}
+                    <span class="text-sm font-semibold leading-6 text-gray-900">Welcome, {{ user.get_username }}</span>
+                    <a href="{% url 'user_profile' %}" class="ml-4 text-sm font-semibold leading-6 text-gray-900">Profile</a>
+                    <a href="{% url 'logout' %}" class="ml-4 text-sm font-semibold leading-6 text-gray-900">Logout</a>
+                {% else %}
+                    <a href="{% url 'login' %}" class="text-sm font-semibold leading-6 text-gray-900">Login</a>
+                    <a href="{% url 'create_profile' %}" class="ml-4 text-sm font-semibold leading-6 text-gray-900">Create Profile</a>
+                {% endif %}
+            </div>
+            <div class="lg:hidden">
+                <button type="button" class="text-gray-500 hover:text-gray-900 focus:outline-none focus:text-gray-900" aria-controls="mobile-menu" aria-expanded="false" onclick="toggleMenu()">
+                  <span class="sr-only">Open main menu</span>
+                  <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+            </div>
+        </nav>
+
+        <div class="lg:hidden" id="mobile-menu" style="display: none;">      
+            <div class="px-2 pt-2 pb-3 space-y-1">
+              {% comment %} <a href="{% url 'create_profile' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Create Profile</a>
+              <a href="{% url 'login' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Login</a> {% endcomment %}
+
+              {% if user.is_authenticated %}
+                <a href="{% url 'user_profile' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Profile</a>
+                <a href="{% url 'logout' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Logout</a>
+                {% else %}
+                <a href="{% url 'login' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Login</a>
+                <a href="{% url 'create_profile' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Create Profile</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+
+    <!-- Hero Section -->
+    <div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10 min-h-screen">
+        <div class="mx-auto max-w-6xl text-center">
+            <h1 class="text-4xl sm:text-6xl font-extrabold mt-10">Welcome to BSBCS Events</h1>
+            <p class="mt-4 text-lg">Please select an event to view more details.</p>
+
+            <!-- Message Prompt -->
+            {% if not user.is_authenticated %}
+            <div class="bg-white p-6 rounded shadow-md max-w-sm mx-auto mt-6">
+                <p class="text-red-600 font-bold">To participate in the event, you must create your profile first.</p>
+                <a href="{% url 'create_profile' %}" class="bg-blue-500 text-white py-2 px-4 rounded mt-4 inline-block">Create Profile</a>
+                <a href="{% url 'login' %}" class="bg-blue-500 text-white py-2 px-4 rounded mt-4 ml-4 inline-block">Login</a>
+            </div>
+            {% endif %}
+
+            <!-- Active Events -->
+            <div>
+                <h2 class="text-3xl font-bold mt-10 mb-4">Active Events</h2>
+                <div class="centered-grid">
+                    {% for event in active_events %}
+                    <a href="{% url 'registration:home' event.id %}" class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
+                        <h2 class="text-2xl font-semibold text-gray-900">{{ event.name }} {{ event.year }}</h2>
+                        <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
+                        <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
+                        <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong></p>
+                    </a>
+                    {% empty %}
+                    <p class="text-center text-black col-span-full">No active events found.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Upcoming Events -->
+            <div>
+                <h2 class="text-3xl font-bold mt-10 mb-4">Upcoming Events</h2>
+                <div class="centered-grid">
+                    {% for event in upcoming_events %}
+                    <a href="{% url 'registration:home' event.id %}" class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
+                        <h2 class="text-2xl font-semibold text-gray-900">{{ event.name }} {{ event.year }}</h2>
+                        <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
+                        <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
+                        <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong></p>
+                    </a>
+                    {% empty %}
+                    <p class="text-center text-black col-span-full">No upcoming events found.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Closed Events -->
+            <div>
+                <h2 class="text-3xl font-bold mt-10 mb-4">Past Events</h2>
+                <div class="centered-grid">
+                    {% for event in closed_events %}
+                    <a href="{% url 'registration:home' event.id %}" class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
+                        <h2 class="text-2xl font-semibold text-gray-900">{{ event.name }} {{ event.year }}</h2>
+                        <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
+                        <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
+                        <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong></p>
+                    </a>
+                    {% empty %}
+                    <p class="text-center text-black col-span-full">No closed events found.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="py-8 bg-gray-200 text-center">
+        <p>© BSBCS-2024 All rights reserved.</p>
+        <a href="{% url 'django.contrib.sitemaps.views.sitemap' %}" class="text-gray-700">Sitemap</a>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+          var menu = document.getElementById('mobile-menu');
+          if (menu.style.display === 'none' || menu.style.display === '') {
+            menu.style.display = 'block';
+          } else {
+            menu.style.display = 'none';
+          }
+        }
+      </script>
+</body>
+</html>

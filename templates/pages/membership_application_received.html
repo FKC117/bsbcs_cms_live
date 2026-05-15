@@ -1,0 +1,61 @@
+{% extends "gene_base.html" %}
+
+{% load static %}
+{% block title %}Application Received{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 mt-10">
+    <div class="max-w-md w-full space-y-8 bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 transform transition-all hover:scale-[1.01]">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-24 w-24 rounded-full bg-blue-100 mb-8 animate-pulse">
+                <i class="fas fa-file-signature text-4xl text-blue-600"></i>
+            </div>
+            <h2 class="text-3xl font-black text-gray-900 tracking-tight">Application Received!</h2>
+            <p class="mt-4 text-gray-500 font-medium">
+                Thank you, <strong>{{ member.user_profile.name }}</strong>. Your membership application has been successfully received and is now under review.
+            </p>
+        </div>
+
+        <div class="mt-10 bg-blue-50 rounded-2xl p-8 border border-blue-100 space-y-6">
+            <h3 class="text-xs font-black text-blue-400 uppercase tracking-widest border-b border-blue-200 pb-2">What happens next?</h3>
+            <div class="space-y-4">
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0 mt-1">
+                        <i class="fas fa-check-circle text-blue-500 text-sm"></i>
+                    </div>
+                    <p class="text-sm text-gray-600 font-medium">
+                        Our administrative team will review your application details.
+                    </p>
+                </div>
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0 mt-1">
+                        <i class="fas fa-envelope-open-text text-blue-500 text-sm"></i>
+                    </div>
+                    <p class="text-sm text-gray-600 font-medium">
+                        Once approved, you will receive an email with a unique payment link.
+                    </p>
+                </div>
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0 mt-1">
+                        <i class="fas fa-unlock-alt text-blue-500 text-sm"></i>
+                    </div>
+                    <p class="text-sm text-gray-600 font-medium">
+                        After completing the membership fee payment, you will gain full access to all member facilities and benefits.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-10">
+            <a href="{% url 'website:homepage' %}" 
+               class="w-full flex justify-center items-center py-4 px-6 border border-transparent text-sm font-black rounded-xl text-white bg-gray-900 hover:bg-black shadow-lg transition-all hover:translate-y-[-2px] active:translate-y-[0px]">
+                <i class="fas fa-home mr-2"></i> Return to Homepage
+            </a>
+        </div>
+        
+        <p class="text-center text-[10px] text-gray-400 font-bold uppercase tracking-tighter">
+            Please check your inbox (and spam folder) for updates.
+        </p>
+    </div>
+</div>
+{% endblock %}

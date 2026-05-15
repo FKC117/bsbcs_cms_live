@@ -1,0 +1,17 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Required</title>
+</head>
+<body>
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-4">Registration Required</h1>
+        <p class="text-lg mb-4">To submit an abstract for this event, please complete the registration first.</p>
+        <a href="{% url 'registration:registration' event.id %}" class="text-blue-500 underline">Register for the Event</a>
+    </div>
+</body>
+</html>
+

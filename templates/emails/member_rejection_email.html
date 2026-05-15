@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .content {
+            padding: 40px 20px;
+        }
+        .greeting {
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        .reason-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .reason-box h3 {
+            margin-top: 0;
+            color: #f39c12;
+        }
+        .reason-box p {
+            margin-bottom: 0;
+        }
+        .options {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .options h3 {
+            margin-top: 0;
+            color: #f39c12;
+        }
+        .options ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .options li {
+            margin: 8px 0;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        .button:hover {
+            opacity: 0.9;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #777;
+            border-top: 1px solid #e0e0e0;
+        }
+        .footer a {
+            color: #f39c12;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Membership Application - Update</h1>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <p class="greeting">Dear {{ user_name }},</p>
+
+            <p class="message">
+                Thank you for applying for membership with {{ site_name }}. 
+                We have carefully reviewed your application and unfortunately, at this time, 
+                we are unable to approve your membership request.
+            </p>
+
+            <!-- Reason -->
+            <div class="reason-box">
+                <h3>Reason for Decision:</h3>
+                <p>{{ rejection_reason }}</p>
+            </div>
+
+            <p class="message">
+                We understand this may be disappointing. Your application was evaluated based on our membership criteria, 
+                and we encourage you to reapply in the future as your qualifications and experience develop.
+            </p>
+
+            <!-- Options -->
+            <div class="options">
+                <h3>What You Can Do:</h3>
+                <ul>
+                    <li><strong>Reapply Later:</strong> You are welcome to submit a new application after gaining additional experience or credentials</li>
+                    <li><strong>Get More Information:</strong> Contact our support team to understand specific areas for improvement</li>
+                    <li><strong>Stay Connected:</strong> Subscribe to our newsletter to stay updated with our community activities</li>
+                    <li><strong>Attend Events:</strong> Many of our events are open to non-members</li>
+                </ul>
+            </div>
+
+            <p class="message">
+                If you have questions about this decision or would like more information about membership requirements, 
+                please don't hesitate to reach out to us.
+            </p>
+
+            <!-- CTA Button -->
+            <div style="text-align: center;">
+                <a href="mailto:{{ support_email }}" class="button">Contact Support</a>
+            </div>
+
+            <p style="margin-bottom: 0;">
+                Best regards,<br>
+                <strong>The {{ site_name }} Membership Team</strong>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p style="margin: 0 0 10px 0;">
+                This is an automated email. Please do not reply to this address.
+                <br>
+                Contact: <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+            </p>
+            <p style="margin: 0;">
+                © {{ site_name }}. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

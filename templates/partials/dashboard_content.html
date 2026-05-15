@@ -1,0 +1,286 @@
+{% load static %}
+<nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top shadow-sm">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="#"><i class="bi bi-speedometer2 me-2"></i> CMS Dashboard</a>
+  </div>
+</nav>
+
+<div class="container-fluid" style="padding-top: 70px;">
+  <div class="container-fluid">
+    <!-- Summary Metrics -->
+    <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title text-muted">Total Participants</h5>
+            <div class="metric-value fs-3 fw-bold">{{ totals.participants }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title text-muted">Pending Payments</h5>
+            <div class="metric-value fs-3 fw-bold text-danger">{{ totals.pending_payments }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title text-muted">Total Revenue</h5>
+            <div class="metric-value fs-3 fw-bold text-success">৳ {{ totals.revenue }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Breakdown and Chart -->
+    <div class="row g-4 mb-4">
+      <div class="col-12 col-xl-6">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Event Breakdown</h5>
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th>Event</th>
+                    <th>Approved</th>
+                    <th>Pending</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for metric in event_page_obj %}
+                    <tr>
+                      <td>{{ metric.name }}</td>
+                      <td>{{ metric.approved_participants }}</td>
+                      <td>{{ metric.pending_payments }}</td>
+                      <td>৳ {{ metric.revenue_collected }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="4" class="text-center">No events found</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <nav aria-label="Event pagination">
+                <ul class="pagination justify-content-center">
+                  {% if event_page_obj.has_previous %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?event_page={{ event_page_obj.previous_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&laquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                  {% endif %}
+                  {% for num in event_page_obj.paginator.page_range %}
+                    {% if event_page_obj.number == num %}
+                      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > event_page_obj.number|add:-2 and num < event_page_obj.number|add:2 %}
+                      <li class="page-item">
+                        <a class="page-link" hx-get="?event_page={{ num }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">{{ num }}</a>
+                      </li>
+                    {% endif %}
+                  {% endfor %}
+                  {% if event_page_obj.has_next %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?event_page={{ event_page_obj.next_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&raquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                  {% endif %}
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Metrics Comparison</h5>
+            {% if chart_path %}
+              <img src="{{ MEDIA_URL }}{{ chart_path }}" class="img-fluid rounded" alt="Event Metrics Chart">
+            {% else %}
+              <div class="alert alert-info text-center mb-0">No visualization available</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Participants Overview -->
+    <div class="row g-4 mb-4">
+      <div class="col-12">
+        <h5 class="mb-4">Participants Overview</h5>
+        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-6 g-4">
+          {% for key, value in participant_totals.items %}
+            <div class="col">
+              <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                  <h6 class="card-title text-muted text-truncate">{{ key|title }}</h6>
+                  <div class="metric-value fs-5 fw-bold">{{ value }}</div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Participants List and Chart -->
+    <div class="row g-4">
+      <div class="col-12 col-xl-8">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Participants List</h5>
+            <div id="dashboard-content">
+              <div class="table-responsive">
+                <table class="table table-hover">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Event</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for participant in page_obj %}
+                      <tr>
+                        <td>{{ participant.name }}</td>
+                        <td>{{ participant.email }}</td>
+                        <td>
+                          {% if participant.approved %}
+                            <span class="badge bg-success">Approved</span>
+                          {% elif participant.denied %}
+                            <span class="badge bg-danger">Denied</span>
+                          {% else %}
+                            <span class="badge bg-warning">Pending</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ participant.event_name }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <nav aria-label="Participants pagination">
+                <ul class="pagination justify-content-center">
+                  {% if page_obj.has_previous %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?page={{ page_obj.previous_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&laquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                  {% endif %}
+                  {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > page_obj.number|add:-2 and num < page_obj.number|add:2 %}
+                      <li class="page-item">
+                        <a class="page-link" hx-get="?page={{ num }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">{{ num }}</a>
+                      </li>
+                    {% endif %}
+                  {% endfor %}
+                  {% if page_obj.has_next %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?page={{ page_obj.next_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&raquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                  {% endif %}
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Participant Status Chart</h5>
+            {% if participant_chart_path %}
+              <img src="{{ MEDIA_URL }}{{ participant_chart_path }}" class="img-fluid rounded" alt="Participant Chart">
+            {% else %}
+              <div class="alert alert-info text-center mb-0">No visualization available</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Organization Breakdown and Chart -->
+    <div class="row g-4 mb-4 mt-4">
+      <div class="col-12 col-xl-6">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Organization Breakdown</h5>
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th>Organization</th>
+                    <th>Participants</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for org in organization_page_obj %}
+                    <tr>
+                      <td>{{ org.organization }}</td>
+                      <td>{{ org.participant_count }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <nav aria-label="Organization pagination">
+                <ul class="pagination justify-content-center">
+                  {% if organization_page_obj.has_previous %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?org_page={{ organization_page_obj.previous_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&laquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                  {% endif %}
+                  {% for num in organization_page_obj.paginator.page_range %}
+                    {% if organization_page_obj.number == num %}
+                      <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > organization_page_obj.number|add:-2 and num < organization_page_obj.number|add:2 %}
+                      <li class="page-item">
+                        <a class="page-link" hx-get="?org_page={{ num }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">{{ num }}</a>
+                      </li>
+                    {% endif %}
+                  {% endfor %}
+                  {% if organization_page_obj.has_next %}
+                    <li class="page-item">
+                      <a class="page-link" hx-get="?org_page={{ organization_page_obj.next_page_number }}&{{ query_string }}" hx-target="#dashboard-content" hx-swap="innerHTML">&raquo;</a>
+                    </li>
+                  {% else %}
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                  {% endif %}
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Organization Participation Chart</h5>
+            {% if organization_chart_path %}
+              <img src="{{ MEDIA_URL }}{{ organization_chart_path }}" class="img-fluid rounded" alt="Organization Participation Chart">
+            {% else %}
+              <div class="alert alert-info text-center mb-0">No visualization available</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

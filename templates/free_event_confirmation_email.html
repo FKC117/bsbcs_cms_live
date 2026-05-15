@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Registration Confirmed</title>
+</head>
+<body>
+    <h2>Registration Confirmed for {{ event.name }} {{ event.year }}</h2>
+    
+    <p>Dear {{ participant.name }},</p>
+    
+    <p>Your registration for <strong>{{ event.name }} {{ event.year }}</strong> has been approved!</p>
+    
+    <p><strong>Event Details:</strong></p>
+    <ul>
+        <li>Event: {{ event.name }} {{ event.year }}</li>
+        <li>Date: {{ event.start_date }} to {{ event.end_date }}</li>
+        <li>Location: {{ event.location }}</li>
+        <li>Registration Fee: FREE</li>
+    </ul>
+    
+    {% if password %}
+    <p><strong>Your login credentials:</strong></p>
+    <ul>
+        <li>Email: {{ participant.email }}</li>
+        <li>Password: {{ password }}</li>
+    </ul>
+    <p>Please change your password after your first login.</p>
+    {% endif %}
+    
+    <p>You can now:</p>
+    <ul>
+        <li>Access your participant profile</li>
+        <li>View event schedule and updates</li>
+    </ul>
+    
+    <p>Thank you for registering!</p>
+    
+    <p>Best regards,<br>
+    {{ event.name }} Organizing Committee</p>
+</body>
+</html>

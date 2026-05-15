@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 50px; }
+        .header, .footer { text-align: center; }
+        .invoice-title { font-size: 24px; text-align: center; margin-top: 20px; }
+        .details, .table { margin-top: 20px; }
+        .table table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table table, .table th, .table td { border: 1px solid #ddd; }
+        .table th, .table td { padding: 8px; text-align: left; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if event.event_logo %}
+            <img src="{{ event.event_logo.url }}" width="100">
+        {% else %}
+            <div>{{ event.name }} {{ event.year }}</div>
+        {% endif %}
+    </div>
+    
+    <div class="invoice-title">{{ event.name }} {{ event.year }} Registration Invoice</div>
+
+    <div class="details">
+        <div>Participant Name: {{ participant.name }}</div>
+        <div>Merchant Invoice Number: {{ payment_status.merchant_invoice_number }}</div>
+        <div>Event Name: {{ event.name }}</div>
+        <div>Event Date: {{ event.start_date }}</div>
+        <div>Location: {{ event.location }}</div>
+    </div>
+
+    <div class="table">
+        <table>
+            <tr>
+                <th>Description</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+            </tr>
+            <tr>
+                <td>Registration fees for {{ event.name }} {{ event.year }}</td>
+                <td>1</td>
+                <td>BDT {{ event.amount }}</td>
+                <td>BDT {{ event.amount }}</td>
+            </tr>
+        </table>
+        <div>Total: BDT {{ event.amount }}</div>
+    </div>
+<br><br><br>
+    <div class="footer">
+        Thank you for registering!<br>
+        <br>
+        This is a computer-generated invoice and does not need any signature.
+    </div>
+</body>
+</html>

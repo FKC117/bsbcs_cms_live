@@ -1,0 +1,11 @@
+{% if event.modal_image %}
+<div class="modal-content">
+    <button class="close absolute top-2 right-2 text-gray-600 hover:text-gray-900" onclick="document.getElementById('myModal').style.display='none'">✖</button>
+    <img src="{{ event.modal_image.url }}" alt="Modal Image" class="w-full h-auto rounded">
+</div>
+{% else %}
+<div class="modal-content">
+    <button class="close absolute top-2 right-2 text-gray-600 hover:text-gray-900" onclick="document.getElementById('myModal').style.display='none'">✖</button>
+    <p>No image available.</p>
+</div>
+{% endif %}
