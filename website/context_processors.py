@@ -1,9 +1,28 @@
 from django.urls import reverse, NoReverseMatch
-from .models import SiteSettings, NavigationLink
+from django.db import DatabaseError, OperationalError, ProgrammingError
+from .models import SiteSettings, NavigationLink, MembershipBenefitModal
 
 
 def site_settings(request):
     settings = SiteSettings.objects.first()
+    membership_benefit_modal_displayable = False
+    try:
+        membership_benefit_modal = (
+            MembershipBenefitModal.objects.filter(is_active=True)
+            .prefetch_related('benefit_items')
+            .first()
+        )
+        if membership_benefit_modal:
+            has_image = bool(membership_benefit_modal.image)
+            has_content = any([
+                bool((membership_benefit_modal.title or '').strip()),
+                bool((membership_benefit_modal.subtitle or '').strip()),
+                bool((membership_benefit_modal.description or '').strip()),
+                membership_benefit_modal.benefit_items.filter(is_active=True).exists(),
+            ])
+            membership_benefit_modal_displayable = has_image or has_content
+    except (DatabaseError, OperationalError, ProgrammingError):
+        membership_benefit_modal = None
 
     # Build navigation links with resolved URLs when possible
     navigation_links = []
@@ -29,4 +48,6 @@ def site_settings(request):
     return {
         'site_settings': settings,
         'navigation_links': navigation_links,
+        'membership_benefit_modal': membership_benefit_modal,
+        'membership_benefit_modal_displayable': membership_benefit_modal_displayable,
     }

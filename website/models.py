@@ -674,3 +674,50 @@ class MembershipPayment(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+
+class MembershipBenefitModal(models.Model):
+    title = models.CharField(max_length=180, default="Become a BSBCS Member")
+    subtitle = models.CharField(max_length=220, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(
+        upload_to='membership/benefits/',
+        blank=True,
+        null=True,
+        help_text=(
+            'Optional image-only modal. Recommended size: 1200x800 px, 3:2 ratio. '
+            'If uploaded, this image is shown instead of text benefits.'
+        )
+    )
+    primary_button_text = models.CharField(max_length=80, default="Apply for Membership")
+    secondary_button_text = models.CharField(max_length=80, default="Maybe Later")
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_active:
+            MembershipBenefitModal.objects.exclude(pk=self.pk).update(is_active=False)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        ordering = ['-updated_at']
+        verbose_name = "Membership Benefit Modal"
+        verbose_name_plural = "Membership Benefit Modal"
+
+
+class MembershipBenefitItem(models.Model):
+    modal = models.ForeignKey(MembershipBenefitModal, on_delete=models.CASCADE, related_name='benefit_items')
+    title = models.CharField(max_length=150)
+    description = models.TextField(blank=True, null=True)
+    icon = models.ImageField(upload_to='membership/benefit_icons/', blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        ordering = ['order', 'id']
+

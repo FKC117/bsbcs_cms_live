@@ -148,12 +148,12 @@
                         {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
                             {# Smart Override: If the button text is 'Join Society', always use the internal membership_form URL #}
                             {% if call_to_action.primary_button_text == "Join Society" %}
-                                <a href="{% url 'website:membership_form' %}" class="btn-primary">{{ call_to_action.primary_button_text }}</a>
+                                <a href="{% url 'website:membership_form' %}" class="btn-primary"{% if membership_benefit_modal_displayable %} data-membership-modal-trigger{% endif %}>{{ call_to_action.primary_button_text }}</a>
                             {% else %}
                                 <a href="{{ call_to_action.primary_button_url }}" class="btn-primary">{{ call_to_action.primary_button_text }}</a>
                             {% endif %}
                         {% else %}
-                            <a href="{% url 'website:membership_form'%}" class="btn-primary">Join Society</a>
+                            <a href="{% url 'website:membership_form'%}" class="btn-primary"{% if membership_benefit_modal_displayable %} data-membership-modal-trigger{% endif %}>Join Society</a>
                         {% endif %}
                     {% endif %}
                 </div>
@@ -227,12 +227,12 @@
                             {% if call_to_action and call_to_action.primary_button_text and call_to_action.primary_button_url %}
                                 {# Smart Override: If the button text is 'Join Society', always use the internal membership_form URL #}
                                 {% if call_to_action.primary_button_text == "Join Society" %}
-                                    <a href="{% url 'website:membership_form' %}" class="btn-primary w-full">{{ call_to_action.primary_button_text }}</a>
+                                    <a href="{% url 'website:membership_form' %}" class="btn-primary w-full"{% if membership_benefit_modal_displayable %} data-membership-modal-trigger{% endif %}>{{ call_to_action.primary_button_text }}</a>
                                 {% else %}
                                     <a href="{{ call_to_action.primary_button_url }}" class="btn-primary w-full">{{ call_to_action.primary_button_text }}</a>
                                 {% endif %}
                             {% else %}
-                                <a href="{% url 'website:membership_form' %}" class="btn-primary w-full">Join Society</a>
+                                <a href="{% url 'website:membership_form' %}" class="btn-primary w-full"{% if membership_benefit_modal_displayable %} data-membership-modal-trigger{% endif %}>Join Society</a>
                             {% endif %}
                         </div>
                     {% endif %}
@@ -246,6 +246,8 @@
         {% block content %}
         {% endblock %}
     </main>
+
+    {% include "partials/membership_benefits_modal.html" %}
 
     <!-- Footer -->
     <footer class="bg-text-primary text-white">

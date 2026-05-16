@@ -5,7 +5,7 @@ from .models import (
     MemberSpotlight, ResearchHighlight, Event, PastEvent, PastEventSpeaker, PastEventSession, PastEventActivity, PastEventSponsor, CallToAction, BoardMember,
     Committee, Partnership, Award, AnnualReport, ResourceCategory, ResourceItem,
     Webinar, Member, NavigationLink, OrganizationalValue, ResearchInterestArea, Speciality, Panelist, Media,
-    MembershipType, MembershipPayment
+    MembershipType, MembershipPayment, MembershipBenefitModal, MembershipBenefitItem
 )
 from .models import TimelineSection, TimelineItem
 
@@ -394,3 +394,25 @@ class MembershipPaymentAdmin(admin.ModelAdmin):
             return "Lifetime"
         return f"{obj.duration_years} Year(s)"
     get_expiry_display.short_description = 'Applied Period'  # type: ignore
+
+
+class MembershipBenefitItemInline(admin.TabularInline):
+    model = MembershipBenefitItem
+    extra = 1
+    fields = ('title', 'description', 'icon', 'order', 'is_active')
+
+
+@admin.register(MembershipBenefitModal)
+class MembershipBenefitModalAdmin(admin.ModelAdmin):
+    list_display = ('title', 'subtitle', 'is_active', 'updated_at')
+    list_editable = ('is_active',)
+    search_fields = ('title', 'subtitle', 'description')
+    inlines = [MembershipBenefitItemInline]
+
+
+@admin.register(MembershipBenefitItem)
+class MembershipBenefitItemAdmin(admin.ModelAdmin):
+    list_display = ('title', 'modal', 'order', 'is_active')
+    list_filter = ('modal', 'is_active')
+    list_editable = ('order', 'is_active')
+    search_fields = ('title', 'description')

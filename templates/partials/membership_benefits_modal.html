@@ -1,0 +1,298 @@
+{% if membership_benefit_modal_displayable %}
+<div class="membership-modal" data-membership-modal aria-hidden="true">
+    <div class="membership-modal-backdrop" data-membership-modal-close></div>
+
+    <section class="membership-modal-dialog {% if membership_benefit_modal.image %}membership-modal-dialog-image{% endif %}" role="dialog" aria-modal="true" aria-labelledby="membershipModalTitle" tabindex="-1">
+        <button type="button" class="membership-modal-close" data-membership-modal-close aria-label="Close membership benefits">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+        </button>
+
+        {% if membership_benefit_modal.image %}
+            <div class="membership-modal-image-wrap">
+                <img src="{{ membership_benefit_modal.image.url }}" alt="{{ membership_benefit_modal.title|default:'Membership benefits' }}" class="membership-modal-image">
+            </div>
+        {% else %}
+            <div class="membership-modal-content">
+                {% if membership_benefit_modal.subtitle %}
+                    <p class="membership-modal-eyebrow">{{ membership_benefit_modal.subtitle }}</p>
+                {% endif %}
+
+                {% if membership_benefit_modal.title %}
+                    <h2 id="membershipModalTitle">{{ membership_benefit_modal.title }}</h2>
+                {% else %}
+                    <h2 id="membershipModalTitle">Membership Benefits</h2>
+                {% endif %}
+
+                {% if membership_benefit_modal.description %}
+                    <p class="membership-modal-description">{{ membership_benefit_modal.description }}</p>
+                {% endif %}
+
+                <div class="membership-modal-list">
+                    {% for item in membership_benefit_modal.benefit_items.all %}
+                        {% if item.is_active %}
+                            <article class="membership-modal-item">
+                                {% if item.icon %}
+                                    <img src="{{ item.icon.url }}" alt="" class="membership-modal-icon">
+                                {% else %}
+                                    <span class="membership-modal-icon" aria-hidden="true">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m5 12 4 4L19 6"/>
+                                        </svg>
+                                    </span>
+                                {% endif %}
+                                <span>
+                                    <strong>{{ item.title }}</strong>
+                                    {% if item.description %}
+                                        <small>{{ item.description }}</small>
+                                    {% endif %}
+                                </span>
+                            </article>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="membership-modal-actions">
+            <a href="{% url 'website:membership_form' %}" class="membership-modal-primary">
+                {{ membership_benefit_modal.primary_button_text|default:"Apply for Membership" }}
+            </a>
+            <button type="button" class="membership-modal-secondary" data-membership-modal-close>
+                {{ membership_benefit_modal.secondary_button_text|default:"Maybe Later" }}
+            </button>
+        </div>
+    </section>
+</div>
+
+<style>
+    .membership-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+    }
+    .membership-modal.is-open {
+        display: flex;
+    }
+    .membership-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.58);
+        backdrop-filter: blur(5px);
+    }
+    .membership-modal-dialog {
+        position: relative;
+        width: min(620px, 100%);
+        max-height: min(760px, calc(100vh - 2.5rem));
+        overflow: hidden;
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 28px 80px rgba(15, 23, 42, 0.34);
+        outline: none;
+    }
+    .membership-modal-dialog-image {
+        width: min(760px, 100%);
+    }
+    .membership-modal-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 3;
+        display: inline-flex;
+        width: 2.5rem;
+        height: 2.5rem;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #dce3ec;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.95);
+        color: #334155;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    }
+    .membership-modal-image-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        max-height: calc(100vh - 9rem);
+        padding: 1rem;
+        background: #f5f8fb;
+    }
+    .membership-modal-image {
+        display: block;
+        width: auto;
+        max-width: 100%;
+        max-height: calc(100vh - 11rem);
+        border-radius: 14px;
+        object-fit: contain;
+    }
+    .membership-modal-content {
+        max-height: calc(100vh - 9rem);
+        overflow-y: auto;
+        padding: 3rem 3rem 1.75rem;
+    }
+    .membership-modal-eyebrow {
+        margin: 0 0 0.625rem;
+        color: #00695c;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .membership-modal-content h2 {
+        margin: 0;
+        color: #172033;
+        font-family: Inter, sans-serif;
+        font-size: clamp(1.7rem, 3vw, 2.35rem);
+        line-height: 1.12;
+        letter-spacing: 0;
+    }
+    .membership-modal-description {
+        margin: 1rem 0 1.5rem;
+        color: #5f6b7a;
+        line-height: 1.65;
+    }
+    .membership-modal-list {
+        display: grid;
+        gap: 0.85rem;
+    }
+    .membership-modal-item {
+        display: flex;
+        gap: 0.85rem;
+        padding: 0.9rem;
+        border: 1px solid #dce3ec;
+        border-radius: 12px;
+        background: #f8fbfd;
+    }
+    .membership-modal-icon {
+        display: inline-flex;
+        width: 2rem;
+        height: 2rem;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #e0f2f1;
+        color: #00695c;
+        object-fit: contain;
+    }
+    .membership-modal-item strong {
+        display: block;
+        color: #172033;
+        font-size: 0.98rem;
+        line-height: 1.35;
+    }
+    .membership-modal-item small {
+        display: block;
+        margin-top: 0.22rem;
+        color: #5f6b7a;
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+    .membership-modal-actions {
+        display: flex;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem 1.25rem;
+        border-top: 1px solid #dce3ec;
+        background: #fff;
+    }
+    .membership-modal-primary,
+    .membership-modal-secondary {
+        display: inline-flex;
+        min-height: 2.9rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        font-family: Inter, sans-serif;
+        font-weight: 800;
+        text-decoration: none;
+    }
+    .membership-modal-primary {
+        flex: 1;
+        background: #1565c0;
+        color: #fff;
+    }
+    .membership-modal-primary:hover {
+        background: #0d47a1;
+    }
+    .membership-modal-secondary {
+        border: 1px solid #dce3ec;
+        background: #fff;
+        color: #5f6b7a;
+        cursor: pointer;
+    }
+    body.membership-modal-open {
+        overflow: hidden;
+    }
+    @media (max-width: 760px) {
+        .membership-modal {
+            align-items: flex-end;
+            padding: 0;
+        }
+        .membership-modal-dialog {
+            width: 100%;
+            max-height: 92vh;
+            border-radius: 18px 18px 0 0;
+        }
+        .membership-modal-image-wrap {
+            max-height: calc(92vh - 5.8rem);
+            padding: 0.75rem;
+        }
+        .membership-modal-image {
+            max-height: calc(92vh - 7.3rem);
+            border-radius: 12px;
+        }
+        .membership-modal-content {
+            max-height: calc(92vh - 5.8rem);
+            padding: 1.65rem 1.15rem 1rem;
+        }
+        .membership-modal-close {
+            top: 0.75rem;
+            right: 0.75rem;
+        }
+        .membership-modal-actions {
+            flex-direction: column;
+            padding: 0.9rem 1rem 1rem;
+        }
+    }
+</style>
+
+<script>
+    (function () {
+        const modal = document.querySelector('[data-membership-modal]');
+        if (!modal) return;
+
+        const dialog = modal.querySelector('.membership-modal-dialog');
+        const openers = document.querySelectorAll('[data-membership-modal-trigger]');
+        const closers = modal.querySelectorAll('[data-membership-modal-close]');
+
+        function openModal(event) {
+            event.preventDefault();
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('membership-modal-open');
+            setTimeout(() => dialog && dialog.focus(), 0);
+        }
+
+        function closeModal() {
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('membership-modal-open');
+        }
+
+        openers.forEach((opener) => opener.addEventListener('click', openModal));
+        closers.forEach((closer) => closer.addEventListener('click', closeModal));
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                closeModal();
+            }
+        });
+    })();
+</script>
+{% endif %}
