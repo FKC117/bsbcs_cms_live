@@ -4,71 +4,362 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Profile</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}"/>
+    <title>Create Profile | {{ site_settings.site_name|default:"BSBCS" }}</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% if site_settings and site_settings.favicon %}
+        <link rel="icon" href="{{ site_settings.favicon.url }}">
+    {% endif %}
+    <style>
+        :root {
+            --auth-primary: #1565c0;
+            --auth-primary-dark: #0d47a1;
+            --auth-accent: #00695c;
+            --auth-secondary: #c2185b;
+            --auth-text: #172033;
+            --auth-muted: #5f6b7a;
+            --auth-border: #dce3ec;
+            --auth-bg: #f5f8fb;
+        }
+        body {
+            margin: 0;
+            background: var(--auth-bg);
+            color: var(--auth-text);
+            font-family: "Source Sans Pro", Arial, sans-serif;
+        }
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 28px 16px;
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 720px;
+            background: #fff;
+            border: 1px solid var(--auth-border);
+            border-radius: 18px;
+            box-shadow: 0 18px 45px rgba(21, 41, 72, 0.10);
+            padding: 30px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 28px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .brand-mark {
+            width: 44px;
+            height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: #e0f2f1;
+            color: var(--auth-accent);
+            font-weight: 800;
+            font-size: 18px;
+            flex: 0 0 auto;
+        }
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            object-fit: contain;
+            background: #fff;
+            border: 1px solid var(--auth-border);
+            padding: 4px;
+            flex: 0 0 auto;
+        }
+        .brand-name {
+            display: block;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 22px;
+            line-height: 1.1;
+            font-weight: 800;
+            color: var(--auth-primary);
+        }
+        .brand-subtitle {
+            display: block;
+            margin-top: 4px;
+            color: var(--auth-muted);
+            font-size: 13px;
+            line-height: 1.3;
+        }
+        .eyebrow {
+            margin: 0 0 8px;
+            color: var(--auth-secondary);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 0;
+            color: var(--auth-text);
+            font-family: Inter, Arial, sans-serif;
+            font-size: 30px;
+            line-height: 1.15;
+            letter-spacing: 0;
+        }
+        .lead {
+            margin: 12px 0 26px;
+            color: var(--auth-muted);
+            font-size: 15px;
+            line-height: 1.6;
+            max-width: 600px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--auth-text);
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .auth-input {
+            width: 100%;
+            min-height: 48px;
+            border: 1px solid var(--auth-border);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--auth-text);
+            font: inherit;
+            padding: 11px 13px;
+            transition: border-color 160ms ease, box-shadow 160ms ease;
+        }
+        .auth-input:focus {
+            border-color: var(--auth-primary);
+            box-shadow: 0 0 0 4px rgba(21, 101, 192, 0.12);
+            outline: none;
+        }
+        .primary-button {
+            width: 100%;
+            min-height: 50px;
+            border: 0;
+            border-radius: 10px;
+            background: var(--auth-primary);
+            color: #fff;
+            cursor: pointer;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 15px;
+            font-weight: 800;
+            transition: background 160ms ease, transform 160ms ease;
+        }
+        .primary-button:hover {
+            background: var(--auth-primary-dark);
+        }
+        .primary-button:active {
+            transform: translateY(1px);
+        }
+        .link {
+            color: var(--auth-primary);
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        .link-secondary {
+            color: var(--auth-secondary);
+        }
+        .auth-footer {
+            margin-top: 22px;
+            padding-top: 20px;
+            border-top: 1px solid var(--auth-border);
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            color: var(--auth-muted);
+            font-size: 14px;
+        }
+        .error-box,
+        .message-box {
+            margin-bottom: 18px;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .error-box {
+            border: 1px solid #ffcdd2;
+            background: #fff5f5;
+            color: #b71c1c;
+        }
+        .message-box {
+            border: 1px solid #bbdefb;
+            background: #f4f9ff;
+            color: #0d47a1;
+        }
+        .field-error {
+            margin-top: 7px;
+            color: #b71c1c;
+            font-size: 13px;
+        }
+        .field-error ul,
+        .error-box ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        @media (max-width: 640px) {
+            .auth-page {
+                align-items: stretch;
+                justify-content: flex-start;
+                padding: 0;
+                background: #fff;
+            }
+            .auth-card {
+                min-height: 100vh;
+                border: 0;
+                border-radius: 0;
+                padding: 22px 18px 26px;
+                box-shadow: none;
+            }
+            .brand {
+                margin-bottom: 22px;
+                padding-bottom: 18px;
+                border-bottom: 1px solid var(--auth-border);
+            }
+            .brand-mark {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+            }
+            .brand-logo {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+            }
+            .brand-name {
+                font-size: 20px;
+            }
+            .brand-subtitle {
+                font-size: 12px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            .lead {
+                font-size: 14px;
+                margin-bottom: 22px;
+            }
+            .form-grid {
+                display: block;
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            .auth-input {
+                min-height: 46px;
+                border-radius: 9px;
+                font-size: 16px;
+            }
+            .primary-button {
+                min-height: 48px;
+                border-radius: 9px;
+                margin-top: 2px;
+            }
+            .auth-footer {
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 20px;
+                padding-top: 16px;
+                text-align: center;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-body">
-                        
-                        <form method="POST" action="{% url 'create_profile' %}">
-                            <h1 class="text-center text-2xl font-bold mb-3">Create Your Profile</h1>
-                                {% csrf_token %}
-                                <div class="mb-3">
-                                    <label for="name" class="form-label">Name</label>
-                                    <input type="text" name="name" class="form-control" id="name">
-                                    {% if form.name.errors %}
-                                        <div class="text-danger">{{ form.name.errors }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-3">
-                                    <label for="email" class="form-label">Email</label>
-                                    <input type="email" name="email" class="form-control" id="email">
-                                    {% if form.email.errors %}
-                                        <div class="text-danger">{{ form.email.errors }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-3">
-                                    <label for="password" class="form-label">Password</label>
-                                    <input type="password" name="password" class="form-control" id="password">
-                                    {% if form.password.errors %}
-                                        <div class="text-danger">{{ form.password.errors }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-3">
-                                    <label for="phone" class="form-label">Phone</label>
-                                    <input type="text" name="phone" class="form-control" id="phone">
-                                    {% if form.phone.errors %}
-                                        <div class="text-danger">{{ form.phone.errors }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-3">
-                                    <label for="country" class="form-label">Country</label>
-                                    <input type="text" name="country" class="form-control" id="country">
-                                    {% if form.country.errors %}
-                                        <div class="text-danger">{{ form.country.errors }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="d-grid mt-3">
-                                    <button type="submit" class="btn btn-primary">Create Profile</button>
-                                </div>
-                        
-                                <div class="row justify-content-center mt-4">
-                                    <div class="col-md-8 text-center">
-                                        <p class="text-danger">To participate in the event, you must create your profile first.</p>
-                                        <a href="{% url 'index' %}" class="btn btn-secondary mt-2">Back to Events</a>
-                                    </div>
-                                </div>
-                        </form>
+    <main class="auth-page">
+        <section class="auth-card" aria-labelledby="signup-title">
+            <a href="{% url 'website:homepage' %}" class="brand">
+                {% if site_settings and site_settings.logo %}
+                    <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="brand-logo">
+                {% else %}
+                    <span class="brand-mark">B</span>
+                {% endif %}
+                <span>
+                    <span class="brand-name">{{ site_settings.site_name|default:"BSBCS" }}</span>
+                    <span class="brand-subtitle">{{ site_settings.abbreviation|default:"Bangladesh Society for Breast Cancer Study" }}</span>
+                </span>
+            </a>
+
+            <p class="eyebrow">Create profile</p>
+            <h1 id="signup-title">Create your BSBCS profile</h1>
+            <p class="lead">Use one profile for membership applications, event registrations, abstracts, payments, and future society activities.</p>
+
+            {% if form.non_field_errors %}
+                <div class="error-box">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="message-box">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+
+            <form method="POST" action="{% url 'create_profile' %}">
+                {% csrf_token %}
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="name">Full name</label>
+                        <input type="text" name="name" class="auth-input" id="name" value="{{ form.name.value|default_if_none:'' }}" autocomplete="name" required>
+                        {% if form.name.errors %}
+                            <div class="field-error">{{ form.name.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" name="email" class="auth-input" id="email" value="{{ form.email.value|default_if_none:'' }}" autocomplete="email" required>
+                        {% if form.email.errors %}
+                            <div class="field-error">{{ form.email.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="text" name="phone" class="auth-input" id="phone" value="{{ form.phone.value|default_if_none:'' }}" autocomplete="tel" required>
+                        {% if form.phone.errors %}
+                            <div class="field-error">{{ form.phone.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="country">Country</label>
+                        <input type="text" name="country" class="auth-input" id="country" value="{{ form.country.value|default_if_none:'' }}" autocomplete="country-name" required>
+                        {% if form.country.errors %}
+                            <div class="field-error">{{ form.country.errors }}</div>
+                        {% endif %}
                     </div>
                 </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" name="password" class="auth-input" id="password" autocomplete="new-password" required>
+                    {% if form.password.errors %}
+                        <div class="field-error">{{ form.password.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="primary-button">Create Profile</button>
+            </form>
+
+            <div class="auth-footer">
+                <span>Already have a profile? <a href="{% url 'login' %}" class="link link-secondary">Login</a></span>
+                <a href="{% url 'index' %}" class="link">Back to Events</a>
             </div>
-        </div>
-    </div>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+        </section>
+    </main>
 </body>
 </html>

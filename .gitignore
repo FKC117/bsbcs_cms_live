@@ -11,3 +11,4 @@ tmp/
 *.sqlite3
 static/charts/
 *.pdf
+tasks.md
