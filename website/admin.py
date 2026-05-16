@@ -4,7 +4,7 @@ from .models import (
     HeroSection, CarouselItem, NewsTickerItem, QuickAccessCard, StatisticCounter,
     MemberSpotlight, ResearchHighlight, Event, PastEvent, PastEventSpeaker, PastEventSession, PastEventActivity, PastEventSponsor, CallToAction, BoardMember,
     Committee, Partnership, Award, AnnualReport, ResourceCategory, ResourceItem,
-    Webinar, Member, NavigationLink, OrganizationalValue, ResearchInterestArea, Speciality, Panelist, Media,
+    Webinar, Member, PendingEventIntent, NavigationLink, OrganizationalValue, ResearchInterestArea, Speciality, Panelist, Media,
     MembershipType, MembershipPayment, MembershipBenefitModal, MembershipBenefitItem
 )
 from .models import TimelineSection, TimelineItem
@@ -300,6 +300,14 @@ class MemberAdmin(admin.ModelAdmin):
     def get_research_interests(self, obj):
         return ', '.join([r.name for r in obj.research_interest_areas.all()])
     get_research_interests.short_description = 'Research Interests'  # type: ignore
+
+
+@admin.register(PendingEventIntent)
+class PendingEventIntentAdmin(admin.ModelAdmin):
+    list_display = ('user_profile', 'event', 'intent_type', 'status', 'participant', 'created_at', 'completed_at')
+    list_filter = ('status', 'intent_type', 'event', 'created_at')
+    search_fields = ('user_profile__name', 'user_profile__email', 'event__name', 'note')
+    readonly_fields = ('created_at', 'updated_at', 'completed_at')
 
 
 

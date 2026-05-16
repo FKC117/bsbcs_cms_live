@@ -61,6 +61,24 @@ def mask_sensitive(obj):
     return obj
 
 
+def get_active_member_for_user(user):
+    if not user.is_authenticated:
+        return None
+    try:
+        user_profile = UserProfile.objects.get(user=user)
+        member = getattr(user_profile, 'member', None)
+    except UserProfile.DoesNotExist:
+        return None
+    if member and member.approval_status == 'approved' and member.is_active_member:
+        return member
+    return None
+
+
+def get_or_create_member_department(event):
+    department, _ = Department.objects.get_or_create(event=event, name='BSBCS Member')
+    return department
+
+
 # User Profile View STARTS ---------------------------------------------------------------###
 def create_profile(request):
     if request.method == 'POST':
@@ -220,6 +238,21 @@ def home(request, event_id):
     about_conference = AboutTheConference.objects.filter(event=event).first()  # Assuming you have one instance per event
     invitations = Invitation.objects.filter(event=event)
     modal_image_path = 'images/BBCC_2024_Poster_Final.jpg'
+    active_member = get_active_member_for_user(request.user)
+    existing_participant = None
+    if request.user.is_authenticated:
+        existing_participant = Participant.objects.filter(user=request.user, event=event).first()
+    regular_registration_available = (
+        event.event_status == 'active'
+        and event.registration == 'Open'
+        and event.registration_audience == 'all'
+    )
+    member_registration_available = (
+        event.event_status == 'active'
+        and event.registration == 'Open'
+        and (event.member_registration_enabled or event.registration_audience == 'members_only')
+        and not existing_participant
+    )
 
     context = {
         'user_profile': user_profile,
@@ -228,6 +261,10 @@ def home(request, event_id):
         'about_conference': about_conference,
         'invitations': invitations,
         'modal_image': modal_image_path,
+        'active_member': active_member,
+        'existing_participant': existing_participant,
+        'regular_registration_available': regular_registration_available,
+        'member_registration_available': member_registration_available,
     }
 
     return render(request, 'home.html', context)
@@ -295,15 +332,25 @@ from django.contrib import messages
 from django.db import IntegrityError
 
 def registration(request, event_id):
+    event = get_object_or_404(Event, id=event_id)
+    membership_nudge_available = (
+        event.registration == 'Open'
+        and (event.member_registration_enabled or event.registration_audience == 'members_only')
+    )
+    regular_registration_fee = event.amount if event.payment_required and event.amount else 0
+    member_registration_fee = event.member_registration_fee or 0
+
     # Check if the user is authenticated
     if not request.user.is_authenticated:
         return render(request, 'registration_login_prompt.html', {
             'message': 'You need to log in to be able to register for this event.',
-            'login_url': '/login/',  # Replace with your login URL name or path
-            'signup_url': '/create_profile/'  # Replace with your signup URL name or path
+            'event': event,
+            'membership_nudge_available': membership_nudge_available,
+            'regular_registration_fee': regular_registration_fee,
+            'member_registration_fee': member_registration_fee,
+            'login_url': reverse('login'),
+            'signup_url': reverse('create_profile'),
         })
-
-    event = get_object_or_404(Event, id=event_id)
 
     # Check if registration for the event is open
     if event.registration != 'Open':  # Match case-sensitive values as per your model
@@ -316,6 +363,12 @@ def registration(request, event_id):
             'event': event
         })
 
+    active_member = get_active_member_for_user(request.user)
+    member_registration_available = (
+        event.member_registration_enabled
+        or event.registration_audience == 'members_only'
+    )
+
     user_profile = UserProfile.objects.get(user=request.user)
 
     # Check if the user has already registered for the event
@@ -327,7 +380,16 @@ def registration(request, event_id):
             'participant': participant
         })
     except Participant.DoesNotExist:
-        pass  # User has not registered yet, proceed with registration 
+        pass  # User has not registered yet, proceed with registration
+
+    if active_member and member_registration_available:
+        return redirect('registration:member_registration', event_id=event.pk)
+
+    if event.registration_audience == 'members_only':
+        return render(request, 'registration_error.html', {
+            'message': 'This event is available for approved active BSBCS members only. Please apply for membership or use member registration after your membership is active.',
+            'event': event
+        })
 
     initial_data = {
         'name': user_profile.name,
@@ -345,30 +407,30 @@ def registration(request, event_id):
                 participant.save()
 
                 # Generate unique merchant invoice number for free events
-                merchant_invoice_number = f"REG-{event.id}-{request.user.id}-{int(time.time())}"  # type: ignore[attr-defined]
-                
+                merchant_invoice_number = f"REG-{event.pk}-{request.user.id}-{int(time.time())}"
+
                 # Create payment status based on event payment requirement
                 if event.payment_required and event.amount:
                     PaymentStatus.objects.create(
-                        participant=participant, 
-                        event=event, 
+                        participant=participant,
+                        event=event,
                         status='unpaid',
-                        amount=event.amount,
+                        amount=participant.get_payable_amount(),
                         merchant_invoice_number=merchant_invoice_number
                     )
                 else:
                     # For free events, create completed payment status
                     PaymentStatus.objects.create(
-                        participant=participant, 
-                        event=event, 
+                        participant=participant,
+                        event=event,
                         status='completed',
                         amount=0,
                         merchant_invoice_number=merchant_invoice_number
                     )
-                
+
                 send_registration_form_submission_email(participant)
                 messages.success(request, 'Registration form submitted successfully!')
-                return redirect('registration:registration_submitted', event_id=event.id)  # type: ignore[attr-defined]
+                return redirect('registration:registration_submitted', event_id=event.pk)
             except IntegrityError as e:
                 logger.exception("IntegrityError: %s", e)  # Debugging line
                 messages.error(request, 'A participant with this email or phone number already exists for this event.')
@@ -377,7 +439,99 @@ def registration(request, event_id):
     else:
         form = RegistrationForm(initial=initial_data, event=event)
 
-    return render(request, 'registration.html', {'form': form, 'event': event})
+    show_membership_nudge = (
+        membership_nudge_available
+        and event.registration_audience == 'all'
+        and not active_member
+    )
+    show_registration_choice = (
+        show_membership_nudge
+        and request.method == 'GET'
+        and request.GET.get('mode') != 'regular'
+    )
+
+    return render(request, 'registration.html', {
+        'form': form,
+        'event': event,
+        'show_membership_nudge': show_membership_nudge,
+        'show_registration_choice': show_registration_choice,
+        'regular_registration_fee': regular_registration_fee,
+        'member_registration_fee': member_registration_fee,
+    })
+
+
+def member_event_registration(request, event_id):
+    if not request.user.is_authenticated:
+        return redirect(f'{reverse("login")}?next={reverse("registration:member_registration", kwargs={"event_id": event_id})}')
+
+    event = get_object_or_404(Event, id=event_id)
+
+    if event.event_status != 'active' or event.registration != 'Open':
+        return render(request, 'registration_error.html', {
+            'message': 'Member registration is not open for this event.',
+            'event': event
+        })
+
+    if not event.member_registration_enabled and event.registration_audience != 'members_only':
+        return render(request, 'registration_error.html', {
+            'message': 'This event does not currently allow member registration.',
+            'event': event
+        })
+
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        messages.warning(request, "Please create your profile before registering for this event.")
+        return redirect(f'{reverse("create_profile")}?next={reverse("registration:member_registration", kwargs={"event_id": event_id})}')
+
+    member = get_active_member_for_user(request.user)
+    if not member:
+        return render(request, 'registration_error.html', {
+            'message': 'Only approved active BSBCS members can use member event registration.',
+            'event': event
+        })
+
+    existing_participant = Participant.objects.filter(user=request.user, event=event).first()
+    if existing_participant:
+        return render(request, 'registration_error.html', {
+            'message': 'You have already registered for this event.',
+            'event': event,
+            'participant': existing_participant
+        })
+
+    department = get_or_create_member_department(event)
+    payable_amount = event.member_registration_fee or 0
+    merchant_invoice_number = f"MEMEVT-{event.pk}-{request.user.id}-{int(time.time())}"
+
+    try:
+        participant = Participant.objects.create(
+            user=request.user,
+            event=event,
+            registration_type='member',
+            name=user_profile.name,
+            degree=(member.position or 'Member')[:50],
+            year_of_graduation=0,
+            department=department,
+            organization=(member.institution or 'BSBCS Member')[:100],
+            email=user_profile.email,
+            phone=user_profile.phone,
+            country=user_profile.country,
+            BMDC_registration_number='',
+        )
+        PaymentStatus.objects.create(
+            participant=participant,
+            event=event,
+            status='unpaid' if payable_amount else 'completed',
+            amount=payable_amount,
+            merchant_invoice_number=merchant_invoice_number
+        )
+        send_registration_form_submission_email(participant)
+        messages.success(request, 'Your member event registration has been submitted for approval.')
+        return redirect('registration:registration_submitted', event_id=event.pk)
+    except IntegrityError as e:
+        logger.exception("Member registration IntegrityError: %s", e)
+        messages.error(request, 'You are already registered for this event with this email or phone number.')
+        return redirect('registration:home', event_id=event.pk)
 
 from django.shortcuts import render, get_object_or_404
 
@@ -436,7 +590,7 @@ def send_payment_link_email(participant, event):
     if not event.payment_required:
         return  # Don't send payment email for free events
     subject = f'Complete Your Payment for {event.name} {event.year} Conference'
-    payment_url = reverse('payment', kwargs={
+    payment_url = reverse('registration:payment', kwargs={
         'event_id': event.id,
         'participant_id': participant.id
     })
@@ -861,6 +1015,7 @@ from .models import Participant, Event, PaymentStatus
 def payment(request, event_id, participant_id):
     participant = get_object_or_404(Participant, id=participant_id)
     event = get_object_or_404(Event, id=event_id)
+    payment_status = get_object_or_404(PaymentStatus, participant=participant, event=event)
 
     if request.method == 'POST':
         try:
@@ -871,13 +1026,16 @@ def payment(request, event_id, participant_id):
                 return redirect('index')
 
             # Step 2: Create payment
-            amount = event.amount
+            amount = payment_status.amount or participant.get_payable_amount()
+            if amount <= 0:
+                messages.error(request, "No payment is required for this registration.")
+                return redirect('registration:home', event_id=event.pk)
             payer_reference = str(getattr(request.user.userprofile, 'phone', None))
             if not payer_reference:
                 messages.error(request, "Phone number not found.")
                 return redirect('index')
 
-            merchant_invoice_number = f"INV-{event.id}-{request.user.id}-{int(time.time())}"  # type: ignore[attr-defined]
+            merchant_invoice_number = f"INV-{event.pk}-{request.user.id}-{int(time.time())}"
             callback_url = request.build_absolute_uri(
                 reverse_lazy('registration:payment_success', kwargs={'event_id': event_id, 'participant_id': participant_id})
             ) + f"?merchant_invoice_number={merchant_invoice_number}"
@@ -897,7 +1055,7 @@ def payment(request, event_id, participant_id):
             messages.error(request, "An error occurred.")
             return redirect('index')
 
-    return render(request, 'payment.html', {'participant': participant, 'event': event})
+    return render(request, 'payment.html', {'participant': participant, 'event': event, 'payment_status': payment_status})
 
 # Step 6: Payment Success view
 from django.urls import reverse
@@ -921,6 +1079,7 @@ def payment_success(request, event_id, participant_id):
         defaults={
             'transaction_id': payment_id,
             'status': 'pending',
+            'amount': participant.get_payable_amount(),
             'merchant_invoice_number': merchant_invoice_number  # Check if this is being set correctly
         }
     )

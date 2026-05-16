@@ -542,6 +542,49 @@ class Member(models.Model):
         ordering = ['order']
 
 
+class PendingEventIntent(models.Model):
+    INTENT_TYPE_CHOICES = [
+        ('member_registration', 'Member event registration'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+        ('failed', 'Failed'),
+    ]
+
+    user_profile = models.ForeignKey(
+        'registration.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='pending_event_intents'
+    )
+    event = models.ForeignKey(
+        'registration.Event',
+        on_delete=models.CASCADE,
+        related_name='membership_intents'
+    )
+    intent_type = models.CharField(max_length=40, choices=INTENT_TYPE_CHOICES, default='member_registration')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    participant = models.OneToOneField(
+        'registration.Participant',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='membership_intent'
+    )
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.user_profile.name} - {self.event.name} - {self.get_status_display()}"
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('user_profile', 'event', 'intent_type')
+
+
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True)
 

@@ -11,7 +11,7 @@ from .models import (
     HeroSection, CarouselItem, NewsTickerItem, QuickAccessCard, StatisticCounter,
     MemberSpotlight, ResearchHighlight, Event, PastEvent, PastEventSpeaker, PastEventSession, PastEventActivity, PastEventSponsor, CallToAction, BoardMember,
     Committee, Partnership, Award, AnnualReport, ResourceCategory, ResourceItem,
-    Webinar, Member, MembershipPayment, NavigationLink, OrganizationalValue, TimelineSection, Media, SiteSettings, MembershipType
+    Webinar, Member, PendingEventIntent, MembershipPayment, NavigationLink, OrganizationalValue, TimelineSection, Media, SiteSettings, MembershipType
 )
 from .models import ResearchInterestArea, Speciality
 from .forms import MembershipForm
@@ -502,7 +502,7 @@ def membership_form(request):
     """
     from django.shortcuts import redirect
     from django.urls import reverse
-    from registration.models import UserProfile
+    from registration.models import Event as RegistrationEventModel, UserProfile
     
     # Check if user is logged in
     if not request.user.is_authenticated:
@@ -518,6 +518,33 @@ def membership_form(request):
         # an edit/complete profile view that doesn't ask for a new account.
         messages.warning(request, "Please complete your profile details before joining the society.")
         return redirect(f'{reverse("user_profile")}?next={reverse("website:membership_form")}')
+
+    event_intent_id = request.POST.get('event_intent') or request.GET.get('event_intent')
+    event_intent = None
+    if event_intent_id:
+        event_intent = RegistrationEventModel.objects.filter(id=event_intent_id).first()
+        if event_intent and (
+            event_intent.registration != 'Open'
+            or not (event_intent.member_registration_enabled or event_intent.registration_audience == 'members_only')
+        ):
+            messages.warning(request, "This event is no longer accepting member registration intents.")
+            event_intent = None
+
+    def save_event_intent(member):
+        if not event_intent:
+            return None
+        intent, _ = PendingEventIntent.objects.update_or_create(
+            user_profile=user_profile,
+            event=event_intent,
+            intent_type='member_registration',
+            defaults={
+                'status': 'pending',
+                'participant': None,
+                'note': 'Saved from membership application during event registration.',
+                'completed_at': None,
+            }
+        )
+        return intent
     
     # Check if a Member record already exists for this UserProfile
     existing_member = Member.objects.filter(user_profile=user_profile).first()
@@ -525,15 +552,21 @@ def membership_form(request):
     # If member already exists and is approved or pending, redirect them
     if existing_member:
         if existing_member.approval_status == 'approved':
+            save_event_intent(existing_member)
             # Redirect to home, or perhaps to the payment page if they haven't paid
             if not existing_member.is_active_member:
                 return redirect('website:membership_payment_init')
+            if event_intent:
+                from .utils_membership import process_pending_event_intents
+                process_pending_event_intents(existing_member)
             messages.info(request, "You are already an approved member.")
             return redirect('website:homepage')
         elif existing_member.approval_status == 'pending':
+            save_event_intent(existing_member)
             # They already applied, show them the success/thank you page again
             return render(request, 'pages/membership_application_received.html', {
                 'member': existing_member,
+                'event_intent': event_intent,
             })
         # If 'rejected', we allow them to re-submit/edit their form below
     
@@ -551,10 +584,12 @@ def membership_form(request):
                 member.order = Member.objects.count() + 1
             member.save()
             form.save_m2m()  # Save many-to-many relationships
-            
+            save_event_intent(member)
+
             # Render success message for application submission (not payment)
             return render(request, 'pages/membership_application_received.html', {
                 'member': member,
+                'event_intent': event_intent,
             })
     else:
         # Pass the existing instance to prepopulate the form if they were rejected
@@ -570,6 +605,7 @@ def membership_form(request):
         'call_to_action': call_to_action,
         'navigation_links': navigation_links,
         'user_profile': user_profile,
+        'event_intent': event_intent,
     }
     return render(request, 'pages/membership_form.html', context)
 

@@ -55,11 +55,19 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
     # Only process if approval_status field was actually updated or update_fields is None (Admin save)
     # We check if it changed versus our pre_save tracker
     original_status = getattr(instance, '_original_approval_status', None)
-    
+    original_active_status = getattr(instance, '_original_active_status', False)
+
+    if instance.user_profile and instance.is_active_member and not original_active_status:
+        try:
+            from .utils_membership import process_pending_event_intents
+            process_pending_event_intents(instance)
+        except Exception as e:
+            logger.error(f"[MEMBER SIGNAL] Failed to process event intents for {instance}: {str(e)}", exc_info=True)
+
     if instance.approval_status == original_status:
         logger.info(f"[MEMBER SIGNAL] Member {instance} updated but status '{instance.approval_status}' hasn't changed. Skipping email.")
         return
-        
+
     logger.info(f"[MEMBER SIGNAL] Member status change detected: {original_status} -> {instance.approval_status}")
     
     logger.info(f"[MEMBER SIGNAL] Member updated: {instance}, status={instance.approval_status}, update_fields={update_fields}")
@@ -68,7 +76,7 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
     if not instance.user_profile:
         logger.warning(f"[MEMBER SIGNAL] Member {instance} has no user_profile, cannot send email")
         return
-    
+
     user_email = instance.user_profile.email
     user_name = instance.user_profile.name
     

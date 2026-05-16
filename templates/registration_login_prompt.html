@@ -8,13 +8,40 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="min-h-screen flex items-center justify-center bg-gray-900">
-        <div class="bg-white p-8 rounded-lg shadow-md max-w-sm ml-5 mr-5">
+    <div class="min-h-screen flex items-center justify-center bg-gray-900 px-4 py-10">
+        <div class="bg-white p-8 rounded-2xl shadow-md max-w-xl w-full">
             <h1 class="text-2xl font-bold text-red-600 mb-4">Attention Required!</h1>
-            <p class="text-gray-700">{{ message }}</p><br>
-            <a href="{% url 'login' %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-4 ml-auto text-center">Login</a>
-            <a href="{% url 'create_profile' %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-4 ml-auto text-center">Create Profile</a>
-           
+            <p class="text-gray-700">{{ message }}</p>
+
+            {% if membership_nudge_available %}
+                <div class="mt-6 rounded-xl border border-pink-200 bg-pink-50 p-5">
+                    <p class="text-xs font-bold uppercase tracking-widest text-pink-600">Member benefits available</p>
+                    <h2 class="mt-2 text-xl font-bold text-gray-900">Create your profile, then choose how you want to join this event.</h2>
+                    <p class="mt-2 text-sm leading-6 text-gray-700">
+                        You can register normally after login. You can also apply for BSBCS membership and,
+                        once approved, use eligible member benefits for selected programs.
+                    </p>
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div class="rounded-lg bg-white p-4">
+                            <p class="text-xs font-bold uppercase tracking-widest text-gray-500">Event registration fee</p>
+                            <p class="mt-1 text-2xl font-bold text-gray-900">
+                                {% if regular_registration_fee %}BDT {{ regular_registration_fee }}{% else %}Free{% endif %}
+                            </p>
+                        </div>
+                        <div class="rounded-lg bg-white p-4">
+                            <p class="text-xs font-bold uppercase tracking-widest text-pink-600">Registration fee for members</p>
+                            <p class="mt-1 text-2xl font-bold text-gray-900">
+                                {% if member_registration_fee %}BDT {{ member_registration_fee }}{% else %}Free{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="mt-6 grid gap-3 sm:grid-cols-2">
+                <a href="{% url 'login' %}?next={{ request.path }}" class="bg-blue-600 text-white py-3 px-4 rounded-lg text-center font-bold hover:bg-blue-700">Login</a>
+                <a href="{% url 'create_profile' %}?next={{ request.path }}" class="bg-pink-600 text-white py-3 px-4 rounded-lg text-center font-bold hover:bg-pink-700">Create Profile</a>
+            </div>
         </div>
     </div>
 </body>

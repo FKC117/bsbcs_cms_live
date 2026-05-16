@@ -147,6 +147,91 @@ def send_membership_invoice_email(payment):
     return False
 
 
+def process_pending_event_intents(member):
+    """
+    Convert saved member-event intents into pending event participants.
+
+    This keeps event approval with admins: the participant is created, but not
+    marked approved.
+    """
+    import logging
+    import time
+    from django.db import IntegrityError
+    from registration.models import Department, Participant, PaymentStatus
+    from .models import PendingEventIntent
+
+    logger = logging.getLogger('payment')
+    pending_intents = PendingEventIntent.objects.filter(
+        user_profile=member.user_profile,
+        intent_type='member_registration',
+        status='pending',
+    ).select_related('event', 'user_profile')
+
+    for intent in pending_intents:
+        event = intent.event
+
+        if event.registration != 'Open' or event.event_status != 'active':
+            intent.status = 'failed'
+            intent.note = 'Event registration was not open when membership became active.'
+            intent.save(update_fields=['status', 'note', 'updated_at'])
+            continue
+
+        if not event.member_registration_enabled and event.registration_audience != 'members_only':
+            intent.status = 'failed'
+            intent.note = 'Event no longer allows member registration.'
+            intent.save(update_fields=['status', 'note', 'updated_at'])
+            continue
+
+        existing_participant = Participant.objects.filter(
+            user=member.user_profile.user,
+            event=event,
+        ).first()
+        if existing_participant:
+            intent.participant = existing_participant
+            intent.status = 'completed'
+            intent.note = 'User already had a participant registration for this event.'
+            intent.completed_at = timezone.now()
+            intent.save(update_fields=['participant', 'status', 'note', 'completed_at', 'updated_at'])
+            continue
+
+        department, _ = Department.objects.get_or_create(event=event, name='BSBCS Member')
+        payable_amount = event.member_registration_fee or 0
+        merchant_invoice_number = f"MEMEVT-{event.pk}-{member.user_profile.user_id}-{int(time.time())}"
+
+        try:
+            participant = Participant.objects.create(
+                user=member.user_profile.user,
+                event=event,
+                registration_type='member',
+                name=member.user_profile.name,
+                degree=(member.position or 'Member')[:50],
+                year_of_graduation=0,
+                department=department,
+                organization=(member.institution or 'BSBCS Member')[:100],
+                email=member.user_profile.email,
+                phone=member.user_profile.phone,
+                country=member.user_profile.country,
+                BMDC_registration_number='',
+            )
+            PaymentStatus.objects.create(
+                participant=participant,
+                event=event,
+                status='unpaid' if payable_amount else 'completed',
+                amount=payable_amount,
+                merchant_invoice_number=merchant_invoice_number,
+            )
+            intent.participant = participant
+            intent.status = 'completed'
+            intent.note = 'Participant registration was created after membership activation. Admin approval is still required.'
+            intent.completed_at = timezone.now()
+            intent.save(update_fields=['participant', 'status', 'note', 'completed_at', 'updated_at'])
+        except IntegrityError as exc:
+            logger.warning("Could not complete pending event intent %s: %s", intent.pk, exc)
+            intent.status = 'failed'
+            intent.note = 'Could not create participant because this email or phone is already registered for the event.'
+            intent.save(update_fields=['status', 'note', 'updated_at'])
+
+
 def complete_membership_payment(payment_record):
     """
     Centralized logic to complete a membership payment.
@@ -179,6 +264,7 @@ def complete_membership_payment(payment_record):
     member.subscription_expiry_date = current_expiry + relativedelta(years=payment_record.duration_years)
     member.membership_type = payment_record.membership_type
     member.save()
+    process_pending_event_intents(member)
 
     # 3. Generate and Save Invoice
     try:

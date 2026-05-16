@@ -57,10 +57,10 @@ class ModeratorAdmin(admin.ModelAdmin):
 admin.site.register(Moderator, ModeratorAdmin)
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'show_publication_tab', 'payment_required')
-    list_filter = ('year', 'event_status', 'payment_required')
+    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee')
+    list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled')
     search_fields = ('name',)
-    list_editable = ('show_publication_tab', 'payment_required')
+    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee')
 admin.site.register(Event, EventAdmin)
 
 import os
@@ -170,6 +170,7 @@ from django.utils.html import strip_tags
 def approve_participants(modeladmin, request, queryset):
     for participant in queryset:
         event = participant.event
+        payable_amount = participant.get_payable_amount()
         
         if not User.objects.filter(email=participant.email).exists():
             password = get_random_string(length=12)
@@ -186,23 +187,25 @@ def approve_participants(modeladmin, request, queryset):
             participant.denied = False
         participant.save()
 
-        # For free events, update the merchant invoice number to be unique
-        if not event.payment_required:
-            try:
-                payment_status = PaymentStatus.objects.get(participant=participant, event=event)
-                # Generate unique merchant invoice number for free events
-                merchant_invoice_number = f"FREE-{event.id}-{participant.id}-{int(time.time())}"
-                payment_status.merchant_invoice_number = merchant_invoice_number
-                payment_status.status = 'completed'
-                payment_status.save()
-            except PaymentStatus.DoesNotExist:
-                pass
-        # Handle email based on payment requirement
-        if event.payment_required and event.amount:
-            # For paid events, send payment email
+        payment_status, _ = PaymentStatus.objects.get_or_create(
+            participant=participant,
+            event=event,
+            defaults={
+                'merchant_invoice_number': f"REG-{event.id}-{participant.id}-{int(time.time())}",
+                'amount': payable_amount,
+                'status': 'unpaid' if payable_amount else 'completed',
+            }
+        )
+        payment_status.amount = payable_amount
+
+        if payable_amount:
+            payment_status.status = payment_status.status if payment_status.status in ['completed', 'paid'] else 'unpaid'
+            payment_status.save()
             send_consolidated_email(request, participant, password, include_password)
         else:
-            # For free events, send confirmation email
+            payment_status.merchant_invoice_number = f"FREE-{event.id}-{participant.id}-{int(time.time())}"
+            payment_status.status = 'completed'
+            payment_status.save()
             send_free_event_confirmation_email(participant, event, password, include_password)
 
 def deny_participants(modeladmin, request, queryset):
@@ -213,10 +216,10 @@ deny_participants.short_description = "Deny selected participants"
 
 class ParticipantAdmin(ImportExportModelAdmin):
     resource_class = ParticipantResource
-    list_display = ('name', 'email', 'phone', 'department', 'organization', 'BMDC_registration_number', 'country', 'created_at', 'approved', 'denied', 'event')
+    list_display = ('name', 'registration_type', 'email', 'phone', 'department', 'organization', 'BMDC_registration_number', 'country', 'created_at', 'approved', 'denied', 'event')
     list_per_page = 15
     search_fields = ('name', 'phone', 'organization', 'BMDC_registration_number')
-    list_filter = ('approved', 'denied', 'country', 'event')  # Add filters
+    list_filter = ('registration_type', 'approved', 'denied', 'country', 'event')  # Add filters
     actions = [approve_participants, deny_participants]
 
 admin.site.register(Participant, ParticipantAdmin)

@@ -65,7 +65,11 @@
           <a href="{% url 'registration:publication_list' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Publication</a>
         {% endif %}
         
-        <a href="{% url 'registration:registration' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Registration</a>
+        {% if event.registration_audience == 'members_only' %}
+          <a href="{% url 'registration:member_registration' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Member Registration</a>
+        {% else %}
+          <a href="{% url 'registration:registration' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Registration</a>
+        {% endif %}
        
         <a href="{% url 'registration:abstract_submission' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Abstract Submission</a>
           
@@ -110,7 +114,11 @@
         <a href="{% url 'registration:publication_list' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Publication</a>
         {% endif %}
         
+        {% if event.registration_audience == 'members_only' %}
+        <a href="{% url 'registration:member_registration' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Member Registration</a>
+        {% else %}
         <a href="{% url 'registration:registration' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Registration</a>
+        {% endif %}
 
         <a href="{% url 'registration:abstract_submission' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Abstract Submission</a>
             

@@ -54,6 +54,10 @@ class Event(models.Model):
         ('Closed', 'Closed'),
         ('Starting Soon', 'Starting Soon'),
     ]
+    REGISTRATION_AUDIENCE_CHOICES = [
+        ('all', 'All users'),
+        ('members_only', 'Members only'),
+    ]
     name = models.CharField(max_length=200)
     slogan = models.CharField(max_length=200, default="Empowering Survivors, Education & Support")
     year = models.PositiveIntegerField()
@@ -65,8 +69,25 @@ class Event(models.Model):
     modal_image = models.ImageField(upload_to='media/modal_images/', blank=True, null=True)
     event_hero_image = models.ImageField(upload_to='media/hero_images/', blank=True, null=True, help_text='Upload an image for the hero section of the event page. Recomended size: 1920x1080')
     registration = models.CharField(max_length=50, choices=REGISTRATION_STATUS_CHOICES, default='Open')
+    registration_audience = models.CharField(
+        max_length=20,
+        choices=REGISTRATION_AUDIENCE_CHOICES,
+        default='all',
+        help_text='Choose who can register for this event.'
+    )
     payment_required = models.BooleanField(default=True, help_text='Check if payment is required')
     amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    member_registration_enabled = models.BooleanField(
+        default=False,
+        help_text='Allow approved active BSBCS members to register through the member flow'
+    )
+    member_registration_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text='Optional member-only event fee. Leave blank or set 0 for free member attendance.'
+    )
     show_publication_tab = models.BooleanField(default=False, help_text="Show or hide the Publication tab on the event page.")
     slug = models.SlugField(unique=True, blank=True)
     description = models.TextField(max_length=1000, blank=True, null=True)
@@ -158,8 +179,14 @@ class Department(models.Model):
 
 #Participant Models START------------------------------------------------------------------------------------#
 class Participant(models.Model):
+    REGISTRATION_TYPE_CHOICES = [
+        ('regular', 'Regular'),
+        ('member', 'Member'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    registration_type = models.CharField(max_length=20, choices=REGISTRATION_TYPE_CHOICES, default='regular')
     name = models.CharField(max_length=100)
     degree = models.CharField(max_length=50)
     year_of_graduation = models.IntegerField()
@@ -179,6 +206,14 @@ class Participant(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_payable_amount(self):
+        if self.registration_type == 'member' and (
+            self.event.member_registration_enabled
+            or self.event.registration_audience == 'members_only'
+        ):
+            return self.event.member_registration_fee or 0
+        return self.event.amount or 0
 
 #Participant Models END------------------------------------------------------------------------------------#
 
@@ -207,9 +242,10 @@ class PaymentStatus(models.Model):
     email_sent = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        # Auto-set the amount from the associated event
-        if self.event:
-            self.amount = self.event.amount
+        # Auto-set amount from participant/event policy when amount is not already set.
+        # This allows member discounted fees to stay different from the regular event fee.
+        if self.event and self.participant and self.amount is None:
+            self.amount = self.participant.get_payable_amount()
 
         # Check and remove from PendingPaymentReminder if the status is 'paid' or 'completed'
         if self.status in ['paid', 'completed']:

@@ -45,7 +45,7 @@
 
                 <div class="mb-4">
                     <label class="block text-gray-700 font-bold">Amount:</label>
-                    <p class="text-gray-900">{{ event.amount }}</p>
+                    <p class="text-gray-900">{{ payment_status.amount }}</p>
                 </div>
 
                 <form method="POST" action="{% url 'registration:payment' event.id participant.id %}">

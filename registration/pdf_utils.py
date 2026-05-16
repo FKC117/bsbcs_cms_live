@@ -138,6 +138,7 @@ from reportlab.platypus import Table, TableStyle
 from reportlab.pdfgen import canvas
 
 def generate_invoice(participant, event, payment_status):
+    invoice_amount = payment_status.amount or 0
     # Generate the filename based on payment status ID
     file_name = f"invoice_{payment_status.id}.pdf"
     
@@ -204,7 +205,7 @@ def generate_invoice(participant, event, payment_status):
     # Fourth Section: Invoice Table for Fees
     data = [
         ["Description", "Quantity", "Unit Price", "Total"],
-        [f"Registration fees for {event.name} {event.year}", "1", f"BDT {event.amount}", f"BDT {event.amount}"]
+        [f"Registration fees for {event.name} {event.year}", "1", f"BDT {invoice_amount}", f"BDT {invoice_amount}"]
     ]
     
     table = Table(data, colWidths=[250, 80, 80, 100])
@@ -225,7 +226,7 @@ def generate_invoice(participant, event, payment_status):
 
     # Total Amount Section
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(letter[0] - margin - 150, content_top - 250, f"Total: BDT {event.amount}")
+    c.drawString(letter[0] - margin - 150, content_top - 250, f"Total: BDT {invoice_amount}")
 
     # Footer Section with Thank You and Signature Message
     c.setFont("Helvetica", 10)

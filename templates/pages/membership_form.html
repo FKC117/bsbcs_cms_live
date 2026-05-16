@@ -267,6 +267,15 @@
             <h1>Join Our Community</h1>
             <p>Share your expertise and contribute to our growing network of professionals.</p>
         {% endif %}
+        {% if event_intent %}
+            <div class="mt-4 rounded-xl border border-sky-200 bg-white px-5 py-4 text-left shadow-sm">
+                <strong class="block text-sm uppercase tracking-widest text-sky-700">Event registration intent saved</strong>
+                <span class="mt-1 block text-sm text-slate-700">
+                    After your membership is approved and activated, we will submit your member registration request for
+                    {{ event_intent.name }} {{ event_intent.year }}. Event participation will still wait for admin approval.
+                </span>
+            </div>
+        {% endif %}
     </section>
 
     <div class="membership-shell">
@@ -291,6 +300,9 @@
 
             <form method="post" enctype="multipart/form-data" class="space-y-6">
                 {% csrf_token %}
+                {% if event_intent %}
+                    <input type="hidden" name="event_intent" value="{{ event_intent.id }}">
+                {% endif %}
 
                 <!-- User identity (read-only) -->
                 <div class="profile-summary">
