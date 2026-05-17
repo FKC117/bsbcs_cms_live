@@ -184,6 +184,32 @@
             color: var(--auth-muted);
             font-size: 14px;
         }
+        .corporate-entry {
+            margin-top: 18px;
+            border: 1px solid #cfe3f6;
+            border-radius: 12px;
+            background: #f4f9ff;
+            padding: 14px;
+            color: var(--auth-text);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .corporate-entry strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--auth-primary-dark);
+            font-size: 15px;
+        }
+        .corporate-entry a {
+            display: inline-flex;
+            margin-top: 9px;
+            color: var(--auth-primary);
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .corporate-entry a:hover {
+            text-decoration: underline;
+        }
         .error-box,
         .message-box {
             margin-bottom: 18px;
@@ -363,6 +389,13 @@
             <div class="auth-footer">
                 <span>Already have a profile? <a href="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" class="link link-secondary">Login</a></span>
                 <a href="{% url 'index' %}" class="link">Back to Events</a>
+            </div>
+
+            <div class="corporate-entry">
+                <strong>Need corporate event registration?</strong>
+                Companies and institutions can request authorized access for bulk participant registration.
+                <a href="{% url 'corporate_account_request' %}">Request corporate access</a>
+                <a href="{% url 'corporate_login' %}">Corporate login</a>
             </div>
         </section>
     </main>

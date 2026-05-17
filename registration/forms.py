@@ -45,6 +45,22 @@ class UserProfileForm(forms.ModelForm):
         return user_profile
 
 
+class CorporateAccountRequestForm(forms.ModelForm):
+    class Meta:
+        model = CorporateAccountRequest
+        fields = [
+            'company_name',
+            'contact_name',
+            'contact_designation',
+            'email',
+            'phone',
+            'note',
+        ]
+        widgets = {
+            'note': forms.Textarea(attrs={'rows': 4}),
+        }
+
+
 
 
 

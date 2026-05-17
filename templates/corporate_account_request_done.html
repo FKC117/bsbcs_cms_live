@@ -1,0 +1,96 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Request Received | {{ site_settings.site_name|default:"BSBCS" }}</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% if site_settings and site_settings.favicon %}
+        <link rel="icon" href="{{ site_settings.favicon.url }}">
+    {% endif %}
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(227, 242, 253, 0.94), rgba(224, 242, 241, 0.82));
+            color: #172033;
+            font-family: "Source Sans Pro", Arial, sans-serif;
+            padding: 24px;
+        }
+        .card {
+            width: 100%;
+            max-width: 520px;
+            border: 1px solid #dce3ec;
+            border-radius: 18px;
+            background: #fff;
+            box-shadow: 0 18px 45px rgba(21, 41, 72, 0.10);
+            padding: 34px;
+            text-align: center;
+        }
+        .status-mark {
+            width: 58px;
+            height: 58px;
+            margin: 0 auto 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #e0f2f1;
+            color: #00695c;
+            font-size: 28px;
+            font-weight: 900;
+        }
+        h1 {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 28px;
+            line-height: 1.18;
+        }
+        p {
+            margin: 14px 0 0;
+            color: #5f6b7a;
+            line-height: 1.65;
+        }
+        .actions {
+            margin-top: 26px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            border-radius: 10px;
+            padding: 0 18px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .button-primary {
+            background: #1565c0;
+            color: #fff;
+        }
+        .button-secondary {
+            border: 1px solid #dce3ec;
+            color: #172033;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <div class="status-mark">&#10003;</div>
+        <h1>Corporate request received</h1>
+        <p>Thank you. The BSBCS admin team will review your organization details and contact you about corporate event registration access.</p>
+        <div class="actions">
+            <a href="{% url 'website:homepage' %}" class="button button-primary">Back to Website</a>
+            <a href="{% url 'corporate_login' %}" class="button button-secondary">Corporate Login</a>
+        </div>
+    </main>
+</body>
+</html>

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | {{ site_settings.site_name|default:"BSBCS" }}</title>
+    <title>Corporate Login | {{ site_settings.site_name|default:"BSBCS" }}</title>
     <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
     {% if site_settings and site_settings.favicon %}
         <link rel="icon" href="{{ site_settings.favicon.url }}">
@@ -23,7 +23,7 @@
         body {
             margin: 0;
             background:
-                linear-gradient(135deg, rgba(227, 242, 253, 0.95), rgba(252, 228, 236, 0.72)),
+                linear-gradient(135deg, rgba(227, 242, 253, 0.95), rgba(224, 242, 241, 0.76)),
                 var(--auth-bg);
             color: var(--auth-text);
             font-family: "Source Sans Pro", Arial, sans-serif;
@@ -37,7 +37,7 @@
         }
         .auth-card {
             width: 100%;
-            max-width: 440px;
+            max-width: 460px;
             background: #fff;
             border: 1px solid var(--auth-border);
             border-radius: 18px;
@@ -52,28 +52,27 @@
             color: inherit;
             text-decoration: none;
         }
-        .brand-mark {
-            width: 44px;
-            height: 44px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 12px;
-            background: #e3f2fd;
-            color: var(--auth-primary);
-            font-weight: 800;
-            font-size: 18px;
-            flex: 0 0 auto;
-        }
+        .brand-mark,
         .brand-logo {
             width: 44px;
             height: 44px;
             border-radius: 12px;
+            flex: 0 0 auto;
+        }
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #e3f2fd;
+            color: var(--auth-primary);
+            font-weight: 800;
+            font-size: 18px;
+        }
+        .brand-logo {
             object-fit: contain;
             background: #fff;
             border: 1px solid var(--auth-border);
             padding: 4px;
-            flex: 0 0 auto;
         }
         .brand-name {
             display: block;
@@ -137,7 +136,6 @@
             color: var(--auth-text);
             font: inherit;
             padding: 11px 13px;
-            transition: border-color 160ms ease, box-shadow 160ms ease;
         }
         .auth-input:focus {
             border-color: var(--auth-primary);
@@ -155,13 +153,9 @@
             font-family: Inter, Arial, sans-serif;
             font-size: 15px;
             font-weight: 800;
-            transition: background 160ms ease, transform 160ms ease;
         }
         .primary-button:hover {
             background: var(--auth-primary-dark);
-        }
-        .primary-button:active {
-            transform: translateY(1px);
         }
         .link {
             color: var(--auth-primary);
@@ -174,6 +168,21 @@
         .link-secondary {
             color: var(--auth-secondary);
         }
+        .error-box {
+            margin-bottom: 18px;
+            border: 1px solid #ffcdd2;
+            border-radius: 10px;
+            background: #fff5f5;
+            color: #b71c1c;
+            padding: 12px 14px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .field-error {
+            margin-top: 7px;
+            color: #b71c1c;
+            font-size: 13px;
+        }
         .auth-footer {
             margin-top: 22px;
             padding-top: 20px;
@@ -181,60 +190,6 @@
             color: var(--auth-muted);
             text-align: center;
             font-size: 14px;
-        }
-        .corporate-entry {
-            margin-top: 18px;
-            border: 1px solid #cfe3f6;
-            border-radius: 12px;
-            background: #f4f9ff;
-            padding: 14px;
-            color: var(--auth-text);
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        .corporate-entry strong {
-            display: block;
-            margin-bottom: 4px;
-            color: var(--auth-primary-dark);
-            font-size: 15px;
-        }
-        .corporate-entry a {
-            display: inline-flex;
-            margin-top: 9px;
-            color: var(--auth-primary);
-            font-weight: 800;
-            text-decoration: none;
-        }
-        .corporate-entry a:hover {
-            text-decoration: underline;
-        }
-        .error-box,
-        .message-box {
-            margin-bottom: 18px;
-            border-radius: 10px;
-            padding: 12px 14px;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        .error-box {
-            border: 1px solid #ffcdd2;
-            background: #fff5f5;
-            color: #b71c1c;
-        }
-        .message-box {
-            border: 1px solid #bbdefb;
-            background: #f4f9ff;
-            color: #0d47a1;
-        }
-        .field-error {
-            margin-top: 7px;
-            color: #b71c1c;
-            font-size: 13px;
-        }
-        .field-error ul,
-        .error-box ul {
-            margin: 0;
-            padding-left: 18px;
         }
         @media (max-width: 480px) {
             .auth-page {
@@ -250,65 +205,15 @@
                 padding: 22px 18px 26px;
                 box-shadow: none;
             }
-            .brand {
-                margin-bottom: 22px;
-                padding-bottom: 18px;
-                border-bottom: 1px solid var(--auth-border);
-            }
-            .brand-mark {
-                width: 40px;
-                height: 40px;
-                border-radius: 10px;
-            }
-            .brand-logo {
-                width: 40px;
-                height: 40px;
-                border-radius: 10px;
-            }
-            .brand-name {
-                font-size: 20px;
-            }
-            .brand-subtitle {
-                font-size: 12px;
-            }
             h1 {
                 font-size: 24px;
-            }
-            .lead {
-                font-size: 14px;
-                margin-bottom: 22px;
-            }
-            .form-group {
-                margin-bottom: 16px;
-            }
-            .auth-input {
-                min-height: 46px;
-                border-radius: 9px;
-                font-size: 16px;
-            }
-            .primary-button {
-                min-height: 48px;
-                border-radius: 9px;
-                margin-top: 2px;
-            }
-            .label-row {
-                flex-direction: row;
-                align-items: center;
-                gap: 10px;
-            }
-            .link {
-                font-size: 13px;
-            }
-            .auth-footer {
-                margin-top: 20px;
-                padding: 16px 12px 0;
             }
         }
     </style>
 </head>
 <body>
     <main class="auth-page">
-        <section class="auth-card" aria-labelledby="login-title">
+        <section class="auth-card" aria-labelledby="corporate-login-title">
             <a href="{% url 'website:homepage' %}" class="brand">
                 {% if site_settings and site_settings.logo %}
                     <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="brand-logo">
@@ -321,40 +226,22 @@
                 </span>
             </a>
 
-            <p class="eyebrow">Welcome back</p>
-            <h1 id="login-title">Login to your account</h1>
-            <p class="lead">Access your profile, membership application, event registrations, payments, and abstracts.</p>
+            <p class="eyebrow">Corporate access</p>
+            <h1 id="corporate-login-title">Corporate login</h1>
+            <p class="lead">Use your BSBCS account to manage approved organization event registration work.</p>
 
             {% if form.non_field_errors %}
                 <div class="error-box">{{ form.non_field_errors }}</div>
             {% endif %}
 
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="message-box">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-
-            <form method="POST" action="{% url 'login' %}">
+            <form method="POST" action="{% url 'corporate_login' %}">
                 {% csrf_token %}
-                {% if request.GET.next %}
-                    <input type="hidden" name="next" value="{{ request.GET.next }}">
-                {% endif %}
+                <input type="hidden" name="next" value="{{ request.GET.next|default:dashboard_url }}">
 
                 <div class="form-group">
                     <label for="id_username">Email</label>
-                    <input
-                        type="text"
-                        name="username"
-                        id="id_username"
-                        class="auth-input"
-                        value="{{ form.username.value|default_if_none:'' }}"
-                        autocomplete="email"
-                        required
-                    >
-                    {% if form.username.errors %}
-                        <div class="field-error">{{ form.username.errors }}</div>
-                    {% endif %}
+                    <input type="text" name="username" id="id_username" class="auth-input" value="{{ form.username.value|default_if_none:'' }}" autocomplete="email" required>
+                    {% if form.username.errors %}<div class="field-error">{{ form.username.errors }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
@@ -362,32 +249,16 @@
                         <label for="id_password">Password</label>
                         <a href="{% url 'password_reset' %}" class="link">Forgot password?</a>
                     </div>
-                    <input
-                        type="password"
-                        name="password"
-                        id="id_password"
-                        class="auth-input"
-                        autocomplete="current-password"
-                        required
-                    >
-                    {% if form.password.errors %}
-                        <div class="field-error">{{ form.password.errors }}</div>
-                    {% endif %}
+                    <input type="password" name="password" id="id_password" class="auth-input" autocomplete="current-password" required>
+                    {% if form.password.errors %}<div class="field-error">{{ form.password.errors }}</div>{% endif %}
                 </div>
 
-                <button type="submit" class="primary-button">Login</button>
+                <button type="submit" class="primary-button">Login to Corporate Dashboard</button>
             </form>
 
             <div class="auth-footer">
-                New to BSBCS?
-                <a href="{% url 'create_profile' %}" class="link link-secondary">Create your profile</a>
-            </div>
-
-            <div class="corporate-entry">
-                <strong>Registering participants for an organization?</strong>
-                Request corporate access for company or institution-sponsored event registration.
-                <a href="{% url 'corporate_account_request' %}">Request corporate access</a>
-                <a href="{% url 'corporate_login' %}">Corporate login</a>
+                Need authorization?
+                <a href="{% url 'corporate_account_request' %}" class="link link-secondary">Request corporate access</a>
             </div>
         </section>
     </main>

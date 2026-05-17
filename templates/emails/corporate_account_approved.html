@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f5f8fb;font-family:Arial,sans-serif;color:#172033;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px;">
+        <tr>
+            <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border:1px solid #dce3ec;border-radius:14px;overflow:hidden;">
+                    <tr>
+                        <td style="background:#102033;color:#ffffff;padding:24px;">
+                            <h1 style="margin:0;font-size:24px;">Corporate access approved</h1>
+                            <p style="margin:8px 0 0;color:#d8e2ee;">{{ site_name }}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:26px;">
+                            <p>Dear {{ contact_name }},</p>
+                            <p>Your corporate access request for <strong>{{ company_name }}</strong> has been approved.</p>
+                            {% if created_user and setup_url %}
+                                <p>We created a BSBCS login account for this email address. Please set your password using the button below, then login to the corporate dashboard.</p>
+                                <p style="margin:24px 0;">
+                                    <a href="{{ setup_url }}" style="display:inline-block;background:#1565c0;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:bold;">Set Password</a>
+                                </p>
+                            {% else %}
+                                <p>You can use your existing BSBCS login credentials to access the corporate dashboard.</p>
+                            {% endif %}
+                            <p style="margin:24px 0;">
+                                <a href="{{ login_url }}" style="display:inline-block;background:#00695c;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:bold;">Open Corporate Dashboard</a>
+                            </p>
+                            <p style="color:#5f6b7a;">Best regards,<br>{{ site_name }} Team</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

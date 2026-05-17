@@ -1,0 +1,649 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Registration | {{ event.name }} {{ event.year }}</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% if site_settings and site_settings.favicon %}
+        <link rel="icon" href="{{ site_settings.favicon.url }}">
+    {% endif %}
+    <style>
+        body {
+            margin: 0;
+            background: #f5f8fb;
+            color: #172033;
+            font-family: "Source Sans Pro", Arial, sans-serif;
+        }
+        .topbar {
+            border-bottom: 1px solid #dce3ec;
+            background: #fff;
+        }
+        .topbar-inner,
+        .page {
+            max-width: 1120px;
+            margin: 0 auto;
+        }
+        .topbar-inner {
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .brand img,
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+        }
+        .brand img {
+            object-fit: contain;
+            border: 1px solid #dce3ec;
+            padding: 4px;
+        }
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #e3f2fd;
+            color: #1565c0;
+            font-weight: 900;
+        }
+        .brand strong {
+            display: block;
+            color: #1565c0;
+            font-size: 18px;
+            line-height: 1.1;
+        }
+        .brand small {
+            color: #5f6b7a;
+        }
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            border-radius: 10px;
+            padding: 0 16px;
+            font-weight: 900;
+            text-decoration: none;
+            border: 0;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .button-primary {
+            background: #1565c0;
+            color: #fff;
+        }
+        .button-secondary {
+            border: 1px solid #dce3ec;
+            color: #172033;
+            background: #fff;
+        }
+        .button-outline {
+            border: 1px solid #1565c0;
+            color: #1565c0;
+            background: #fff;
+        }
+        .logout {
+            background: #102033;
+            color: #fff;
+        }
+        .page {
+            padding: 28px 16px 48px;
+        }
+        .hero {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 18px;
+        }
+        .card {
+            border: 1px solid #dce3ec;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 12px 30px rgba(21, 41, 72, 0.07);
+            padding: 24px;
+        }
+        .eyebrow {
+            margin: 0 0 8px;
+            color: #00695c;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        h1,
+        h2,
+        h3 {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            letter-spacing: 0;
+        }
+        h1 {
+            font-size: 34px;
+            line-height: 1.12;
+        }
+        h2 {
+            font-size: 21px;
+        }
+        h3 {
+            font-size: 16px;
+        }
+        p,
+        li {
+            color: #5f6b7a;
+            line-height: 1.65;
+        }
+        .status {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #e3f2fd;
+            color: #0d47a1;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .message {
+            margin-bottom: 16px;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-weight: 800;
+        }
+        .message.success {
+            border: 1px solid #9ae6b4;
+            background: #ecfdf3;
+            color: #166534;
+        }
+        .message.error {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+        .message.warning {
+            border: 1px solid #fcd34d;
+            background: #fffbeb;
+            color: #92400e;
+        }
+        .fee-grid,
+        .content-grid {
+            margin-top: 18px;
+            display: grid;
+            gap: 18px;
+        }
+        .fee-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .content-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        .entry-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .upload-section {
+            margin-top: 18px;
+        }
+        .entry-grid .wide {
+            grid-column: 1 / -1;
+        }
+        .fee-box,
+        .upload-box {
+            border: 1px solid #dce3ec;
+            border-radius: 14px;
+            background: #f8fafc;
+            padding: 18px;
+        }
+        .fee-box strong {
+            display: block;
+            margin-top: 8px;
+            font-size: 24px;
+            color: #172033;
+        }
+        .upload-drop {
+            margin-top: 16px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 14px;
+            background: #fff;
+            padding: 26px;
+            text-align: center;
+        }
+        .upload-drop input[type="file"] {
+            width: 100%;
+            max-width: 320px;
+            margin: 14px auto 0;
+            padding: 10px;
+            border: 1px solid #dce3ec;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+        .field label {
+            display: block;
+            margin-bottom: 7px;
+            color: #172033;
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .field input,
+        .field textarea {
+            width: 100%;
+            min-height: 44px;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 10px 12px;
+            color: #172033;
+            font: inherit;
+            background: #fff;
+        }
+        .field textarea {
+            min-height: 86px;
+            resize: vertical;
+        }
+        .actions-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .draft-table-wrap {
+            margin-top: 16px;
+            overflow-x: auto;
+            border: 1px solid #dce3ec;
+            border-radius: 12px;
+            background: #fff;
+        }
+        .draft-table {
+            width: 100%;
+            min-width: 640px;
+            border-collapse: collapse;
+        }
+        .draft-table th,
+        .draft-table td {
+            padding: 12px;
+            border-bottom: 1px solid #edf2f7;
+            text-align: left;
+            vertical-align: top;
+            font-size: 14px;
+        }
+        .draft-table th {
+            color: #5f6b7a;
+            font-size: 12px;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        .draft-table tr:last-child td {
+            border-bottom: 0;
+        }
+        .draft-empty {
+            padding: 16px;
+            color: #5f6b7a;
+            font-size: 14px;
+        }
+        .list-summary {
+            margin-top: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: 1px solid #dce3ec;
+            border-radius: 14px;
+            background: #f8fafc;
+            padding: 16px;
+        }
+        .list-summary strong {
+            display: block;
+            color: #172033;
+        }
+        .modal-shell {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.62);
+        }
+        .modal-shell.is-open {
+            display: flex;
+        }
+        .modal-panel {
+            width: min(980px, 100%);
+            max-height: min(760px, 86vh);
+            overflow: hidden;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+        }
+        .modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid #dce3ec;
+            padding: 18px 20px;
+        }
+        .modal-close {
+            width: 38px;
+            height: 38px;
+            border: 1px solid #dce3ec;
+            border-radius: 999px;
+            background: #fff;
+            color: #172033;
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 1;
+        }
+        .modal-body {
+            max-height: calc(min(760px, 86vh) - 76px);
+            overflow: auto;
+            padding: 20px;
+        }
+        .step-card {
+            border: 1px solid #dce3ec;
+            border-radius: 14px;
+            padding: 16px;
+            background: #fff;
+        }
+        .step-card + .step-card {
+            margin-top: 12px;
+        }
+        .step-card strong {
+            display: block;
+            color: #172033;
+        }
+        .columns-list {
+            margin: 14px 0 0;
+            padding-left: 18px;
+        }
+        .muted {
+            color: #5f6b7a;
+            font-size: 14px;
+        }
+        @media (max-width: 760px) {
+            .hero,
+            .fee-grid,
+            .content-grid {
+                display: block;
+            }
+            .card,
+            .fee-box,
+            .upload-box {
+                margin-bottom: 16px;
+            }
+            .entry-grid {
+                display: block;
+            }
+            .field {
+                margin-bottom: 12px;
+            }
+            .list-summary {
+                display: block;
+            }
+            .list-summary .button {
+                width: 100%;
+                margin-top: 12px;
+            }
+            .nav-actions {
+                display: none;
+            }
+            h1 {
+                font-size: 27px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a href="{% url 'corporate_dashboard' %}" class="brand">
+                {% if site_settings and site_settings.logo %}
+                    <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo">
+                {% else %}
+                    <span class="brand-mark">B</span>
+                {% endif %}
+                <span>
+                    <strong>{{ site_settings.site_name|default:"BSBCS" }}</strong>
+                    <small>Corporate Registration</small>
+                </span>
+            </a>
+            <div class="nav-actions">
+                <a href="{% url 'corporate_dashboard' %}" class="button button-secondary">Dashboard</a>
+                <a href="{% url 'logout' %}" class="button logout">Logout</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="page">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="message {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <section class="hero">
+            <div class="card">
+                <p class="eyebrow">Selected Event</p>
+                <h1>{{ event.name }} {{ event.year }}</h1>
+                <p>{{ event.slogan }}</p>
+                <span class="status">Registration Open</span>
+            </div>
+            <aside class="card">
+                <h2>{{ corporate_account.company_name }}</h2>
+                <p><strong>{{ corporate_account.contact_name }}</strong><br>{{ corporate_account.email }}<br>{{ corporate_account.phone }}</p>
+                <a href="{% url 'registration:home' event.id %}" class="button button-secondary">View Public Event Page</a>
+            </aside>
+        </section>
+
+        <section class="fee-grid">
+            <article class="fee-box">
+                <h3>Regular participant fee</h3>
+                <strong>BDT {{ regular_fee|default:"0" }}</strong>
+                <p class="muted">Applied to non-member attendees unless this event is free.</p>
+            </article>
+            <article class="fee-box">
+                <h3>Member participant fee</h3>
+                <strong>{% if member_fee %}BDT {{ member_fee }}{% else %}Free{% endif %}</strong>
+                <p class="muted">Applied only when the attendee matches an approved active BSBCS member and this event allows member benefits.</p>
+            </article>
+        </section>
+
+        <section class="upload-section">
+            <article class="card">
+                <h2>Upload attendee list</h2>
+                <p>Use the BSBCS template when your organization is registering several attendees. The preview step will identify existing users, active members, duplicates, conflicts, and the fee applied for each attendee.</p>
+                <div class="actions-row">
+                    <a href="{% url 'corporate_event_template_csv' event.id %}" class="button button-outline">Download CSV Template</a>
+                </div>
+                <form class="upload-drop" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="submission_type" value="csv">
+                    <strong>Upload completed CSV</strong>
+                    <p class="muted">CSV upload is active now. XLSX import can be added after the preview step.</p>
+                    <input type="file" name="attendee_file" accept=".csv,text/csv" required>
+                    <div class="actions-row" style="justify-content: center;">
+                        <button type="submit" class="button button-primary">Upload List</button>
+                    </div>
+                </form>
+                {% if recent_submissions %}
+                    <div class="list-summary">
+                        <span>
+                            <strong>Submitted attendee list</strong>
+                            <span class="muted">Open the list to review submitted and approved attendees for this event.</span>
+                        </span>
+                        <button type="button" class="button button-outline" data-open-attendee-modal>View Attendee List</button>
+                    </div>
+                {% else %}
+                    <div class="draft-table-wrap">
+                        <div class="draft-empty">No attendees submitted for this event yet.</div>
+                    </div>
+                {% endif %}
+            </article>
+        </section>
+
+        <section class="content-grid">
+            <article class="card">
+                <h2>How BSBCS will review it</h2>
+                <div class="step-card">
+                    <strong>1. Corporate draft</strong>
+                    <p class="muted">Your organization submits attendees for this selected event.</p>
+                </div>
+                <div class="step-card">
+                    <strong>2. Member and user matching</strong>
+                    <p class="muted">The system checks email and phone against existing users and active members before calculating fees.</p>
+                </div>
+                <div class="step-card">
+                    <strong>3. Admin approval</strong>
+                    <p class="muted">Admin can approve everyone in bulk or approve and deny individual attendees.</p>
+                </div>
+            </article>
+        </section>
+
+        <section class="card" style="margin-top: 18px;">
+            <p class="eyebrow">Small group entry</p>
+            <h2>Add attendees manually</h2>
+            <p>For one or two attendees, the corporate user can fill the same fields directly and submit the attendee for BSBCS admin review.</p>
+            <form id="manual-attendee-form" class="entry-grid" method="post">
+                {% csrf_token %}
+                <div class="field">
+                    <label for="attendee-name">Name</label>
+                    <input type="text" id="attendee-name" name="name" autocomplete="name" required>
+                </div>
+                <div class="field">
+                    <label for="attendee-email">Email</label>
+                    <input type="email" id="attendee-email" name="email" autocomplete="email" required>
+                </div>
+                <div class="field">
+                    <label for="attendee-phone">Phone</label>
+                    <input type="text" id="attendee-phone" name="phone" autocomplete="tel" required>
+                </div>
+                <div class="field">
+                    <label for="attendee-degree">Degree</label>
+                    <input type="text" id="attendee-degree" name="degree">
+                </div>
+                <div class="field">
+                    <label for="attendee-organization">Organization</label>
+                    <input type="text" id="attendee-organization" name="organization" value="{{ corporate_account.company_name }}">
+                </div>
+                <div class="field">
+                    <label for="attendee-country">Country</label>
+                    <input type="text" id="attendee-country" name="country" value="Bangladesh">
+                </div>
+                <div class="field">
+                    <label for="attendee-department">Department</label>
+                    <input type="text" id="attendee-department" name="department">
+                </div>
+                <div class="field">
+                    <label for="attendee-bmdc">BMDC registration number</label>
+                    <input type="text" id="attendee-bmdc" name="bmdc_registration_number">
+                </div>
+                <div class="field">
+                    <label for="attendee-designation">Designation</label>
+                    <input type="text" id="attendee-designation" name="designation">
+                </div>
+                <div class="field">
+                    <label for="attendee-notes">Notes</label>
+                    <input type="text" id="attendee-notes" name="notes">
+                </div>
+                <div class="wide actions-row">
+                    <button type="submit" class="button button-primary">Submit Attendee</button>
+                    <span class="muted">BSBCS admin can review the attendee from the corporate event registration records.</span>
+                </div>
+            </form>
+        </section>
+    </main>
+    {% if recent_submissions %}
+        <div class="modal-shell" id="attendee-list-modal" aria-hidden="true">
+            <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="attendee-list-title">
+                <div class="modal-head">
+                    <div>
+                        <p class="eyebrow">Corporate attendee list</p>
+                        <h2 id="attendee-list-title">{{ event.name }} {{ event.year }}</h2>
+                    </div>
+                    <button type="button" class="modal-close" data-close-attendee-modal aria-label="Close attendee list">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="draft-table-wrap" style="margin-top: 0;">
+                        <table class="draft-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Contact</th>
+                                    <th>Organization</th>
+                                    <th>Member/Fee</th>
+                                    <th>Review</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for submission in recent_submissions %}
+                                    {% for attendee in submission.attendees.all %}
+                                        <tr>
+                                            <td>{{ attendee.name }}</td>
+                                            <td>{{ attendee.email }}<br>{{ attendee.phone }}</td>
+                                            <td>{{ attendee.organization|default:"-" }}{% if attendee.country %}, {{ attendee.country }}{% endif %}</td>
+                                            <td>{{ attendee.member_match_label }}<br>{{ attendee.applied_fee_label }}</td>
+                                            <td>{{ attendee.get_review_status_display }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            (function () {
+                const modal = document.getElementById('attendee-list-modal');
+                const openButton = document.querySelector('[data-open-attendee-modal]');
+                const closeButton = document.querySelector('[data-close-attendee-modal]');
+
+                if (!modal || !openButton || !closeButton) {
+                    return;
+                }
+
+                const openModal = () => {
+                    modal.classList.add('is-open');
+                    modal.setAttribute('aria-hidden', 'false');
+                    closeButton.focus();
+                };
+
+                const closeModal = () => {
+                    modal.classList.remove('is-open');
+                    modal.setAttribute('aria-hidden', 'true');
+                    openButton.focus();
+                };
+
+                openButton.addEventListener('click', openModal);
+                closeButton.addEventListener('click', closeModal);
+                modal.addEventListener('click', function (event) {
+                    if (event.target === modal) {
+                        closeModal();
+                    }
+                });
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                        closeModal();
+                    }
+                });
+            })();
+        </script>
+    {% endif %}
+</body>
+</html>

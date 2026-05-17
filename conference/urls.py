@@ -33,6 +33,12 @@ urlpatterns = [
     path('index/', views.index, name='index'),
 
     path('create-profile/', views.create_profile,name='create_profile'),
+    path('corporate-access/', views.corporate_account_request, name='corporate_account_request'),
+    path('corporate-access/received/', views.corporate_account_request_done, name='corporate_account_request_done'),
+    path('corporate/login/', views.corporate_login, name='corporate_login'),
+    path('corporate/dashboard/', views.corporate_dashboard, name='corporate_dashboard'),
+    path('corporate/events/<int:event_id>/registration/', views.corporate_event_registration, name='corporate_event_registration'),
+    path('corporate/events/<int:event_id>/template.csv', views.corporate_event_template_csv, name='corporate_event_template_csv'),
     path('event/', include(('registration.urls', 'registration'), namespace='registration')),
 
     path('profile/', views.user_profile, name='user_profile'),

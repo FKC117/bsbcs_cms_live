@@ -40,6 +40,146 @@ class UserProfile(models.Model):
         return self.user.email
 
 
+class CorporateAccountRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    company_name = models.CharField(max_length=180)
+    contact_name = models.CharField(max_length=120)
+    contact_designation = models.CharField(max_length=120, blank=True, null=True)
+    email = models.EmailField()
+    phone = models.CharField(max_length=30)
+    note = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.company_name} - {self.contact_name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class CorporateAccount(models.Model):
+    APPROVAL_STATUS_CHOICES = [
+        ('approved', 'Approved'),
+        ('suspended', 'Suspended'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='corporate_account')
+    source_request = models.OneToOneField(
+        CorporateAccountRequest,
+        on_delete=models.SET_NULL,
+        related_name='corporate_account',
+        blank=True,
+        null=True
+    )
+    company_name = models.CharField(max_length=180)
+    contact_name = models.CharField(max_length=120)
+    contact_designation = models.CharField(max_length=120, blank=True, null=True)
+    email = models.EmailField()
+    phone = models.CharField(max_length=30)
+    status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default='approved')
+    approved_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.company_name} ({self.user.email})"
+
+    class Meta:
+        ordering = ['company_name']
+
+
+class CorporateEventRegistration(models.Model):
+    SUBMISSION_MODE_CHOICES = [
+        ('manual', 'Manual entry'),
+        ('csv', 'CSV upload'),
+    ]
+    STATUS_CHOICES = [
+        ('submitted', 'Submitted'),
+        ('under_review', 'Under review'),
+        ('approved', 'Approved'),
+        ('partially_approved', 'Partially approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    corporate_account = models.ForeignKey(CorporateAccount, on_delete=models.CASCADE, related_name='event_registrations')
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='corporate_registrations')
+    submission_mode = models.CharField(max_length=20, choices=SUBMISSION_MODE_CHOICES, default='manual')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='submitted')
+    total_attendees = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.corporate_account.company_name} - {self.event.name} ({self.total_attendees})"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class CorporateEventAttendee(models.Model):
+    REVIEW_STATUS_CHOICES = [
+        ('pending', 'Pending review'),
+        ('approved', 'Approved'),
+        ('denied', 'Denied'),
+    ]
+
+    registration = models.ForeignKey(CorporateEventRegistration, on_delete=models.CASCADE, related_name='attendees')
+    matched_user = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='corporate_event_attendees')
+    participant = models.OneToOneField('Participant', on_delete=models.SET_NULL, blank=True, null=True, related_name='corporate_attendee')
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    phone = models.CharField(max_length=30)
+    degree = models.CharField(max_length=120, blank=True, null=True)
+    organization = models.CharField(max_length=180, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    department = models.CharField(max_length=120, blank=True, null=True)
+    bmdc_registration_number = models.CharField(max_length=80, blank=True, null=True)
+    designation = models.CharField(max_length=120, blank=True, null=True)
+    notes = models.CharField(max_length=255, blank=True, null=True)
+    review_status = models.CharField(max_length=20, choices=REVIEW_STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.registration.event.name}"
+
+    @property
+    def matched_member(self):
+        if not self.matched_user_id:
+            return None
+        try:
+            profile = self.matched_user.userprofile
+            member = getattr(profile, 'member', None)
+        except UserProfile.DoesNotExist:
+            return None
+        if member and member.approval_status == 'approved' and member.is_active_member:
+            return member
+        return None
+
+    @property
+    def member_match_label(self):
+        return 'Active member' if self.matched_member else 'Regular attendee'
+
+    @property
+    def applied_fee_label(self):
+        if self.matched_member:
+            member_fee = self.registration.event.member_registration_fee or 0
+            return 'Member fee: Free' if not member_fee else f'Member fee: BDT {member_fee}'
+        regular_fee = self.registration.event.amount if self.registration.event.payment_required else 0
+        return 'Regular fee: Free' if not regular_fee else f'Regular fee: BDT {regular_fee}'
+
+    class Meta:
+        ordering = ['name']
+
+
 # Create Event Models START------------------------------------------------------------------------------------#
 
 from django.urls import reverse

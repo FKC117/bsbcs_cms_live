@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -13,6 +13,14 @@ from .pdf_utils import generate_abstract_pdf
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html
+from django.utils import timezone
+from django.conf import settings
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.urls import reverse
 from django.contrib.auth import get_user_model
 from .views import send_approval_email
 import time
@@ -33,6 +41,257 @@ class UserProfileAdmin(ImportExportModelAdmin):
 
     image_preview.short_description = "Current image"
 admin.site.register(UserProfile, UserProfileAdmin)
+
+
+@admin.register(CorporateAccountRequest)
+class CorporateAccountRequestAdmin(admin.ModelAdmin):
+    list_display = ('company_name', 'contact_name', 'email', 'phone', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('company_name', 'contact_name', 'email', 'phone')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Company', {
+            'fields': ('company_name', 'note')
+        }),
+        ('Contact person', {
+            'fields': ('contact_name', 'contact_designation', 'email', 'phone')
+        }),
+        ('Admin review', {
+            'fields': ('status', 'admin_note')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def save_model(self, request, obj, form, change):
+        old_status = None
+        if change and obj.pk:
+            old_status = CorporateAccountRequest.objects.filter(pk=obj.pk).values_list('status', flat=True).first()
+
+        super().save_model(request, obj, form, change)
+
+        if obj.status == old_status:
+            return
+
+        if obj.status == 'approved':
+            corporate_account, created_user = self._create_or_update_corporate_account(request, obj)
+            try:
+                self._send_corporate_approval_email(request, obj, corporate_account, created_user)
+            except Exception as exc:
+                self.message_user(request, f"Corporate access approved, but approval email could not be sent: {exc}", messages.ERROR)
+                return
+            self.message_user(request, f"Corporate access approved for {obj.company_name}.", messages.SUCCESS)
+        elif obj.status == 'rejected':
+            try:
+                self._send_corporate_rejection_email(request, obj)
+            except Exception as exc:
+                self.message_user(request, f"Corporate request rejected, but rejection email could not be sent: {exc}", messages.ERROR)
+                return
+            self.message_user(request, f"Corporate access rejection email sent to {obj.email}.", messages.WARNING)
+
+    def _create_or_update_corporate_account(self, request, obj):
+        user = User.objects.filter(email__iexact=obj.email).first() or User.objects.filter(username__iexact=obj.email).first()
+        created_user = False
+
+        if not user:
+            user = User.objects.create_user(username=obj.email, email=obj.email)
+            user.set_unusable_password()
+            user.first_name = obj.contact_name[:150]
+            user.save()
+            created_user = True
+
+        corporate_account, _ = CorporateAccount.objects.update_or_create(
+            user=user,
+            defaults={
+                'source_request': obj,
+                'company_name': obj.company_name,
+                'contact_name': obj.contact_name,
+                'contact_designation': obj.contact_designation,
+                'email': obj.email,
+                'phone': obj.phone,
+                'status': 'approved',
+                'approved_at': timezone.now(),
+            }
+        )
+        return corporate_account, created_user
+
+    def _build_absolute_url(self, request, path):
+        site_url = getattr(settings, 'SITE_URL', '').rstrip('/')
+        if site_url:
+            return f"{site_url}{path}"
+        return request.build_absolute_uri(path)
+
+    def _send_corporate_approval_email(self, request, obj, corporate_account, created_user):
+        user = corporate_account.user
+        dashboard_path = reverse('corporate_dashboard')
+        login_url = self._build_absolute_url(request, f"{reverse('corporate_login')}?next={dashboard_path}")
+        setup_url = None
+
+        if created_user:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            setup_url = self._build_absolute_url(
+                request,
+                reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+            )
+
+        context = {
+            'contact_name': obj.contact_name,
+            'company_name': obj.company_name,
+            'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
+            'login_url': login_url,
+            'setup_url': setup_url,
+            'created_user': created_user,
+        }
+        html_message = render_to_string('emails/corporate_account_approved.html', context)
+        send_mail(
+            subject=f"{context['site_name']} Corporate Access Approved",
+            message=strip_tags(html_message),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[obj.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+
+    def _send_corporate_rejection_email(self, request, obj):
+        context = {
+            'contact_name': obj.contact_name,
+            'company_name': obj.company_name,
+            'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
+            'admin_note': obj.admin_note,
+            'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
+        }
+        html_message = render_to_string('emails/corporate_account_rejected.html', context)
+        send_mail(
+            subject=f"{context['site_name']} Corporate Access Request Update",
+            message=strip_tags(html_message),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[obj.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+
+
+@admin.register(CorporateAccount)
+class CorporateAccountAdmin(admin.ModelAdmin):
+    list_display = ('company_name', 'user', 'email', 'phone', 'status', 'approved_at')
+    list_filter = ('status', 'approved_at')
+    search_fields = ('company_name', 'user__email', 'user__username', 'contact_name', 'email', 'phone')
+    readonly_fields = ('created_at', 'updated_at')
+    fields = (
+        'user',
+        'source_request',
+        'company_name',
+        'contact_name',
+        'contact_designation',
+        'email',
+        'phone',
+        'status',
+        'approved_at',
+        'created_at',
+        'updated_at',
+    )
+
+
+class CorporateEventAttendeeInline(admin.TabularInline):
+    model = CorporateEventAttendee
+    extra = 0
+    fields = ('name', 'email', 'phone', 'degree', 'organization', 'matched_user', 'participant', 'member_match', 'applied_fee', 'review_status')
+    readonly_fields = ('matched_user', 'participant', 'member_match', 'applied_fee')
+
+    def member_match(self, obj):
+        return obj.member_match_label if obj and obj.pk else '-'
+    member_match.short_description = 'Member match'  # type: ignore
+
+    def applied_fee(self, obj):
+        return obj.applied_fee_label if obj and obj.pk else '-'
+    applied_fee.short_description = 'Fee category'  # type: ignore
+
+
+@admin.register(CorporateEventRegistration)
+class CorporateEventRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('corporate_account', 'event', 'submission_mode', 'status', 'total_attendees', 'created_at')
+    list_filter = ('status', 'submission_mode', 'event')
+    search_fields = ('corporate_account__company_name', 'event__name', 'attendees__name', 'attendees__email', 'attendees__phone')
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [CorporateEventAttendeeInline]
+    actions = ['approve_all_pending_attendees']
+
+    def approve_all_pending_attendees(self, request, queryset):
+        attendees = CorporateEventAttendee.objects.filter(registration__in=queryset, review_status='pending')
+        approved_count = approve_corporate_attendees(request, attendees)
+        self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
+    approve_all_pending_attendees.short_description = 'Approve all pending attendees in selected submissions'  # type: ignore
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        approved_attendee_ids = []
+
+        for instance in instances:
+            old_status = None
+            if instance.pk:
+                old_status = CorporateEventAttendee.objects.filter(pk=instance.pk).values_list('review_status', flat=True).first()
+            instance.save()
+            if (
+                isinstance(instance, CorporateEventAttendee)
+                and instance.review_status == 'approved'
+                and old_status != 'approved'
+                and not instance.participant_id
+            ):
+                approved_attendee_ids.append(instance.pk)
+
+        for deleted_object in formset.deleted_objects:
+            deleted_object.delete()
+        formset.save_m2m()
+
+        if approved_attendee_ids:
+            approved_count = approve_corporate_attendees(
+                request,
+                CorporateEventAttendee.objects.filter(pk__in=approved_attendee_ids)
+            )
+            self.message_user(request, f'{approved_count} attendee(s) converted to participants and notified.')
+
+
+@admin.register(CorporateEventAttendee)
+class CorporateEventAttendeeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'phone', 'registration', 'matched_user', 'participant', 'member_match', 'applied_fee', 'review_status')
+    list_filter = ('review_status', 'registration__event')
+    search_fields = ('name', 'email', 'phone', 'organization', 'registration__corporate_account__company_name')
+    readonly_fields = ('matched_user', 'participant', 'created_at', 'updated_at')
+    actions = ['approve_selected_attendees', 'deny_selected_attendees']
+
+    def member_match(self, obj):
+        return obj.member_match_label
+    member_match.short_description = 'Member match'  # type: ignore
+
+    def applied_fee(self, obj):
+        return obj.applied_fee_label
+    applied_fee.short_description = 'Fee category'  # type: ignore
+
+    def approve_selected_attendees(self, request, queryset):
+        approved_count = approve_corporate_attendees(request, queryset)
+        self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
+    approve_selected_attendees.short_description = 'Approve selected attendees and email them'  # type: ignore
+
+    def deny_selected_attendees(self, request, queryset):
+        updated = queryset.update(review_status='denied')
+        self.message_user(request, f'{updated} corporate attendee(s) denied.')
+    deny_selected_attendees.short_description = 'Deny selected attendees'  # type: ignore
+
+    def save_model(self, request, obj, form, change):
+        old_status = None
+        if change and obj.pk:
+            old_status = CorporateEventAttendee.objects.filter(pk=obj.pk).values_list('review_status', flat=True).first()
+
+        super().save_model(request, obj, form, change)
+
+        if obj.review_status == 'approved' and old_status != 'approved' and not obj.participant_id:
+            approved_count = approve_corporate_attendees(
+                request,
+                CorporateEventAttendee.objects.filter(pk=obj.pk)
+            )
+            self.message_user(request, f'{approved_count} attendee converted to participant and notified.')
 # Register your models here.
 class InvitationAdmin(admin.ModelAdmin):
     list_display = ('name', 'event')
@@ -169,6 +428,108 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
     )
     email.attach_alternative(html_content, "text/html")
     email.send()
+
+
+def update_corporate_registration_status(corporate_registration):
+    attendees = corporate_registration.attendees.all()
+    total = attendees.count()
+    approved_count = attendees.filter(review_status='approved').count()
+    denied_count = attendees.filter(review_status='denied').count()
+
+    if total and approved_count == total:
+        corporate_registration.status = 'approved'
+    elif total and denied_count == total:
+        corporate_registration.status = 'rejected'
+    elif approved_count or denied_count:
+        corporate_registration.status = 'partially_approved'
+    else:
+        corporate_registration.status = 'submitted'
+    corporate_registration.total_attendees = total
+    corporate_registration.save(update_fields=['status', 'total_attendees', 'updated_at'])
+
+
+def approve_corporate_attendees(request, queryset):
+    approved_count = 0
+    touched_registrations = set()
+
+    for attendee in queryset.select_related('registration__event', 'matched_user', 'participant'):
+        event = attendee.registration.event
+        department, _ = Department.objects.get_or_create(event=event, name='Corporate Registration')
+        registration_type = 'member' if attendee.matched_member else 'regular'
+        password = None
+        include_password = False
+
+        user = attendee.matched_user
+        if not user:
+            user = User.objects.filter(Q(email__iexact=attendee.email) | Q(username__iexact=attendee.email)).first()
+
+        if not user:
+            password = get_random_string(length=12)
+            user = User.objects.create_user(username=attendee.email, email=attendee.email, password=password)
+            include_password = True
+        elif not attendee.matched_user_id:
+            attendee.matched_user = user
+
+        participant = attendee.participant
+        if not participant:
+            participant = Participant.objects.filter(event=event).filter(
+                Q(email__iexact=attendee.email) | Q(phone=attendee.phone)
+            ).first()
+
+        participant_defaults = {
+            'user': user,
+            'registration_type': registration_type,
+            'name': attendee.name[:100],
+            'degree': (attendee.degree or 'N/A')[:50],
+            'year_of_graduation': timezone.now().year,
+            'department': department,
+            'organization': (attendee.organization or attendee.registration.corporate_account.company_name)[:100],
+            'email': attendee.email,
+            'phone': attendee.phone,
+            'country': attendee.country or 'Bangladesh',
+            'BMDC_registration_number': (attendee.bmdc_registration_number or '')[:20],
+            'approved': True,
+            'denied': False,
+        }
+
+        if participant:
+            for field, value in participant_defaults.items():
+                setattr(participant, field, value)
+            participant.save()
+        else:
+            participant = Participant.objects.create(event=event, **participant_defaults)
+
+        payable_amount = participant.get_payable_amount()
+        payment_status, _ = PaymentStatus.objects.get_or_create(
+            participant=participant,
+            event=event,
+            defaults={
+                'merchant_invoice_number': f"CORP-{event.id}-{participant.id}-{int(time.time())}",
+                'amount': payable_amount,
+                'status': 'unpaid' if payable_amount else 'completed',
+            }
+        )
+        payment_status.amount = payable_amount
+        if payable_amount:
+            if payment_status.status not in ['completed', 'paid']:
+                payment_status.status = 'unpaid'
+            payment_status.save()
+            send_consolidated_email(request, participant, password, include_password)
+        else:
+            payment_status.status = 'completed'
+            payment_status.save()
+            send_free_event_confirmation_email(participant, event, password, include_password)
+
+        attendee.participant = participant
+        attendee.review_status = 'approved'
+        attendee.save(update_fields=['matched_user', 'participant', 'review_status', 'updated_at'])
+        touched_registrations.add(attendee.registration_id)
+        approved_count += 1
+
+    for registration_id in touched_registrations:
+        update_corporate_registration_status(CorporateEventRegistration.objects.get(pk=registration_id))
+
+    return approved_count
 
 # Event Specific Participants admin view START------------------------------------------------------------------------------#
 from django.contrib.auth.models import User

@@ -4,14 +4,18 @@ from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from .forms import RegistrationForm, AbstractSubmissionForm, UserProfileForm
+from .forms import RegistrationForm, AbstractSubmissionForm, UserProfileForm, CorporateAccountRequestForm
 from .models import *
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
 import time
 import json
 import logging
+import csv
+import io
+from django.http import HttpResponse
 from django.utils import timezone
+from django.db import transaction
 
 
 # Payment logger (writes to payment.log via settings)
@@ -142,11 +146,27 @@ def create_profile(request):
         form = UserProfileForm()
     return render(request, 'create_profile.html', {'form': form})
 
+
+def corporate_account_request(request):
+    if request.method == 'POST':
+        form = CorporateAccountRequestForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('corporate_account_request_done')
+    else:
+        form = CorporateAccountRequestForm()
+
+    return render(request, 'corporate_account_request.html', {'form': form})
+
+
+def corporate_account_request_done(request):
+    return render(request, 'corporate_account_request_done.html')
+
 # User profile Views START-----------------------------------------------------###
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
-from .models import UserProfile, AbstractSubmission, ProgramSchedule, Event
+from .models import UserProfile, AbstractSubmission, ProgramSchedule, Event, CorporateAccount
 from django.db.models import Q
 from website.models import SiteSettings, MembershipBenefitModal, MembershipPayment, PendingEventIntent
 
@@ -297,6 +317,303 @@ def user_login(request):
         return redirect(reverse('website:homepage'))  # Redirect to website homepage
 
     return render(request, 'login.html', {'form': form})
+
+
+def corporate_login(request):
+    form = AuthenticationForm(request, data=request.POST or None)
+    form.fields['username'].label = "Email"
+    dashboard_url = reverse('corporate_dashboard')
+
+    if form.is_valid():
+        login(request, form.get_user())
+        next_url = request.POST.get('next') or request.GET.get('next') or dashboard_url
+        from django.utils.http import url_has_allowed_host_and_scheme
+        if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            return redirect(next_url)
+        return redirect(dashboard_url)
+
+    return render(request, 'corporate_login.html', {'form': form, 'dashboard_url': dashboard_url})
+
+
+@login_required
+def corporate_dashboard(request):
+    corporate_account = CorporateAccount.objects.filter(user=request.user).first()
+    matching_requests = CorporateAccountRequest.objects.filter(email__iexact=request.user.email).order_by('-created_at')
+    open_events = Event.objects.filter(event_status='active', registration='Open').order_by('start_date')
+
+    return render(request, 'corporate_dashboard.html', {
+        'corporate_account': corporate_account,
+        'matching_requests': matching_requests,
+        'open_events': open_events,
+    })
+
+
+def _match_user_for_corporate_attendee(email, phone):
+    matched_profile = UserProfile.objects.filter(Q(email__iexact=email) | Q(phone__iexact=phone)).select_related('user').first()
+    if matched_profile:
+        return matched_profile.user
+    return User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
+
+
+def _create_corporate_attendee(registration, attendee_data):
+    return CorporateEventAttendee.objects.create(
+        registration=registration,
+        matched_user=_match_user_for_corporate_attendee(attendee_data['email'], attendee_data['phone']),
+        name=attendee_data['name'],
+        email=attendee_data['email'],
+        phone=attendee_data['phone'],
+        degree=attendee_data.get('degree', ''),
+        organization=attendee_data.get('organization', ''),
+        country=attendee_data.get('country', ''),
+        department=attendee_data.get('department', ''),
+        bmdc_registration_number=attendee_data.get('bmdc_registration_number', ''),
+        designation=attendee_data.get('designation', ''),
+        notes=attendee_data.get('notes', ''),
+    )
+
+
+def _clean_corporate_csv_header(header):
+    return (header or '').strip().lower().replace(' ', '_').replace('-', '_')
+
+
+def _parse_corporate_csv(uploaded_file):
+    if not uploaded_file.name.lower().endswith('.csv'):
+        return [], ['Please upload a CSV file using the BSBCS template.']
+
+    try:
+        content = uploaded_file.read().decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return [], ['The CSV file could not be read. Please save it as UTF-8 CSV and upload again.']
+
+    reader = csv.DictReader(io.StringIO(content))
+    required_columns = {'name', 'email', 'phone'}
+    headers = {_clean_corporate_csv_header(header) for header in (reader.fieldnames or [])}
+    missing_columns = sorted(required_columns - headers)
+    if missing_columns:
+        return [], [f"Missing required column(s): {', '.join(missing_columns)}."]
+
+    rows = []
+    errors = []
+    for row_number, row in enumerate(reader, start=2):
+        normalized = {
+            _clean_corporate_csv_header(key): (value or '').strip()
+            for key, value in row.items()
+        }
+        if not any(normalized.values()):
+            continue
+
+        missing_values = [column for column in required_columns if not normalized.get(column)]
+        if missing_values:
+            errors.append(f"Row {row_number}: missing {', '.join(missing_values)}.")
+            continue
+
+        rows.append({
+            'name': normalized.get('name', ''),
+            'email': normalized.get('email', ''),
+            'phone': normalized.get('phone', ''),
+            'degree': normalized.get('degree', ''),
+            'organization': normalized.get('organization', ''),
+            'country': normalized.get('country', ''),
+            'department': normalized.get('department', ''),
+            'bmdc_registration_number': normalized.get('bmdc_registration_number', ''),
+            'designation': normalized.get('designation', ''),
+            'notes': normalized.get('notes', ''),
+        })
+
+    if not rows and not errors:
+        errors.append('The CSV file does not contain any attendee rows.')
+
+    return rows, errors
+
+
+def _split_corporate_attendee_rows(event, attendee_rows):
+    accepted_rows = []
+    skipped_rows = []
+    seen_keys = set()
+
+    for index, row in enumerate(attendee_rows, start=2):
+        email_key = (row.get('email') or '').strip().lower()
+        phone_key = (row.get('phone') or '').strip()
+        row_keys = {key for key in [f'email:{email_key}', f'phone:{phone_key}'] if key.split(':', 1)[1]}
+
+        if seen_keys.intersection(row_keys):
+            skipped_rows.append({
+                'row': index,
+                'name': row.get('name', ''),
+                'reason': 'duplicate inside this CSV file',
+            })
+            continue
+
+        existing_attendee = CorporateEventAttendee.objects.filter(
+            registration__event=event
+        ).filter(
+            Q(email__iexact=row.get('email', '')) | Q(phone=row.get('phone', ''))
+        ).select_related('registration').order_by('-created_at').first()
+
+        if existing_attendee and existing_attendee.review_status == 'approved':
+            skipped_rows.append({
+                'row': index,
+                'name': row.get('name', ''),
+                'reason': 'already approved for this event',
+            })
+            continue
+
+        if existing_attendee and existing_attendee.review_status == 'pending':
+            skipped_rows.append({
+                'row': index,
+                'name': row.get('name', ''),
+                'reason': 'already submitted and pending review',
+            })
+            continue
+
+        if existing_attendee and existing_attendee.review_status == 'denied':
+            previous_note = f"Previously denied corporate attendee #{existing_attendee.pk}; resubmitted for review."
+            row['notes'] = f"{row.get('notes', '')} {previous_note}".strip()
+
+        existing_participant = Participant.objects.filter(event=event).filter(
+            Q(email__iexact=row.get('email', '')) | Q(phone=row.get('phone', ''))
+        ).order_by('-created_at').first()
+
+        if existing_participant and existing_participant.approved:
+            skipped_rows.append({
+                'row': index,
+                'name': row.get('name', ''),
+                'reason': 'already approved as a participant for this event',
+            })
+            continue
+
+        if existing_participant and not existing_participant.approved and not existing_participant.denied:
+            skipped_rows.append({
+                'row': index,
+                'name': row.get('name', ''),
+                'reason': 'already submitted as a participant and pending review',
+            })
+            continue
+
+        if existing_participant and existing_participant.denied:
+            previous_note = f"Previously denied participant #{existing_participant.pk}; resubmitted by corporate account."
+            row['notes'] = f"{row.get('notes', '')} {previous_note}".strip()
+
+        accepted_rows.append(row)
+        seen_keys.update(row_keys)
+
+    return accepted_rows, skipped_rows
+
+
+@login_required
+def corporate_event_registration(request, event_id):
+    corporate_account = CorporateAccount.objects.filter(user=request.user, status='approved').first()
+    if not corporate_account:
+        return redirect('corporate_dashboard')
+
+    event = get_object_or_404(Event, id=event_id, event_status='active', registration='Open')
+    regular_fee = event.amount if event.payment_required else 0
+    member_fee = event.member_registration_fee if event.member_registration_fee is not None else 0
+    recent_submissions = CorporateEventRegistration.objects.filter(
+        corporate_account=corporate_account,
+        event=event,
+    ).prefetch_related('attendees')[:5]
+
+    if request.method == 'POST' and request.POST.get('submission_type') == 'csv':
+        uploaded_file = request.FILES.get('attendee_file')
+        if not uploaded_file:
+            messages.error(request, 'Please choose a CSV file to upload.')
+        else:
+            attendee_rows, upload_errors = _parse_corporate_csv(uploaded_file)
+            if upload_errors:
+                for error in upload_errors[:8]:
+                    messages.error(request, error)
+                if len(upload_errors) > 8:
+                    messages.error(request, f'{len(upload_errors) - 8} more row error(s) were found. Please correct the CSV and upload again.')
+            else:
+                accepted_rows, skipped_rows = _split_corporate_attendee_rows(event, attendee_rows)
+                if accepted_rows:
+                    with transaction.atomic():
+                        registration = CorporateEventRegistration.objects.create(
+                            corporate_account=corporate_account,
+                            event=event,
+                            submission_mode='csv',
+                            status='submitted',
+                            total_attendees=len(accepted_rows),
+                        )
+                        for attendee_data in accepted_rows:
+                            _create_corporate_attendee(registration, attendee_data)
+                    messages.success(request, f'{len(accepted_rows)} attendee(s) uploaded for BSBCS admin review.')
+                else:
+                    messages.warning(request, 'No new attendees were submitted from this CSV.')
+
+                if skipped_rows:
+                    reason_counts = {}
+                    for skipped in skipped_rows:
+                        reason_counts[skipped['reason']] = reason_counts.get(skipped['reason'], 0) + 1
+                    summary = '; '.join(f'{count} {reason}' for reason, count in reason_counts.items())
+                    messages.warning(request, f'{len(skipped_rows)} row(s) skipped: {summary}.')
+                return redirect('corporate_event_registration', event_id=event.id)
+
+    elif request.method == 'POST':
+        name = (request.POST.get('name') or '').strip()
+        email = (request.POST.get('email') or '').strip()
+        phone = (request.POST.get('phone') or '').strip()
+
+        if not name or not email or not phone:
+            messages.error(request, 'Name, email, and phone are required for manual attendee submission.')
+        else:
+            registration = CorporateEventRegistration.objects.create(
+                corporate_account=corporate_account,
+                event=event,
+                submission_mode='manual',
+                status='submitted',
+                total_attendees=1,
+            )
+            _create_corporate_attendee(registration, {
+                'name': name,
+                'email': email,
+                'phone': phone,
+                'degree': (request.POST.get('degree') or '').strip(),
+                'organization': (request.POST.get('organization') or '').strip(),
+                'country': (request.POST.get('country') or '').strip(),
+                'department': (request.POST.get('department') or '').strip(),
+                'bmdc_registration_number': (request.POST.get('bmdc_registration_number') or '').strip(),
+                'designation': (request.POST.get('designation') or '').strip(),
+                'notes': (request.POST.get('notes') or '').strip(),
+            })
+            messages.success(request, f'{name} has been submitted for BSBCS admin review.')
+            return redirect('corporate_event_registration', event_id=event.id)
+
+    return render(request, 'corporate_event_registration.html', {
+        'corporate_account': corporate_account,
+        'event': event,
+        'regular_fee': regular_fee,
+        'member_fee': member_fee,
+        'recent_submissions': recent_submissions,
+    })
+
+
+@login_required
+def corporate_event_template_csv(request, event_id):
+    corporate_account = CorporateAccount.objects.filter(user=request.user, status='approved').first()
+    if not corporate_account:
+        return redirect('corporate_dashboard')
+
+    event = get_object_or_404(Event, id=event_id, event_status='active', registration='Open')
+    filename = f"bsbcs_corporate_{event.id}_attendee_template.csv"
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'name',
+        'email',
+        'phone',
+        'degree',
+        'organization',
+        'country',
+        'department',
+        'bmdc_registration_number',
+        'designation',
+        'notes',
+    ])
+    return response
 
 
 def user_logout(request):
