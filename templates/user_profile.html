@@ -110,22 +110,22 @@
             </nav>
 
             <section id="overview" class="profile-panel mt-6">
-                <div class="grid gap-4 md:grid-cols-4">
-                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div class="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                    <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                         <span class="text-sm text-gray-500">Event registrations</span>
-                        <strong class="mt-2 block text-3xl">{{ participants|length }}</strong>
+                        <strong class="mt-2 block text-2xl sm:text-3xl">{{ participants|length }}</strong>
                     </article>
-                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                         <span class="text-sm text-gray-500">Abstracts</span>
-                        <strong class="mt-2 block text-3xl">{{ abstract_submissions|length }}</strong>
+                        <strong class="mt-2 block text-2xl sm:text-3xl">{{ abstract_submissions|length }}</strong>
                     </article>
-                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                         <span class="text-sm text-gray-500">Pending payments</span>
-                        <strong class="mt-2 block text-3xl">{{ pending_payment_count }}</strong>
+                        <strong class="mt-2 block text-2xl sm:text-3xl">{{ pending_payment_count }}</strong>
                     </article>
-                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                         <span class="text-sm text-gray-500">Membership-linked events</span>
-                        <strong class="mt-2 block text-3xl">{{ pending_event_intents|length }}</strong>
+                        <strong class="mt-2 block text-2xl sm:text-3xl">{{ pending_event_intents|length }}</strong>
                     </article>
                 </div>
 
