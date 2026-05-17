@@ -3,388 +3,460 @@
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Profile</title>
+    <title>User Portal | BSBCS</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        .menu {
-            background-color: rgb(139, 144, 205);
-            /* Maroon background color */
-        }
-
-        .abstract-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .abstract-table th,
-        .abstract-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-        }
-
-        .abstract-table th {
-            background-color: #f4f4f4;
-        }
-    </style>
 </head>
-
-<body class="bg-gray-100">
-
-    <header class="bg-white shadow p-4 flex items-center justify-between">
-        <!-- Logo -->
-        <a href="{% url 'website:homepage' %}" class="flex items-center">
-            <img src="{% static 'images/BSBCS-logo-1-1.png' %}" alt="Logo" class="h-12 w-12 mr-3">
-            <span class="sr-only">Events</span>
-        </a>
-        <!-- Centered Title -->
-        <h1 class="text-1xl md:text-sm font-bold text-center flex-grow">Welcome! <span class="text-sm">{{ user_profile.name }}</span></h1>
-        <!-- Logout Button -->
-        <a href="{% url 'logout' %}"
-            class="ml-auto bg-blue-500 text-white text-sm px-3 py-1 rounded hover:bg-blue-600 transition duration-200">Logout</a>
+<body class="bg-gray-50 text-gray-900">
+    <header class="sticky top-0 z-40 border-b border-gray-200 bg-white">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+            <a href="{% url 'website:homepage' %}" class="flex items-center gap-3">
+                {% if site_settings and site_settings.logo %}
+                    <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-11 w-11 object-contain">
+                {% else %}
+                    <img src="{% static 'images/BSBCS-logo-1-1.png' %}" alt="BSBCS" class="h-11 w-11 object-contain">
+                {% endif %}
+                <span>
+                    <strong class="block text-lg leading-tight text-blue-700">BSBCS</strong>
+                    <small class="block text-xs text-gray-500">User Portal</small>
+                </span>
+            </a>
+            <div class="flex items-center gap-3">
+                <a href="{% url 'website:homepage' %}" class="hidden rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 sm:inline-flex">Website</a>
+                <a href="{% url 'logout' %}" class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Logout</a>
+            </div>
+        </div>
     </header>
 
-
-
-
-    <div class="container mx-auto my-8 px-4">
-        <div class="flex flex-col md:flex-row bg-white shadow-lg rounded-lg overflow-hidden">
-
-            <!-- Menu Column -->
-            <div class="menu md:flex md:flex-col bg-gray-200 p-4 md:w-1/4 w-full">
-                <ul class="space-y-4">
-                    <li><a href="#overview"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Overview</strong></a>
-                    </li>
-                    <li><a href="#payment-status"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Payment
-                                Status</strong></a>
-                    </li>
-                    <li><a href="#edit-profile"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Edit
-                                Profile</strong></a></li>
-                    <li><a href="#abstract-submission"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Abstract</strong></a>
-                    </li>
-                    {% comment %} <li><a href="#Make_payment"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Payment
-                                Status</strong></a></li> {% endcomment %}
-                    <li><a href="#password"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Change
-                                Password</strong></a></li>
-                    {% if site_settings.membership_subscription_enabled %}
-                    <li><a href="#membership"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Membership</strong></a>
-                    </li>
-                    {% endif %}
-                    {% comment %} <li><a href="#logout"
-                            class="block p-2 text-white hover:bg-gray-300 rounded border-b"><strong>Logout</strong></a>
-                    </li> {% endcomment %}
-                </ul>
-            </div>
-
-            <!-- Content Column -->
-            <div class="content p-6 md:w-3/4 w-full">
-                {% if message %}
-                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-                    {{ message }}
+    {% if needs_profile %}
+        <main class="mx-auto flex min-h-screen max-w-3xl items-center px-4 py-16">
+            <section class="w-full rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+                <p class="text-sm font-bold uppercase tracking-widest text-blue-700">Profile Required</p>
+                <h1 class="mt-2 text-3xl font-bold">This account does not have a BSBCS profile yet.</h1>
+                <p class="mt-3 leading-7 text-gray-600">Create your profile to access membership, event registrations, abstracts, and payments.</p>
+                <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+                    <a href="{% url 'create_profile' %}?next={% url 'user_profile' %}" class="inline-flex justify-center rounded-lg bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700">Create Profile</a>
+                    <a href="{% url 'admin:index' %}" class="inline-flex justify-center rounded-lg border border-gray-300 px-5 py-3 font-bold text-gray-700 hover:bg-gray-50">Go to Admin</a>
                 </div>
+            </section>
+        </main>
+    {% else %}
+        <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {% if message %}
+                <div class="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-800">{{ message }}</div>
+            {% endif %}
+
+            <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div class="grid gap-6 p-6 lg:grid-cols-[1.4fr_0.9fr] lg:p-8">
+                    <div>
+                        <p class="text-sm font-bold uppercase tracking-widest text-blue-700">Welcome back</p>
+                        <h1 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{{ user_profile.name }}</h1>
+                        <div class="mt-4 flex flex-wrap gap-3 text-sm text-gray-600">
+                            <span class="rounded-full bg-gray-100 px-3 py-1">{{ user_profile.email }}</span>
+                            <span class="rounded-full bg-gray-100 px-3 py-1">{{ user_profile.phone }}</span>
+                            <span class="rounded-full bg-gray-100 px-3 py-1">{{ user_profile.country }}</span>
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-gray-900 p-5 text-white">
+                        <p class="text-xs font-bold uppercase tracking-widest text-blue-200">Membership Status</p>
+                        {% if not member %}
+                            <h2 class="mt-2 text-2xl font-bold">Not a member yet</h2>
+                            <p class="mt-2 text-sm text-gray-300">Apply to unlock member benefits and event pricing.</p>
+                            <a href="{% url 'website:membership_form' %}" class="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Apply for Membership</a>
+                        {% elif member.approval_status == 'pending' %}
+                            <h2 class="mt-2 text-2xl font-bold">Application pending</h2>
+                            <p class="mt-2 text-sm text-gray-300">Your membership application is under admin review.</p>
+                        {% elif member.approval_status == 'approved' and not member.is_active_member %}
+                            <h2 class="mt-2 text-2xl font-bold">Approved, payment needed</h2>
+                            <p class="mt-2 text-sm text-gray-300">Complete payment to activate your membership.</p>
+                            <a href="{% url 'website:membership_payment_init' %}" class="mt-4 inline-flex rounded-lg bg-pink-600 px-4 py-2 text-sm font-bold text-white hover:bg-pink-700">Complete Payment</a>
+                        {% elif member.is_active_member %}
+                            <h2 class="mt-2 text-2xl font-bold">Active member</h2>
+                            <p class="mt-2 text-sm text-gray-300">{{ member.membership_type|default:"BSBCS Membership" }}</p>
+                            {% if member.subscription_expiry_date %}
+                                <p class="mt-3 text-sm text-blue-100">Valid until {{ member.subscription_expiry_date }}</p>
+                            {% else %}
+                                <p class="mt-3 text-sm text-blue-100">Validity date will be updated by the BSBCS admin team.</p>
+                            {% endif %}
+                        {% elif member.approval_status == 'rejected' %}
+                            <h2 class="mt-2 text-2xl font-bold">Application rejected</h2>
+                            <p class="mt-2 text-sm text-gray-300">{{ member.rejection_reason|default:"Please contact the BSBCS team for details." }}</p>
+                            <a href="{% url 'website:membership_form' %}" class="mt-4 inline-flex rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700">Re-apply</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <nav class="mt-6 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+                <div class="flex min-w-max gap-2" data-profile-tabs>
+                    <button class="profile-tab active rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="overview">Overview</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="member-zone">Member Zone</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="my-events">My Events</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="abstracts">Abstracts</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="payments">Payments</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="settings">Profile Settings</button>
+                </div>
+            </nav>
+
+            <section id="overview" class="profile-panel mt-6">
+                <div class="grid gap-4 md:grid-cols-4">
+                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <span class="text-sm text-gray-500">Event registrations</span>
+                        <strong class="mt-2 block text-3xl">{{ participants|length }}</strong>
+                    </article>
+                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <span class="text-sm text-gray-500">Abstracts</span>
+                        <strong class="mt-2 block text-3xl">{{ abstract_submissions|length }}</strong>
+                    </article>
+                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <span class="text-sm text-gray-500">Pending payments</span>
+                        <strong class="mt-2 block text-3xl">{{ pending_payment_count }}</strong>
+                    </article>
+                    <article class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                        <span class="text-sm text-gray-500">Membership-linked events</span>
+                        <strong class="mt-2 block text-3xl">{{ pending_event_intents|length }}</strong>
+                    </article>
+                </div>
+
+                <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_0.9fr]">
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <div class="flex items-center justify-between gap-4">
+                            <h2 class="text-xl font-bold">Active Events</h2>
+                            <a href="{% url 'website:events' %}" class="text-sm font-bold text-blue-700 hover:text-blue-900">Browse all</a>
+                        </div>
+                        <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            {% for event in active_events|slice:":4" %}
+                                <a href="{% url 'registration:home' event.id %}" class="rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:bg-blue-50">
+                                    <strong class="block">{{ event.name }} {{ event.year }}</strong>
+                                    <span class="mt-2 block text-sm text-gray-600">{{ event.start_date|date:"M d, Y" }} · {{ event.location|default:"Venue TBA" }}</span>
+                                    <span class="mt-2 inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{{ event.registration }}</span>
+                                </a>
+                            {% empty %}
+                                <p class="text-gray-500">No active events right now.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 class="text-xl font-bold">Next Actions</h2>
+                        <div class="mt-4 space-y-3">
+                            {% if member and member.approval_status == 'approved' and not member.is_active_member %}
+                                <a href="{% url 'website:membership_payment_init' %}" class="block rounded-xl bg-pink-600 px-4 py-3 text-center font-bold text-white hover:bg-pink-700">Complete Membership Payment</a>
+                            {% elif not member %}
+                                <a href="{% url 'website:membership_form' %}" class="block rounded-xl bg-gray-900 px-4 py-3 text-center font-bold text-white hover:bg-black">Apply for Membership</a>
+                            {% endif %}
+                            <a href="{% url 'website:events' %}" class="block rounded-xl border border-gray-300 px-4 py-3 text-center font-bold text-gray-700 hover:bg-gray-50">Explore Events</a>
+                            <a href="{% url 'password_change' %}" class="block rounded-xl border border-gray-300 px-4 py-3 text-center font-bold text-gray-700 hover:bg-gray-50">Change Password</a>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="member-zone" class="profile-panel mt-6 hidden">
+                <div class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 class="text-xl font-bold">Member Zone</h2>
+                        <p class="mt-2 text-gray-600">Membership status, benefits, renewal, and member event opportunities.</p>
+                        <div class="mt-5 space-y-4">
+                            {% if member and member.is_active_member %}
+                                <div class="rounded-xl bg-green-50 p-4 text-green-800">
+                                    <strong>Active member</strong>
+                                    {% if member.subscription_expiry_date %}
+                                        <p class="mt-1 text-sm">Your membership is active until {{ member.subscription_expiry_date }}.</p>
+                                    {% else %}
+                                        <p class="mt-1 text-sm">Your membership is active. The validity date will be updated by the BSBCS admin team.</p>
+                                    {% endif %}
+                                </div>
+                                <a href="{% url 'website:membership_payment_init' %}" class="block rounded-xl border border-pink-300 px-4 py-3 text-center font-bold text-pink-700 hover:bg-pink-50">Renew Membership</a>
+                            {% elif member and member.approval_status == 'pending' %}
+                                <div class="rounded-xl bg-blue-50 p-4 text-blue-800">
+                                    <strong>Application under review</strong>
+                                    <p class="mt-1 text-sm">The admin team will notify you after review.</p>
+                                </div>
+                            {% elif member and member.approval_status == 'approved' %}
+                                <a href="{% url 'website:membership_payment_init' %}" class="block rounded-xl bg-pink-600 px-4 py-3 text-center font-bold text-white hover:bg-pink-700">Pay & Activate Membership</a>
+                            {% else %}
+                                <a href="{% url 'website:membership_form' %}" class="block rounded-xl bg-gray-900 px-4 py-3 text-center font-bold text-white hover:bg-black">Apply for Membership</a>
+                            {% endif %}
+                        </div>
+                    </section>
+
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 class="text-xl font-bold">Member Event Opportunities</h2>
+                        <div class="mt-4 space-y-3">
+                            {% for event in member_events %}
+                                <a href="{% url 'registration:home' event.id %}" class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 hover:bg-gray-50">
+                                    <span>
+                                        <strong class="block">{{ event.name }} {{ event.year }}</strong>
+                                        <small class="text-gray-600">Member fee: {% if event.member_registration_fee %}BDT {{ event.member_registration_fee }}{% else %}Free{% endif %}</small>
+                                    </span>
+                                    <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">View</span>
+                                </a>
+                            {% empty %}
+                                <p class="text-gray-500">No member-specific event opportunities are open right now.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+
+                {% if membership_benefits %}
+                    <section class="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                        <div class="grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
+                            <div class="bg-gray-900 p-6 text-white lg:p-8">
+                                <p class="text-xs font-bold uppercase tracking-widest text-blue-300">Member Benefits</p>
+                                <h2 class="mt-3 text-2xl font-bold">Your BSBCS Member Benefits</h2>
+                                <p class="mt-3 text-sm leading-6 text-gray-200">These are the current benefits available with your active BSBCS membership.</p>
+                                {% if membership_benefits.image %}
+                                    <div class="mt-5 overflow-hidden rounded-xl border border-gray-700 bg-gray-800">
+                                        <img src="{{ membership_benefits.image.url }}" alt="{{ membership_benefits.title|default:'BSBCS member benefits' }}" class="h-44 w-full object-cover">
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="p-6 lg:p-8">
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    {% for item in membership_benefits.benefit_items.all %}
+                                        {% if item.is_active %}
+                                            <article class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                                <div class="flex gap-3">
+                                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100 text-sm font-bold text-green-700">&#10003;</span>
+                                                    <div>
+                                                        <h3 class="font-bold text-gray-900">{{ item.title }}</h3>
+                                                        {% if item.description %}
+                                                            <p class="mt-1 text-sm leading-6 text-gray-600">{{ item.description }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </article>
+                                        {% endif %}
+                                    {% empty %}
+                                        <p class="rounded-xl border border-dashed border-gray-300 p-6 text-center text-gray-500">Membership benefits will be published here soon.</p>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 {% endif %}
 
-                <!-- Overview Section -->
-                <section id="overview">
-                    <h2 class="text-xl md:text-2xl font-bold mb-4">Overview</h2>
-                    <p>Welcome to your profile overview. Here you can see your event details.</p>
-                    <!-- Active Events -->
-                    <div>
-                        <h2 class="text-xl font-bold mt-10 mb-4">Active Events</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {% for event in active_events %}
-                            <a href="{% url 'registration:home' event.id %}"
-                                class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
-                                <h2 class="text-xl font-semibold">{{ event.name }} {{ event.year }}</h2>
-                                <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
-                                <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
-                                <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong>
-                                </p>
-                            </a>
-                            {% empty %}
-                            <p class="text-center text-gray-500 col-span-full">No active events found.</p>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <!-- Upcoming Events -->
-                    <div>
-                        <h2 class="text-xl font-bold mt-10 mb-4">Upcoming Events</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {% for event in upcoming_events %}
-                            <a href="{% url 'registration:home' event.id %}"
-                                class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
-                                <h2 class="text-xl font-semibold">{{ event.name }} {{ event.year }}</h2>
-                                <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
-                                <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
-                                <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong>
-                                </p>
-                            </a>
-                            {% empty %}
-                            <p class="text-center text-gray-500 col-span-full">No upcoming events found.</p>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <!-- Past Events -->
-                    <div>
-                        <h2 class="text-xl font-bold mt-10 mb-4">Past Events</h2>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {% for event in closed_events %}
-                            <a href="{% url 'registration:home' event.id %}"
-                                class="block p-6 bg-white shadow-lg rounded-lg hover:bg-gray-200 transition duration-300">
-                                <h2 class="text-xl font-semibold">{{ event.name }} {{ event.year }}</h2>
-                                <p class="mt-2 text-gray-700">From {{ event.start_date }} to {{ event.end_date }}</p>
-                                <p class="mt-2 text-gray-700">Location: {{ event.location }}</p>
-                                <p class="mt-2 text-gray-700">Registration: <strong>{{ event.registration }}</strong>
-                                </p>
-                            </a>
-                            {% empty %}
-                            <p class="text-center text-gray-500 col-span-full">No past events found.</p>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Payment Status Section -->
-                <section id="payment-status" class="hidden">
-                    <h2 class="text-xl md:text-2xl font-bold mb-4">Payment Status</h2>
-                    {% if payment_data %}
-                    <table class="abstract-table">
-                        <thead>
-                            <tr>
-                                <th>Event</th>
-                                <th>Transaction ID</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Updated At</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-400 text-center">
-                            {% for payment in payment_data %}
-                            <tr>
-                                <td>{{ payment.event }}</td>
-                                <td>{{ payment.trxID }}</td>
-                                <td>{{ payment.amount }}</td>
-                                <td>{{ payment.status }}</td>
-                                <td>{{ payment.updated_at }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <p>No payment records found.</p>
-                    {% endif %}
-                </section>
-
-
-                <!-- Edit Profile Section -->
-                <section id="edit-profile" class="hidden">
-                    <h2 class="text-xl md:text-2xl font-bold mb-4">Edit Profile</h2>
-                    <form method="POST">
-                        {% csrf_token %}
-                        <!-- Form Fields -->
-                        <div class="mb-4">
-                            <label for="name" class="block text-gray-700">Name</label>
-                            <input type="text" id="name" name="name" value="{{ user_profile.name }}"
-                                class="w-full p-2 border border-gray-300 rounded">
-                        </div>
-                        <div class="mb-4">
-                            <label for="email" class="block text-gray-700">Email</label>
-                            <input type="email" id="email" name="email" value="{{ user.get_username }}"
-                                class="w-full p-2 border border-gray-300 rounded">
-                        </div>
-                        <div class="mb-4">
-                            <label for="phone" class="block text-gray-700">Phone Number</label>
-                            <input type="text" id="phone" name="phone" value="{{ user_profile.phone }}"
-                                class="w-full p-2 border border-gray-300 rounded">
-                        </div>
-                        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Save Changes</button>
-                    </form>
-                </section>
-
-                <!-- Abstract Submission Section -->
-                <section id="abstract-submission" class="hidden">
-                    <h2 class="text-xl md:text-2xl font-bold mb-4">Submitted Abstract</h2>
-                    {% if abstract_submissions %}
-                    <table class="abstract-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Status</th>
-                                <th>Presentation Time</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-400 text-center">
-                            {% for abstract in abstract_submissions %}
-                            <tr>
-                                <td>{{ abstract.title }}</td>
-                                <td class="text-center">
-                                    {% if abstract.approved_for_presentation %}
-                                    Approved for Presentation
-                                    {% elif abstract.approved_for_poster %}
-                                    Approved for Poster
-                                    {% else %}
-                                    Pending
-                                    {% endif %}
-                                </td>
-                                {% with schedule=program_schedules|get_by_abstract:abstract %}
-                                {% if schedule %}
-                                <td>{{ schedule.time_slots.all|join:", " }}</td>
-                                {% else %}
-                                <td>No schedule available.</td>
-                                {% endif %}
-                                {% endwith %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <p>No abstract submission found.</p>
-                    {% endif %}
-                    {% comment %} <div class="mt-4 text-center">
-                        <a href="{% url 'registration:abstract_submission' event.id %}"
-                            class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-200">Submit
-                            Another Abstract</a>
-                    </div> {% endcomment %}
-                </section>
-
-                <!-- Change Password Section -->
-                <section id="password" class="hidden">
-                    <h2 class="text-xl md:text-2xl font-bold mb-4">Change Password</h2>
-                    <a href="{% url 'password_change' %}"
-                        class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-200">Change
-                        Password</a>
-                </section>
-
-                {% if site_settings.membership_subscription_enabled %}
-                <!-- Membership Section -->
-                <section id="membership" class="hidden">
-                    <h2 class="text-xl md:text-2xl font-bold mb-6">Membership Subscription</h2>
-
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="p-6">
-                                <div class="flex items-center space-x-4 mb-6">
-                                    <div class="h-16 w-16 bg-pink-100 rounded-full flex items-center justify-center">
-                                        <i class="fas fa-id-card text-2xl text-pink-600"></i>
-                                    </div>
+                <section class="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-xl font-bold">Event Applications Through Membership</h2>
+                    <p class="mt-2 text-sm text-gray-600">When you apply for membership from an event page, we keep that event here and submit your member registration after membership activation.</p>
+                    <div class="mt-4 grid gap-4">
+                        {% for intent in pending_event_intents %}
+                            <article class="rounded-xl border border-gray-200 p-5">
+                                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                                     <div>
-                                        <h3 class="text-lg font-bold text-gray-900">Current Status</h3>
-                                        {% if not user_profile.member %}
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-gray-100 text-gray-600">
-                                            <i class="fas fa-info-circle mr-1"></i> Not a Member (No Application)
-                                        </span>
-                                        {% elif user_profile.member.approval_status == 'pending' %}
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-800">
-                                            <i class="fas fa-clock mr-1"></i> Application Pending Approval
-                                        </span>
-                                        {% elif user_profile.member.approval_status == 'approved' and not user_profile.member.is_active_member %}
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-yellow-100 text-yellow-800">
-                                            <i class="fas fa-exclamation-triangle mr-1"></i> Approved - Payment Required
-                                        </span>
-                                        {% elif user_profile.member.is_active_member %}
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800">
-                                            <i class="fas fa-check-circle mr-1"></i> Active Member
-                                        </span>
-                                        {% elif user_profile.member.approval_status == 'rejected' %}
-                                        <span
-                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-red-100 text-red-800">
-                                            <i class="fas fa-times-circle mr-1"></i> Application Rejected
-                                        </span>
+                                        <h3 class="text-lg font-bold">{{ intent.event.name }} {{ intent.event.year }}</h3>
+                                        {% if intent.status == 'pending' %}
+                                            <p class="mt-1 text-sm text-gray-600">Waiting for your membership to become active. After activation, your event registration will be submitted.</p>
+                                        {% elif intent.status == 'completed' and intent.participant and not intent.participant.approved %}
+                                            <p class="mt-1 text-sm text-gray-600">Your member registration has been submitted and is waiting for event approval.</p>
+                                        {% elif intent.status == 'completed' and intent.participant and intent.participant.approved %}
+                                            <p class="mt-1 text-sm text-gray-600">Your event registration has been approved.</p>
+                                        {% elif intent.status == 'failed' %}
+                                            <p class="mt-1 text-sm text-gray-600">We could not submit this event registration automatically. Please contact the event team.</p>
+                                        {% else %}
+                                            <p class="mt-1 text-sm text-gray-600">This event request is being processed.</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        {% if intent.status == 'pending' %}
+                                            <span class="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800">Waiting for membership</span>
+                                        {% elif intent.status == 'completed' and intent.participant and not intent.participant.approved %}
+                                            <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">Submitted for review</span>
+                                        {% elif intent.status == 'completed' and intent.participant and intent.participant.approved %}
+                                            <span class="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800">Approved</span>
+                                        {% elif intent.status == 'failed' %}
+                                            <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800">Needs attention</span>
+                                        {% else %}
+                                            <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">Processing</span>
                                         {% endif %}
                                     </div>
                                 </div>
-
-                                {% if user_profile.member.is_active_member %}
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    <div class="p-4 bg-gray-50 rounded-lg">
-                                        <span
-                                            class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Subscription
-                                            Date</span>
-                                        <span class="text-gray-900 font-bold">{{ user_profile.member.subscription_start_date }}</span>
-                                    </div>
-                                    <div class="p-4 bg-gray-50 rounded-lg">
-                                        <span
-                                            class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Expiry
-                                            Date</span>
-                                        <span class="text-pink-600 font-bold">{{ user_profile.member.subscription_expiry_date }}</span>
-                                    </div>
-                                </div>
-                                {% endif %}
-
-                                <div class="space-y-4">
-                                    {% if not user_profile.member %}
-                                    <a href="{% url 'website:membership_form' %}"
-                                        class="block w-full text-center bg-gray-800 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-gray-900 transition duration-200">
-                                        Apply for Membership (BDT {{ site_settings.membership_yearly_fee }}/year)
-                                    </a>
-                                    {% elif user_profile.member.approval_status == 'pending' %}
-                                    <button disabled
-                                        class="block w-full text-center bg-gray-200 text-gray-500 font-bold py-3 rounded-xl cursor-not-allowed">
-                                        Application Under Review
-                                    </button>
-                                    {% elif user_profile.member.approval_status == 'approved' and not user_profile.member.is_active_member %}
-                                    <a href="{% url 'website:membership_payment_init' %}"
-                                        class="block w-full text-center bg-pink-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-pink-700 transition duration-200">
-                                        Pay & Activate Membership
-                                    </a>
-                                    {% elif user_profile.member.is_active_member %}
-                                    <a href="{% url 'website:membership_payment_init' %}"
-                                        class="block w-full text-center border-2 border-pink-600 text-pink-600 font-bold py-3 rounded-xl hover:bg-pink-50 transition duration-200">
-                                        Renew Membership
-                                    </a>
-                                    {% elif user_profile.member.approval_status == 'rejected' %}
-                                    <a href="{% url 'website:membership_form' %}"
-                                        class="block w-full text-center bg-red-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-700 transition duration-200">
-                                        Update Details & Re-apply
-                                    </a>
+                                <div class="mt-4 flex flex-wrap gap-3">
+                                    <a href="{% url 'registration:home' intent.event.id %}" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">View Event</a>
+                                    {% if intent.participant %}
+                                        <a href="{% url 'registration:registration' intent.event.id %}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">View Registration Status</a>
                                     {% endif %}
                                 </div>
-                        </div>
+                            </article>
+                        {% empty %}
+                            <p class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-500">No membership-linked event applications yet.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+            </section>
 
-                        {% if site_settings.membership_facilities %}
-                        <div class="bg-gray-50 p-6 border-t border-gray-200">
-                            <h4 class="text-sm font-bold text-gray-900 mb-3 uppercase tracking-widest">Member Benefits
-                            </h4>
-                            <div class="text-sm text-gray-600 whitespace-pre-line">
-                                {{ site_settings.membership_facilities }}
-                            </div>
-                        </div>
+            <section id="my-events" class="profile-panel mt-6 hidden">
+                <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-xl font-bold">My Event Registrations</h2>
+                    <div class="mt-4 grid gap-4">
+                        {% for participant in participants %}
+                            <article class="rounded-xl border border-gray-200 p-5">
+                                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <h3 class="text-lg font-bold">{{ participant.event.name }} {{ participant.event.year }}</h3>
+                                        <p class="mt-1 text-sm text-gray-600">{{ participant.created_at|date:"M d, Y" }} · {{ participant.get_registration_type_display }}</p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        {% if participant.denied %}
+                                            <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">Denied</span>
+                                        {% elif participant.approved %}
+                                            <span class="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">Approved</span>
+                                        {% else %}
+                                            <span class="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">Pending approval</span>
+                                        {% endif %}
+                                        {% if participant.payment_statuses %}
+                                            <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{{ participant.payment_statuses.get_status_display }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="mt-4 flex flex-wrap gap-3">
+                                    <a href="{% url 'registration:home' participant.event.id %}" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">Event Page</a>
+                                    {% if participant.approved and participant.payment_statuses and participant.payment_statuses.amount and participant.payment_statuses.status != 'completed' and participant.payment_statuses.status != 'paid' %}
+                                        <a href="{% url 'registration:payment' participant.event.id participant.id %}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Complete Payment</a>
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% empty %}
+                            <p class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-500">You have not registered for any events yet.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+            </section>
+
+            <section id="abstracts" class="profile-panel mt-6 hidden">
+                <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-xl font-bold">Submitted Abstracts</h2>
+                    <div class="mt-4 overflow-x-auto">
+                        {% if abstract_submissions %}
+                            <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
+                                <thead class="bg-gray-50 text-xs uppercase tracking-widest text-gray-500">
+                                    <tr><th class="px-4 py-3">Title</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Presentation Time</th></tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    {% for abstract in abstract_submissions %}
+                                        <tr>
+                                            <td class="px-4 py-3 font-semibold">{{ abstract.title }}</td>
+                                            <td class="px-4 py-3">
+                                                {% if abstract.approved_for_presentation %}Approved for Presentation{% elif abstract.approved_for_poster %}Approved for Poster{% else %}Pending{% endif %}
+                                            </td>
+                                            {% with schedule=program_schedules|get_by_abstract:abstract %}
+                                                <td class="px-4 py-3">{% if schedule %}{{ schedule.time_slots.all|join:", " }}{% else %}No schedule available{% endif %}</td>
+                                            {% endwith %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <p class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-500">No abstract submissions yet.</p>
                         {% endif %}
                     </div>
                 </section>
-                {% endif %}
+            </section>
 
-            </div>
-        </div>
+            <section id="payments" class="profile-panel mt-6 hidden">
+                <div class="grid gap-6 lg:grid-cols-2">
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 class="text-xl font-bold">Event Payments</h2>
+                        <div class="mt-4 space-y-3">
+                            {% for payment in payment_statuses %}
+                                <article class="rounded-xl border border-gray-200 p-4">
+                                    <div class="flex justify-between gap-4">
+                                        <strong>{{ payment.event.name }} {{ payment.event.year }}</strong>
+                                        <span class="text-sm font-bold">{{ payment.get_status_display }}</span>
+                                    </div>
+                                    <p class="mt-2 text-sm text-gray-600">Amount: BDT {{ payment.amount|default:"0" }}</p>
+                                    {% if payment.event.event_status == 'active' and payment.participant.approved and payment.amount and payment.status != 'completed' and payment.status != 'paid' %}
+                                        <div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                                            <strong>Payment needed</strong>
+                                            <p class="mt-1">Your registration is approved. Complete payment to confirm your seat for this active event.</p>
+                                        </div>
+                                        <a href="{% url 'registration:payment' payment.event.id payment.participant.id %}" class="mt-3 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Complete Payment</a>
+                                    {% endif %}
+                                    {% if payment.invoice %}
+                                        <a href="{{ payment.invoice.url }}" class="mt-3 inline-flex text-sm font-bold text-blue-700">Download invoice</a>
+                                    {% endif %}
+                                </article>
+                            {% empty %}
+                                <p class="text-gray-500">No event payment records found.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 class="text-xl font-bold">Membership Payments</h2>
+                        <div class="mt-4 space-y-3">
+                            {% for payment in membership_payments %}
+                                <article class="rounded-xl border border-gray-200 p-4">
+                                    <div class="flex justify-between gap-4">
+                                        <strong>{{ payment.membership_type|default:"Membership" }}</strong>
+                                        <span class="text-sm font-bold">{{ payment.get_status_display }}</span>
+                                    </div>
+                                    <p class="mt-2 text-sm text-gray-600">Amount: BDT {{ payment.amount }}</p>
+                                    {% if payment.invoice %}
+                                        <a href="{{ payment.invoice.url }}" class="mt-3 inline-flex text-sm font-bold text-blue-700">Download invoice</a>
+                                    {% endif %}
+                                </article>
+                            {% empty %}
+                                <p class="text-gray-500">No membership payment records found.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                </div>
+            </section>
 
+            <section id="settings" class="profile-panel mt-6 hidden">
+                <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-xl font-bold">Profile Settings</h2>
+                    <form method="POST" class="mt-5 grid gap-4 md:grid-cols-2">
+                        {% csrf_token %}
+                        <div>
+                            <label for="name" class="mb-2 block text-sm font-bold text-gray-700">Name</label>
+                            <input type="text" id="name" name="name" value="{{ user_profile.name }}" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                        </div>
+                        <div>
+                            <label for="email" class="mb-2 block text-sm font-bold text-gray-700">Email</label>
+                            <input type="email" id="email" name="email" value="{{ user_profile.email }}" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                        </div>
+                        <div>
+                            <label for="phone" class="mb-2 block text-sm font-bold text-gray-700">Phone</label>
+                            <input type="text" id="phone" name="phone" value="{{ user_profile.phone }}" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                        </div>
+                        <div>
+                            <label for="country" class="mb-2 block text-sm font-bold text-gray-700">Country</label>
+                            <input type="text" id="country" name="country" value="{{ user_profile.country }}" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                        </div>
+                        <div class="flex flex-col gap-3 md:col-span-2 sm:flex-row">
+                            <button type="submit" class="rounded-lg bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700">Save Changes</button>
+                            <a href="{% url 'password_change' %}" class="rounded-lg border border-gray-300 px-5 py-3 text-center font-bold text-gray-700 hover:bg-gray-50">Change Password</a>
+                        </div>
+                    </form>
+                </section>
+            </section>
+        </main>
 
+        <style>
+            .profile-tab {
+                color: #475569;
+                background: transparent;
+            }
+            .profile-tab.active {
+                color: #fff;
+                background: #1d4ed8;
+            }
+        </style>
         <script>
-            document.querySelectorAll('.menu a').forEach(link => {
-                link.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    document.querySelectorAll('.content section').forEach(section => {
-                        section.classList.add('hidden');
-                    });
-                    document.querySelector(this.getAttribute('href')).classList.remove('hidden');
+            document.querySelectorAll('[data-tab-target]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    document.querySelectorAll('[data-tab-target]').forEach((tab) => tab.classList.remove('active'));
+                    document.querySelectorAll('.profile-panel').forEach((panel) => panel.classList.add('hidden'));
+                    button.classList.add('active');
+                    const panel = document.getElementById(button.dataset.tabTarget);
+                    if (panel) panel.classList.remove('hidden');
                 });
             });
         </script>
-
+    {% endif %}
 </body>
-
 </html>

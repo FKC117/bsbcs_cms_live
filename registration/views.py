@@ -147,38 +147,60 @@ def create_profile(request):
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
 from .models import UserProfile, AbstractSubmission, ProgramSchedule, Event
-from website.models import SiteSettings
+from django.db.models import Q
+from website.models import SiteSettings, MembershipBenefitModal, MembershipPayment, PendingEventIntent
 
 @login_required
 def user_profile(request):
     # Fetch the user's profile
-    user_profile = get_object_or_404(UserProfile, user=request.user)
+    user_profile = UserProfile.objects.filter(user=request.user).first()
+    site_settings = SiteSettings.objects.first()
+
+    if not user_profile:
+        return render(request, 'user_profile.html', {
+            'user': request.user,
+            'needs_profile': True,
+            'site_settings': site_settings,
+        })
 
     # Fetch related submissions and schedules
     abstract_submissions = AbstractSubmission.objects.filter(user=request.user)
     program_schedules = ProgramSchedule.objects.filter(abstract_submission__in=abstract_submissions)
+    participants = Participant.objects.filter(user=request.user).select_related('event', 'department').order_by('-created_at')
 
     # Fetch active, upcoming, and closed events
     active_events = Event.objects.filter(event_status='active').order_by('-start_date')
     upcoming_events = Event.objects.filter(event_status='upcoming').order_by('start_date')
     closed_events = Event.objects.filter(event_status='closed').order_by('-end_date')
+    member_events = Event.objects.filter(
+        event_status='active',
+        registration='Open',
+    ).filter(
+        Q(member_registration_enabled=True) | Q(registration_audience='members_only')
+    ).order_by('start_date')[:6]
 
     # Fetch payment Status for the user's in registered events
     payment_statuses = PaymentStatus.objects.filter(participant__user=request.user).select_related('event', 'participant')
+    pending_payment_count = payment_statuses.filter(status__in=['unpaid', 'pending', 'initiated']).count()
     payment_data = []
     for payment in payment_statuses:
         payment_data.append({
             'event': f"{payment.event.name} {payment.event.year}",  # Assuming the event name and year are stored in the Event modelpayment.event.name,
             'trxID': payment.trxID,
-            'amount': payment.event.amount,  # Assuming the event amount is stored in the Event model
+            'amount': payment.amount,
             'status': payment.status,
             'updated_at': payment.updated_at,  # Assuming there's an updated_at field in PaymentStatus
         })
+    membership_payments = MembershipPayment.objects.filter(user_profile=user_profile).select_related('membership_type').order_by('-created_at')
+    pending_event_intents = PendingEventIntent.objects.filter(user_profile=user_profile).select_related('event', 'participant').order_by('-created_at')
+    member = getattr(user_profile, 'member', None)
+    membership_benefits = MembershipBenefitModal.objects.filter(is_active=True).prefetch_related('benefit_items').first()
 
     if request.method == 'POST':
         user_profile.name = request.POST.get('name')
         user_profile.email = request.POST.get('email')
         user_profile.phone = request.POST.get('phone')
+        user_profile.country = request.POST.get('country')
         user_profile.save()
         message = "Profile updated successfully"
     else:
@@ -189,12 +211,20 @@ def user_profile(request):
         'user_profile': user_profile,
         'abstract_submissions': abstract_submissions,
         'program_schedules': program_schedules,
+        'participants': participants,
         'message': message,
         'active_events': active_events,
         'upcoming_events': upcoming_events,
         'closed_events': closed_events,
+        'member_events': member_events,
         'payment_data': payment_data,
-        'site_settings': SiteSettings.objects.first(),
+        'payment_statuses': payment_statuses,
+        'pending_payment_count': pending_payment_count,
+        'membership_payments': membership_payments,
+        'pending_event_intents': pending_event_intents,
+        'member': member,
+        'membership_benefits': membership_benefits,
+        'site_settings': site_settings,
     })
 
 # Custom Password Change View STARTS ---------------------------------------------------------------###

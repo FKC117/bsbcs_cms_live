@@ -6,13 +6,25 @@ from .models import SiteSettings, NavigationLink, MembershipBenefitModal
 def site_settings(request):
     settings = SiteSettings.objects.first()
     membership_benefit_modal_displayable = False
+    user_is_active_member = False
+    if request.user.is_authenticated:
+        try:
+            user_profile = getattr(request.user, 'userprofile', None)
+            member = getattr(user_profile, 'member', None) if user_profile else None
+            user_is_active_member = bool(member and member.is_active_member)
+        except Exception:
+            user_is_active_member = False
+
     try:
-        membership_benefit_modal = (
-            MembershipBenefitModal.objects.filter(is_active=True)
-            .prefetch_related('benefit_items')
-            .first()
-        )
-        if membership_benefit_modal:
+        if user_is_active_member:
+            membership_benefit_modal = None
+        else:
+            membership_benefit_modal = (
+                MembershipBenefitModal.objects.filter(is_active=True)
+                .prefetch_related('benefit_items')
+                .first()
+            )
+        if membership_benefit_modal and not user_is_active_member:
             has_image = bool(membership_benefit_modal.image)
             has_content = any([
                 bool((membership_benefit_modal.title or '').strip()),
