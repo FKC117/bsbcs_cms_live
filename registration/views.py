@@ -201,6 +201,8 @@ def user_profile(request):
         user_profile.email = request.POST.get('email')
         user_profile.phone = request.POST.get('phone')
         user_profile.country = request.POST.get('country')
+        if request.FILES.get('image'):
+            user_profile.image = request.FILES['image']
         user_profile.save()
         message = "Profile updated successfully"
     else:

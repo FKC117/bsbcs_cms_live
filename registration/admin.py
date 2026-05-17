@@ -12,6 +12,7 @@ from .resources import ParticipantResource, AbstractSubmissionResource, TimeSlot
 from .pdf_utils import generate_abstract_pdf
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.crypto import get_random_string
+from django.utils.html import format_html
 from django.contrib.auth import get_user_model
 from .views import send_approval_email
 import time
@@ -22,6 +23,15 @@ class UserProfileAdmin(ImportExportModelAdmin):
     list_display = ('user', 'name', 'phone', 'country')
     list_per_page = 15
     search_fields = ('user__username', 'name', 'phone')
+    readonly_fields = ('image_preview',)
+    fields = ('user', 'name', 'email', 'phone', 'country', 'image', 'image_preview')
+
+    def image_preview(self, obj):
+        if obj and obj.image:
+            return format_html('<img src="{}" style="height: 80px; width: 80px; object-fit: cover; border-radius: 8px;" />', obj.image.url)
+        return "No image uploaded"
+
+    image_preview.short_description = "Current image"
 admin.site.register(UserProfile, UserProfileAdmin)
 # Register your models here.
 class InvitationAdmin(admin.ModelAdmin):
