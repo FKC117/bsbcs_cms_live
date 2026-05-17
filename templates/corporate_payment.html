@@ -1,0 +1,112 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Payment | {{ event.name }} {{ event.year }}</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #f5f8fb;
+            color: #172033;
+            font-family: "Source Sans Pro", Arial, sans-serif;
+        }
+        .payment-card {
+            width: min(560px, calc(100% - 32px));
+            border: 1px solid #dce3ec;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 18px 48px rgba(21, 41, 72, 0.12);
+            padding: 28px;
+        }
+        .eyebrow {
+            margin: 0 0 8px;
+            color: #00695c;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 30px;
+            line-height: 1.15;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 1px solid #edf2f7;
+            padding: 14px 0;
+        }
+        .row span {
+            color: #5f6b7a;
+        }
+        .amount {
+            font-size: 28px;
+            font-weight: 900;
+            color: #1565c0;
+        }
+        .actions {
+            display: grid;
+            gap: 10px;
+            margin-top: 22px;
+        }
+        .button {
+            display: inline-flex;
+            min-height: 46px;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 10px;
+            padding: 0 16px;
+            font: inherit;
+            font-weight: 900;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .button-primary {
+            background: #1565c0;
+            color: #fff;
+        }
+        .button-secondary {
+            border: 1px solid #dce3ec;
+            background: #fff;
+            color: #172033;
+        }
+    </style>
+</head>
+<body>
+    <main class="payment-card">
+        <p class="eyebrow">Corporate payment</p>
+        <h1>{{ event.name }} {{ event.year }}</h1>
+        <div class="row">
+            <span>Organization</span>
+            <strong>{{ corporate_payment.corporate_account.company_name }}</strong>
+        </div>
+        <div class="row">
+            <span>Invoice</span>
+            <strong>{{ corporate_payment.merchant_invoice_number }}</strong>
+        </div>
+        <div class="row">
+            <span>Status</span>
+            <strong>{{ corporate_payment.get_status_display }}</strong>
+        </div>
+        <div class="row">
+            <span>Total payable</span>
+            <strong class="amount">BDT {{ corporate_payment.amount }}</strong>
+        </div>
+        <form method="post" class="actions">
+            {% csrf_token %}
+            <button type="submit" class="button button-primary">Pay with bKash</button>
+            <a href="{% url 'corporate_dashboard' %}" class="button button-secondary">Back to Dashboard</a>
+        </form>
+    </main>
+</body>
+</html>

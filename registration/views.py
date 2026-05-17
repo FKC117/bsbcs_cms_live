@@ -340,11 +340,33 @@ def corporate_dashboard(request):
     corporate_account = CorporateAccount.objects.filter(user=request.user).first()
     matching_requests = CorporateAccountRequest.objects.filter(email__iexact=request.user.email).order_by('-created_at')
     open_events = Event.objects.filter(event_status='active', registration='Open').order_by('start_date')
+    corporate_payments = CorporatePayment.objects.filter(corporate_account=corporate_account).select_related('event', 'corporate_registration')[:8] if corporate_account else []
+    corporate_registrations = (
+        CorporateEventRegistration.objects.filter(corporate_account=corporate_account)
+        .select_related('event')
+        .prefetch_related('attendees', 'corporate_payments')
+        [:10]
+    ) if corporate_account else []
+    dashboard_submissions = []
+    for submission in corporate_registrations:
+        attendees = list(submission.attendees.all())
+        payments = list(submission.corporate_payments.all())
+        dashboard_submissions.append({
+            'submission': submission,
+            'total_count': len(attendees),
+            'pending_count': sum(1 for attendee in attendees if attendee.review_status == 'pending'),
+            'approved_count': sum(1 for attendee in attendees if attendee.review_status == 'approved'),
+            'denied_count': sum(1 for attendee in attendees if attendee.review_status == 'denied'),
+            'payments': payments,
+        })
 
     return render(request, 'corporate_dashboard.html', {
         'corporate_account': corporate_account,
         'matching_requests': matching_requests,
         'open_events': open_events,
+        'corporate_payments': corporate_payments,
+        'corporate_registrations': corporate_registrations,
+        'dashboard_submissions': dashboard_submissions,
     })
 
 
@@ -1600,6 +1622,134 @@ def payment_failure(request, event_id, participant_id):
     failure_reason = request.GET.get('reason', "Payment failed. Please try again.")
     messages.error(request, failure_reason)
     return render(request, 'payment_message.html', {'event_id': event_id, 'participant_id': participant_id})
+
+
+def complete_corporate_payment(corporate_payment, execute_response):
+    corporate_payment.status = 'completed'
+    corporate_payment.amount = execute_response.get('amount', corporate_payment.amount)
+    corporate_payment.merchant_invoice_number = execute_response.get('merchantInvoiceNumber', corporate_payment.merchant_invoice_number)
+    corporate_payment.transaction_id = execute_response.get('paymentID')
+    corporate_payment.trxID = execute_response.get('trxID')
+    corporate_payment.save()
+
+    for attendee in corporate_payment.attendees.select_related('participant').all():
+        if not attendee.participant:
+            continue
+        PaymentStatus.objects.filter(
+            participant=attendee.participant,
+            event=corporate_payment.event,
+        ).update(
+            status='completed',
+            transaction_id=corporate_payment.transaction_id,
+            trxID=corporate_payment.trxID,
+        )
+
+
+@login_required
+def corporate_payment(request, payment_id):
+    corporate_payment = get_object_or_404(
+        CorporatePayment.objects.select_related('corporate_account', 'event'),
+        id=payment_id,
+        corporate_account__user=request.user,
+    )
+
+    if request.method == 'POST':
+        try:
+            token = get_bkash_token()
+            if not token:
+                messages.error(request, "Failed to get token.")
+                return redirect('corporate_dashboard')
+
+            if not corporate_payment.amount or corporate_payment.amount <= 0:
+                messages.error(request, "No payment is required for this corporate invoice.")
+                return redirect('corporate_dashboard')
+
+            merchant_invoice_number = f"CORP-{corporate_payment.event_id}-{corporate_payment.id}-{int(time.time())}"
+            callback_url = request.build_absolute_uri(
+                reverse('corporate_payment_success', kwargs={'payment_id': corporate_payment.id})
+            ) + f"?merchant_invoice_number={merchant_invoice_number}"
+            payment_response = create_bkash_payment(
+                token,
+                corporate_payment.amount,
+                corporate_payment.corporate_account.phone,
+                callback_url,
+                merchant_invoice_number
+            )
+
+            if payment_response and payment_response.get("statusCode") == "0000":
+                corporate_payment.status = 'initiated'
+                corporate_payment.merchant_invoice_number = merchant_invoice_number
+                corporate_payment.save(update_fields=['status', 'merchant_invoice_number', 'updated_at'])
+                return redirect(payment_response["bkashURL"])
+
+            messages.error(request, f"Payment failed: {payment_response.get('statusMessage') if payment_response else 'Unable to create payment.'}")
+            return redirect('corporate_payment', payment_id=corporate_payment.id)
+        except Exception as exc:
+            logger.exception("Error in corporate payment view: %s", exc)
+            messages.error(request, "An error occurred.")
+            return redirect('corporate_dashboard')
+
+    return render(request, 'corporate_payment.html', {
+        'corporate_payment': corporate_payment,
+        'event': corporate_payment.event,
+    })
+
+
+@login_required
+def corporate_payment_success(request, payment_id):
+    corporate_payment = get_object_or_404(CorporatePayment, id=payment_id, corporate_account__user=request.user)
+    payment_id_value = request.GET.get('paymentID')
+    merchant_invoice_number = request.GET.get('merchant_invoice_number')
+    if not payment_id_value:
+        messages.error(request, "Payment ID not found.")
+        return redirect('corporate_payment', payment_id=corporate_payment.id)
+
+    corporate_payment.transaction_id = payment_id_value
+    corporate_payment.merchant_invoice_number = merchant_invoice_number or corporate_payment.merchant_invoice_number
+    corporate_payment.status = 'pending'
+    corporate_payment.save(update_fields=['transaction_id', 'merchant_invoice_number', 'status', 'updated_at'])
+    return redirect(reverse('corporate_finalize_payment', kwargs={'payment_id': corporate_payment.id}))
+
+
+@login_required
+def corporate_finalize_payment(request, payment_id):
+    corporate_payment = get_object_or_404(CorporatePayment, id=payment_id, corporate_account__user=request.user)
+    token = get_bkash_token()
+    if not token:
+        messages.error(request, "Failed to retrieve token.")
+        return render(request, 'payment_message.html', {
+            'title': "Payment Failure",
+            'error_message': "Failed to retrieve token."
+        })
+
+    execute_response = execute_payment(token, corporate_payment.transaction_id)
+    try:
+        logger.info("Corporate execute payment response: %s", json.dumps(execute_response))
+    except Exception:
+        logger.info("Corporate execute payment response raw: %s", str(execute_response))
+
+    if execute_response and execute_response.get('statusCode') == '0000':
+        complete_corporate_payment(corporate_payment, execute_response)
+        return render(request, 'finalize_payment.html', {
+            'message': "Corporate payment successfully finalized.",
+            'payment_details': execute_response,
+        })
+
+    corporate_payment.status = 'failed'
+    corporate_payment.save(update_fields=['status', 'updated_at'])
+    return render(request, 'payment_message.html', {
+        'title': 'Payment Failure',
+        'error_message': execute_response.get('statusMessage', 'Payment finalization failed.') if execute_response else 'Payment finalization failed.',
+    })
+
+
+@login_required
+def corporate_payment_failure(request, payment_id):
+    corporate_payment = get_object_or_404(CorporatePayment, id=payment_id, corporate_account__user=request.user)
+    corporate_payment.status = 'failed'
+    corporate_payment.save(update_fields=['status', 'updated_at'])
+    messages.error(request, request.GET.get('reason', "Payment failed. Please try again."))
+    return render(request, 'payment_message.html', {'title': 'Payment Failure'})
 
 # Invoice Generation Start ----------------------------------------------------------------#
 from django.core.mail import EmailMessage

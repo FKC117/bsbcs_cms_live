@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Corporate Registration Approved</title>
+</head>
+<body>
+    <p>Dear {{ participant.name }},</p>
+
+    <p>Your registration for <strong>{{ event.name }} {{ event.year }}</strong> has been approved under a corporate registration submitted by <strong>{{ corporate_account.company_name }}</strong>.</p>
+
+    {% if payable_amount %}
+        <p>Your registration fee will be handled by {{ corporate_account.company_name }} through BSBCS corporate billing. No individual payment is required from you for this registration.</p>
+    {% else %}
+        <p>No payment is required from you for this registration.</p>
+    {% endif %}
+
+    <p><strong>Event Details:</strong></p>
+    <ul>
+        <li>Event: {{ event.name }} {{ event.year }}</li>
+        <li>Date: {{ event.start_date }} to {{ event.end_date }}</li>
+        <li>Location: {{ event.location }}</li>
+    </ul>
+
+    {% if password %}
+        <p><strong>Your BSBCS login credentials:</strong></p>
+        <ul>
+            <li>Email: {{ participant.email }}</li>
+            <li>Password: {{ password }}</li>
+        </ul>
+        <p>Please change your password after your first login.</p>
+    {% endif %}
+
+    <p>Thank you,<br>The {{ event.name }} {{ event.year }} Team</p>
+</body>
+</html>

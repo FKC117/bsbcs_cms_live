@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -216,13 +216,35 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
     search_fields = ('corporate_account__company_name', 'event__name', 'attendees__name', 'attendees__email', 'attendees__phone')
     readonly_fields = ('created_at', 'updated_at')
     inlines = [CorporateEventAttendeeInline]
-    actions = ['approve_all_pending_attendees']
+    actions = ['approve_all_pending_attendees', 'create_corporate_payment_invoice']
+    fieldsets = (
+        ('Step 1 - Corporate submission', {
+            'fields': ('corporate_account', 'event', 'submission_mode', 'status', 'total_attendees')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
 
     def approve_all_pending_attendees(self, request, queryset):
         attendees = CorporateEventAttendee.objects.filter(registration__in=queryset, review_status='pending')
         approved_count = approve_corporate_attendees(request, attendees)
         self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
-    approve_all_pending_attendees.short_description = 'Approve all pending attendees in selected submissions'  # type: ignore
+    approve_all_pending_attendees.short_description = 'Step 2 - Approve all pending attendees and email participants'  # type: ignore
+
+    def create_corporate_payment_invoice(self, request, queryset):
+        created_count = 0
+        skipped_count = 0
+        for corporate_registration in queryset:
+            payment, created, reason = create_corporate_payment_for_registration(corporate_registration)
+            if created:
+                created_count += 1
+            else:
+                skipped_count += 1
+                if reason:
+                    self.message_user(request, f"{corporate_registration}: {reason}", messages.WARNING)
+        self.message_user(request, f'{created_count} corporate invoice(s) created. {skipped_count} skipped.')
+    create_corporate_payment_invoice.short_description = 'Step 3 - Create corporate invoice/payment for approved attendees'  # type: ignore
 
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
@@ -272,7 +294,7 @@ class CorporateEventAttendeeAdmin(admin.ModelAdmin):
     def approve_selected_attendees(self, request, queryset):
         approved_count = approve_corporate_attendees(request, queryset)
         self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
-    approve_selected_attendees.short_description = 'Approve selected attendees and email them'  # type: ignore
+    approve_selected_attendees.short_description = 'Step 2 - Approve selected attendees and email participants'  # type: ignore
 
     def deny_selected_attendees(self, request, queryset):
         updated = queryset.update(review_status='denied')
@@ -292,6 +314,26 @@ class CorporateEventAttendeeAdmin(admin.ModelAdmin):
                 CorporateEventAttendee.objects.filter(pk=obj.pk)
             )
             self.message_user(request, f'{approved_count} attendee converted to participant and notified.')
+
+
+@admin.register(CorporatePayment)
+class CorporatePaymentAdmin(admin.ModelAdmin):
+    list_display = ('corporate_account', 'event', 'amount', 'status', 'merchant_invoice_number', 'transaction_id', 'trxID', 'created_at')
+    list_filter = ('status', 'event', 'created_at')
+    search_fields = ('corporate_account__company_name', 'event__name', 'merchant_invoice_number', 'transaction_id', 'trxID')
+    readonly_fields = ('created_at', 'updated_at')
+    filter_horizontal = ('attendees',)
+    fieldsets = (
+        ('Step 4 - Corporate invoice/payment', {
+            'fields': ('corporate_registration', 'corporate_account', 'event', 'attendees', 'amount', 'status')
+        }),
+        ('bKash/payment tracking', {
+            'fields': ('merchant_invoice_number', 'transaction_id', 'trxID', 'invoice', 'email_sent')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
 # Register your models here.
 class InvitationAdmin(admin.ModelAdmin):
     list_display = ('name', 'event')
@@ -430,6 +472,32 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
     email.send()
 
 
+def send_corporate_attendee_approval_email(participant, event, corporate_account, payable_amount, password=None, include_password=False):
+    """Notify a corporate attendee without sending an individual payment link."""
+    subject = f'Your Registration for {event.name} {event.year} is Approved'
+    context = {
+        'participant': participant,
+        'event': event,
+        'corporate_account': corporate_account,
+        'payable_amount': payable_amount,
+    }
+
+    if include_password and password:
+        context['password'] = password
+
+    html_content = render_to_string('corporate_attendee_approval_email.html', context)
+    text_content = strip_tags(html_content)
+
+    email = EmailMultiAlternatives(
+        subject,
+        text_content,
+        os.getenv("EMAIL_HOST_USER"),
+        [participant.email]
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+
+
 def update_corporate_registration_status(corporate_registration):
     attendees = corporate_registration.attendees.all()
     total = attendees.count()
@@ -446,6 +514,67 @@ def update_corporate_registration_status(corporate_registration):
         corporate_registration.status = 'submitted'
     corporate_registration.total_attendees = total
     corporate_registration.save(update_fields=['status', 'total_attendees', 'updated_at'])
+
+
+def create_corporate_payment_for_registration(corporate_registration):
+    approved_attendees = CorporateEventAttendee.objects.filter(
+        registration=corporate_registration,
+        review_status='approved',
+        participant__isnull=False,
+    ).exclude(
+        corporate_payments__status__in=['unpaid', 'initiated', 'pending', 'completed', 'paid']
+    ).select_related('participant', 'registration__event').distinct()
+
+    invoice_attendees = []
+    total_amount = 0
+    for attendee in approved_attendees:
+        payment_status = PaymentStatus.objects.filter(
+            participant=attendee.participant,
+            event=corporate_registration.event,
+        ).first()
+        if not payment_status:
+            payment_status = PaymentStatus.objects.create(
+                participant=attendee.participant,
+                event=corporate_registration.event,
+                merchant_invoice_number=f"CORPFREE-{corporate_registration.event_id}-{attendee.participant_id}-{int(time.time())}",
+                amount=attendee.participant.get_payable_amount(),
+                status='completed' if not attendee.participant.get_payable_amount() else 'unpaid',
+            )
+        if payment_status.status in ['completed', 'paid'] and payment_status.amount and payment_status.amount > 0:
+            continue
+
+        amount = payment_status.amount if payment_status.amount is not None else attendee.participant.get_payable_amount()
+        invoice_attendees.append(attendee)
+        if amount and amount > 0:
+            total_amount += amount
+
+    if not invoice_attendees:
+        return None, False, 'No newly approved attendees found for invoicing.'
+
+    existing_payment = CorporatePayment.objects.filter(
+        corporate_registration=corporate_registration,
+        status__in=['unpaid', 'initiated', 'pending'],
+    ).first()
+    if existing_payment:
+        return existing_payment, False, 'An unpaid corporate payment invoice already exists.'
+
+    corporate_payment = CorporatePayment.objects.create(
+        corporate_registration=corporate_registration,
+        corporate_account=corporate_registration.corporate_account,
+        event=corporate_registration.event,
+        amount=total_amount,
+        status='completed' if total_amount == 0 else 'unpaid',
+        merchant_invoice_number=f"CORPINV-{corporate_registration.event_id}-{corporate_registration.id}-{int(time.time())}",
+    )
+    corporate_payment.attendees.set(invoice_attendees)
+
+    if total_amount == 0:
+        PaymentStatus.objects.filter(
+            participant__corporate_attendee__in=invoice_attendees,
+            event=corporate_registration.event,
+        ).update(status='completed')
+
+    return corporate_payment, True, ''
 
 
 def approve_corporate_attendees(request, queryset):
@@ -514,11 +643,25 @@ def approve_corporate_attendees(request, queryset):
             if payment_status.status not in ['completed', 'paid']:
                 payment_status.status = 'unpaid'
             payment_status.save()
-            send_consolidated_email(request, participant, password, include_password)
+            send_corporate_attendee_approval_email(
+                participant,
+                event,
+                attendee.registration.corporate_account,
+                payable_amount,
+                password,
+                include_password
+            )
         else:
             payment_status.status = 'completed'
             payment_status.save()
-            send_free_event_confirmation_email(participant, event, password, include_password)
+            send_corporate_attendee_approval_email(
+                participant,
+                event,
+                attendee.registration.corporate_account,
+                payable_amount,
+                password,
+                include_password
+            )
 
         attendee.participant = participant
         attendee.review_status = 'approved'

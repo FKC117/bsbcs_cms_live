@@ -39,6 +39,10 @@ urlpatterns = [
     path('corporate/dashboard/', views.corporate_dashboard, name='corporate_dashboard'),
     path('corporate/events/<int:event_id>/registration/', views.corporate_event_registration, name='corporate_event_registration'),
     path('corporate/events/<int:event_id>/template.csv', views.corporate_event_template_csv, name='corporate_event_template_csv'),
+    path('corporate/payments/<int:payment_id>/', views.corporate_payment, name='corporate_payment'),
+    path('corporate/payments/<int:payment_id>/success/', views.corporate_payment_success, name='corporate_payment_success'),
+    path('corporate/payments/<int:payment_id>/finalize/', views.corporate_finalize_payment, name='corporate_finalize_payment'),
+    path('corporate/payments/<int:payment_id>/failure/', views.corporate_payment_failure, name='corporate_payment_failure'),
     path('event/', include(('registration.urls', 'registration'), namespace='registration')),
 
     path('profile/', views.user_profile, name='user_profile'),

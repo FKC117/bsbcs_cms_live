@@ -180,6 +180,38 @@ class CorporateEventAttendee(models.Model):
         ordering = ['name']
 
 
+class CorporatePayment(models.Model):
+    STATUS_CHOICES = [
+        ('unpaid', 'Unpaid'),
+        ('initiated', 'Initiated'),
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('paid', 'Paid'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    corporate_registration = models.ForeignKey(CorporateEventRegistration, on_delete=models.CASCADE, related_name='corporate_payments')
+    corporate_account = models.ForeignKey(CorporateAccount, on_delete=models.CASCADE, related_name='corporate_payments')
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='corporate_payments')
+    attendees = models.ManyToManyField(CorporateEventAttendee, blank=True, related_name='corporate_payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    merchant_invoice_number = models.CharField(max_length=255, unique=True)
+    transaction_id = models.CharField(max_length=255, blank=True, null=True)
+    trxID = models.CharField(max_length=255, blank=True, null=True)
+    invoice = models.FileField(upload_to='media/corporate_invoices/', blank=True, null=True)
+    email_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.corporate_account.company_name} - {self.event.name} - BDT {self.amount}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
 # Create Event Models START------------------------------------------------------------------------------------#
 
 from django.urls import reverse
