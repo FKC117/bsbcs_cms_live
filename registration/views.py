@@ -133,6 +133,10 @@ def create_profile(request):
         form = UserProfileForm(request.POST)
         if form.is_valid():
             form.save()
+            next_url = request.POST.get('next')
+            if next_url:
+                from urllib.parse import quote
+                return redirect(f'{reverse("login")}?next={quote(next_url)}')
             return redirect('login')
     else:
         form = UserProfileForm()
@@ -691,8 +695,8 @@ def abstract_submission(request, event_id):
     if not request.user.is_authenticated:
         return render(request, 'login_required_message.html', {
             'message': 'You need to log in to submit an abstract. Please log in or create a profile.',
-            'login_url': '/login/',  # Replace with your login URL name or path
-            'signup_url': '/create_profile/'  # Replace with your signup URL name or path
+            'login_url': f'{reverse("login")}?next={request.get_full_path()}',
+            'signup_url': f'{reverse("create_profile")}?next={request.get_full_path()}',
         })
 
     event = get_object_or_404(Event, id=event_id)

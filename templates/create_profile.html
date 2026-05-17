@@ -311,6 +311,9 @@
 
             <form method="POST" action="{% url 'create_profile' %}">
                 {% csrf_token %}
+                {% if request.GET.next %}
+                    <input type="hidden" name="next" value="{{ request.GET.next }}">
+                {% endif %}
 
                 <div class="form-grid">
                     <div class="form-group">
@@ -358,7 +361,7 @@
             </form>
 
             <div class="auth-footer">
-                <span>Already have a profile? <a href="{% url 'login' %}" class="link link-secondary">Login</a></span>
+                <span>Already have a profile? <a href="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}" class="link link-secondary">Login</a></span>
                 <a href="{% url 'index' %}" class="link">Back to Events</a>
             </div>
         </section>

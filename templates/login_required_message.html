@@ -8,13 +8,14 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="min-h-screen flex items-center justify-center bg-gray-900">
-        <div class="bg-white p-8 rounded-lg shadow-md max-w-sm ml-5 mr-5">
+    <div class="min-h-screen flex items-center justify-center bg-gray-900 px-4 py-10">
+        <div class="bg-white p-8 rounded-lg shadow-md max-w-sm w-full">
             <h1 class="text-2xl font-bold text-red-600 mb-4">Attention Required!</h1>
             <p class="text-gray-700">{{ message }}</p><br>
-            <a href="{% url 'login' %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-4 ml-auto text-center">Login</a>
-            <a href="{% url 'create_profile' %}" class="bg-blue-500 text-white py-1 px-4 rounded w-full mt-4 ml-auto text-center">Create Profile</a>
-           
+            <div class="grid gap-3 sm:grid-cols-2">
+                <a href="{{ login_url|default:'/' }}" class="bg-blue-500 text-white py-2 px-4 rounded text-center">Login</a>
+                <a href="{{ signup_url|default:'/' }}" class="bg-blue-500 text-white py-2 px-4 rounded text-center">Create Profile</a>
+            </div>
         </div>
     </div>
 </body>
