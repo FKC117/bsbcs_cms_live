@@ -258,15 +258,101 @@
         <div class="flex flex-wrap justify-center gap-10 mt-8">
             {% for speaker in speakers %}
             <div class="bg-white shadow-lg rounded-lg p-6 flex flex-col items-center">
-                <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}" class="rounded-full w-32 h-32">
+                <button type="button" class="focus:outline-none" onclick="openFeatureSpeakerModal('feature-speaker-{{ speaker.id }}')" aria-label="View {{ speaker.name }} profile">
+                    <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}" class="rounded-full w-32 h-32 object-cover border-4 border-white shadow">
+                </button>
                 <h3 class="mt-4 text-xl font-semibold text-center">{{ speaker.name }}</h3>
                 <p class="mt-2 text-gray-600 text-center">{{ speaker.speciality }}</p>
                 <p class="mt-2 text-gray-600 text-center">{{ speaker.institution }}</p>
+                <button type="button" onclick="openFeatureSpeakerModal('feature-speaker-{{ speaker.id }}')" class="mt-5 rounded-lg border border-pink-200 px-4 py-2 text-sm font-bold text-pink-600 hover:bg-pink-50">
+                    View Profile
+                </button>
+            </div>
+
+            <div id="feature-speaker-{{ speaker.id }}" class="feature-speaker-modal fixed inset-0 hidden items-center justify-center bg-black bg-opacity-70 px-4 py-6" style="z-index: 10000;" onclick="closeFeatureSpeakerModal('feature-speaker-{{ speaker.id }}')">
+                <div class="feature-speaker-panel relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl" onclick="event.stopPropagation()">
+                    <button type="button" onclick="closeFeatureSpeakerModal('feature-speaker-{{ speaker.id }}')" class="absolute right-4 top-4 rounded-full bg-gray-100 px-3 py-2 text-gray-600 hover:bg-gray-200" aria-label="Close speaker profile">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="feature-speaker-body">
+                        <div class="flex flex-col gap-6 p-6 sm:flex-row sm:p-8">
+                            <div class="flex-shrink-0 text-center sm:w-48">
+                                <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}" class="mx-auto h-32 w-32 rounded-2xl object-cover shadow-lg sm:h-40 sm:w-40">
+                                <h3 class="mt-4 text-xl font-bold text-gray-900">{{ speaker.name }}</h3>
+                                <p class="mt-1 text-sm font-bold text-pink-600">{{ speaker.speciality }}</p>
+                                <p class="mt-2 text-sm text-gray-600">{{ speaker.institution }}</p>
+                            </div>
+                            <div class="min-w-0 flex-1 text-left">
+                                <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Speaker Biography</p>
+                                <div class="mt-4 text-sm leading-7 text-gray-700 sm:text-base">
+                                    {{ speaker.biography|linebreaks }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             {% endfor %}
         </div>
     </div>
 </section>
+
+<style>
+    .feature-speaker-panel {
+        max-height: 82vh;
+        overflow: hidden;
+    }
+
+    .feature-speaker-body {
+        max-height: 82vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 640px) {
+        .feature-speaker-modal {
+            padding: 1rem !important;
+        }
+
+        .feature-speaker-panel,
+        .feature-speaker-body {
+            max-height: 74vh;
+        }
+
+        .feature-speaker-body {
+            padding-top: 1.5rem;
+        }
+    }
+</style>
+
+<script>
+    function openFeatureSpeakerModal(id) {
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeFeatureSpeakerModal(id) {
+        const modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function(event) {
+        if (event.key !== 'Escape') return;
+        document.querySelectorAll('.feature-speaker-modal').forEach(function(modal) {
+            if (!modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.body.style.overflow = '';
+            }
+        });
+    });
+</script>
 
 
 {% comment %} home page invitations content {% endcomment %}

@@ -43,6 +43,85 @@
     .animate-slow-zoom {
         animation: slow-zoom 20s linear infinite alternate;
     }
+
+    .speaker-modal-panel {
+        display: flex;
+        flex-direction: column;
+        max-height: min(82vh, 720px);
+        overflow: hidden;
+    }
+
+    .speaker-modal-body {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 640px) {
+        .speaker-modal {
+            align-items: center !important;
+            padding: 1rem !important;
+        }
+
+        .speaker-modal-panel {
+            width: calc(100vw - 2rem) !important;
+            max-height: 68vh;
+            border-radius: 1rem !important;
+        }
+
+        .speaker-modal-body {
+            padding: 0.875rem !important;
+        }
+
+        .speaker-modal-grid {
+            display: block !important;
+        }
+
+        .speaker-modal-aside {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.875rem;
+            padding-right: 2rem;
+        }
+
+        .speaker-modal-aside img {
+            width: 4rem !important;
+            height: 4rem !important;
+            margin: 0 !important;
+            border-radius: 0.875rem !important;
+        }
+
+        .speaker-modal-aside h3 {
+            font-size: 1rem !important;
+            line-height: 1.25 !important;
+            margin-bottom: 0.125rem !important;
+        }
+
+        .speaker-modal-aside p {
+            font-size: 0.8rem !important;
+            margin-bottom: 0 !important;
+        }
+
+        .speaker-modal-close {
+            top: 0.625rem !important;
+            right: 0.625rem !important;
+        }
+
+        .speaker-modal-bio-title {
+            margin-bottom: 0.5rem !important;
+            font-size: 0.7rem !important;
+        }
+
+        .speaker-modal-bio {
+            font-size: 0.875rem !important;
+            line-height: 1.65 !important;
+            text-align: left !important;
+        }
+
+        .speaker-modal-bio p {
+            margin-bottom: 0.75rem !important;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -90,7 +169,7 @@
                 <p class="text-xs uppercase tracking-widest text-pink-100 font-bold mb-1 opacity-80">Date</p>
                 <p class="text-xl font-bold text-white">
                     {% if is_manual %}
-                    {{ event.year }}
+                    {{ event.date_text|default:event.year }}
                     {% else %}
                     {{ event.start_date|date:"d M" }} - {{ event.end_date|date:"d M, Y" }}
                     {% endif %}
@@ -196,28 +275,30 @@
                 <div id="speaker-{{ forloop.counter }}"
                     class="fixed inset-0 hidden items-center justify-center p-4 bg-black/95 backdrop-blur-lg speaker-modal"
                     style="z-index: 10000;">
-                    <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative"
+                    <div class="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative speaker-modal-panel"
                         onclick="event.stopPropagation()">
                         <button onclick="closeSpeakerModal('speaker-{{ forloop.counter }}')"
-                            class="absolute top-6 right-6 text-gray-400 hover:text-pink-600 transition-colors z-20">
+                            class="absolute top-6 right-6 text-gray-400 hover:text-pink-600 transition-colors z-20 speaker-modal-close">
                             <i class="fas fa-times text-2xl"></i>
                         </button>
 
-                        <div class="grid grid-cols-1 md:grid-cols-12 gap-10 p-8 md:p-12">
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-10 p-8 md:p-12 speaker-modal-body speaker-modal-grid">
                             <div class="md:col-span-4">
-                                <div class="md:sticky md:top-0">
+                                <div class="md:sticky md:top-0 speaker-modal-aside">
                                     {% if speaker.image %}
                                     <img src="{{ speaker.image.url }}" alt="{{ speaker.name }}"
                                         class="w-full aspect-square rounded-2xl object-cover shadow-2xl mb-8">
                                     {% endif %}
-                                    <h3 class="text-2xl font-bold text-gray-900 mb-1">{{ speaker.name }}</h3>
-                                    <p class="text-pink-600 font-bold mb-4">{{ speaker.designation }}</p>
+                                    <div>
+                                        <h3 class="text-2xl font-bold text-gray-900 mb-1">{{ speaker.name }}</h3>
+                                        <p class="text-pink-600 font-bold mb-4">{{ speaker.designation }}</p>
+                                    </div>
                                 </div>
                             </div>
                             <div class="md:col-span-8">
-                                <h4 class="text-xs uppercase tracking-[0.2em] text-gray-400 font-black mb-6 text-left">
+                                <h4 class="text-xs uppercase tracking-widest text-gray-400 font-black mb-6 text-left speaker-modal-bio-title">
                                     Expert Biography</h4>
-                                <div class="prose prose-lg text-gray-700 max-w-none text-justify leading-relaxed">
+                                <div class="prose prose-lg text-gray-700 max-w-none text-justify leading-relaxed speaker-modal-bio">
                                     {{ speaker.bio|linebreaks }}
                                 </div>
                             </div>

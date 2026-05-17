@@ -356,8 +356,8 @@
 
         // wire close buttons and ESC
         document.addEventListener('click', (e) => {
-            if (e.target && e.target.id === 'modalCloseTop') closeModal();
-            if (e.target && e.target.id === 'modalCloseBottom') closeModal();
+            const closeButton = e.target.closest ? e.target.closest('#modalCloseTop, #modalCloseBottom') : null;
+            if (closeButton) closeModal();
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
