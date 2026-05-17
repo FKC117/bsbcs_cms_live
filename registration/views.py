@@ -79,6 +79,54 @@ def get_or_create_member_department(event):
     return department
 
 
+def get_existing_registration_context(participant, event):
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+    payable_amount = payment_status.amount if payment_status else participant.get_payable_amount()
+    payable_amount = payable_amount or 0
+
+    context = {
+        'event': event,
+        'participant': participant,
+        'payment_status': payment_status,
+        'payable_amount': payable_amount,
+        'status_title': 'Registration Received',
+        'status_tone': 'info',
+        'message': 'Your registration has already been submitted and is waiting for admin review.',
+        'primary_action_url': reverse('registration:home', kwargs={'event_id': event.pk}),
+        'primary_action_label': 'Back to Event',
+    }
+
+    if participant.denied:
+        context.update({
+            'status_title': 'Registration Not Approved',
+            'status_tone': 'warning',
+            'message': 'Your registration request was not approved. Please contact the event team if you need help.',
+        })
+        return context
+
+    if not participant.approved:
+        return context
+
+    if payable_amount and (not payment_status or payment_status.status not in ['completed', 'paid']):
+        context.update({
+            'status_title': 'Payment Required',
+            'status_tone': 'payment',
+            'message': 'Your event registration has been approved. Please complete the payment to confirm your seat.',
+            'primary_action_url': reverse('registration:payment', kwargs={'event_id': event.pk, 'participant_id': participant.pk}),
+            'primary_action_label': 'Complete Payment',
+            'secondary_action_url': reverse('registration:home', kwargs={'event_id': event.pk}),
+            'secondary_action_label': 'Back to Event',
+        })
+        return context
+
+    context.update({
+        'status_title': 'Registration Confirmed',
+        'status_tone': 'success',
+        'message': 'You are already registered and confirmed for this event. You can attend the program.',
+    })
+    return context
+
+
 # User Profile View STARTS ---------------------------------------------------------------###
 def create_profile(request):
     if request.method == 'POST':
@@ -374,11 +422,7 @@ def registration(request, event_id):
     # Check if the user has already registered for the event
     try:
         participant = Participant.objects.get(user=request.user, event=event)
-        return render(request, 'registration_error.html', {
-            'message': 'You have already submitted your registration or already registered for this event. Please check your email for further details.',
-            'event': event,
-            'participant': participant
-        })
+        return render(request, 'registration_error.html', get_existing_registration_context(participant, event))
     except Participant.DoesNotExist:
         pass  # User has not registered yet, proceed with registration
 
@@ -493,11 +537,7 @@ def member_event_registration(request, event_id):
 
     existing_participant = Participant.objects.filter(user=request.user, event=event).first()
     if existing_participant:
-        return render(request, 'registration_error.html', {
-            'message': 'You have already registered for this event.',
-            'event': event,
-            'participant': existing_participant
-        })
+        return render(request, 'registration_error.html', get_existing_registration_context(existing_participant, event))
 
     department = get_or_create_member_department(event)
     payable_amount = event.member_registration_fee or 0

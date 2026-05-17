@@ -502,13 +502,15 @@ def membership_form(request):
     """
     from django.shortcuts import redirect
     from django.urls import reverse
+    from urllib.parse import quote
     from registration.models import Event as RegistrationEventModel, UserProfile
-    
+    next_path = quote(request.get_full_path())
+
     # Check if user is logged in
     if not request.user.is_authenticated:
         # Redirect to login with next parameter pointing back to membership form
-        return redirect(f'{reverse("login")}?next={reverse("website:membership_form")}')
-    
+        return redirect(f'{reverse("login")}?next={next_path}')
+
     # Check if user has a UserProfile
     try:
         user_profile = UserProfile.objects.get(user=request.user)
@@ -517,7 +519,7 @@ def membership_form(request):
         # Instead of just Sending them to the 'signup' style create_profile, we can send them to
         # an edit/complete profile view that doesn't ask for a new account.
         messages.warning(request, "Please complete your profile details before joining the society.")
-        return redirect(f'{reverse("user_profile")}?next={reverse("website:membership_form")}')
+        return redirect(f'{reverse("user_profile")}?next={next_path}')
 
     event_intent_id = request.POST.get('event_intent') or request.GET.get('event_intent')
     event_intent = None

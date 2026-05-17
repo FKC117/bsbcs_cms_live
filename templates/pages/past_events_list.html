@@ -22,10 +22,14 @@
                 <div class="group bg-surface-light border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all duration-300">
                     <!-- Image Container -->
                     <div class="relative h-48 overflow-hidden">
-                        {% if event.event_logo %}
-                            <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                        {% elif event.event_hero_image %}
+                        {% if event.event_hero_image %}
                             <img src="{{ event.event_hero_image.url }}" alt="{{ event.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif event.event_logo %}
+                            <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif site_settings and site_settings.logo %}
+                            <div class="w-full h-full bg-surface flex items-center justify-center p-8">
+                                <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="max-h-full max-w-full object-contain opacity-90">
+                            </div>
                         {% else %}
                             <div class="w-full h-full bg-surface flex items-center justify-center">
                                 <i class="fas fa-calendar-alt text-4xl text-primary/20"></i>
@@ -69,10 +73,14 @@
                 <div class="group bg-surface-light border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all duration-300">
                     <!-- Image Container -->
                     <div class="relative h-48 overflow-hidden">
-                        {% if event.logo %}
-                            <img src="{{ event.logo.url }}" alt="{{ event.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                        {% elif event.hero_image %}
+                        {% if event.hero_image %}
                             <img src="{{ event.hero_image.url }}" alt="{{ event.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif event.logo %}
+                            <img src="{{ event.logo.url }}" alt="{{ event.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                        {% elif site_settings and site_settings.logo %}
+                            <div class="w-full h-full bg-surface flex items-center justify-center p-8">
+                                <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo" class="max-h-full max-w-full object-contain opacity-90">
+                            </div>
                         {% else %}
                             <div class="w-full h-full bg-surface flex items-center justify-center">
                                 <i class="fas fa-calendar-alt text-4xl text-primary/20"></i>
