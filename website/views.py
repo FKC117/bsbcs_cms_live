@@ -120,6 +120,7 @@ def homepage(request):
         'events': events,
         'call_to_action': call_to_action,
         'navigation_links': navigation_links,
+        'auto_open_membership_modal': True,
     }
     return render(request, 'pages/homepage.html', context)
 

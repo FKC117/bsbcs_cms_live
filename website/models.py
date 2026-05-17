@@ -734,6 +734,10 @@ class MembershipBenefitModal(models.Model):
     primary_button_text = models.CharField(max_length=80, default="Apply for Membership")
     secondary_button_text = models.CharField(max_length=80, default="Maybe Later")
     is_active = models.BooleanField(default=True)
+    show_on_homepage = models.BooleanField(
+        default=False,
+        help_text="Automatically open this modal on the website homepage."
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):

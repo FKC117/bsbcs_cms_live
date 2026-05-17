@@ -87,6 +87,8 @@
     }
     .membership-modal-dialog {
         position: relative;
+        display: flex;
+        flex-direction: column;
         width: min(620px, 100%);
         max-height: min(760px, calc(100vh - 2.5rem));
         overflow: hidden;
@@ -117,9 +119,11 @@
     }
     .membership-modal-image-wrap {
         display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
         align-items: center;
         justify-content: center;
-        max-height: calc(100vh - 9rem);
+        overflow: auto;
         padding: 1rem;
         background: #f5f8fb;
     }
@@ -132,7 +136,8 @@
         object-fit: contain;
     }
     .membership-modal-content {
-        max-height: calc(100vh - 9rem);
+        flex: 1 1 auto;
+        min-height: 0;
         overflow-y: auto;
         padding: 3rem 3rem 1.75rem;
     }
@@ -196,6 +201,7 @@
     }
     .membership-modal-actions {
         display: flex;
+        flex: 0 0 auto;
         gap: 0.75rem;
         padding: 1rem 1.25rem 1.25rem;
         border-top: 1px solid #dce3ec;
@@ -241,7 +247,6 @@
             border-radius: 18px 18px 0 0;
         }
         .membership-modal-image-wrap {
-            max-height: calc(92vh - 5.8rem);
             padding: 0.75rem;
         }
         .membership-modal-image {
@@ -249,7 +254,6 @@
             border-radius: 12px;
         }
         .membership-modal-content {
-            max-height: calc(92vh - 5.8rem);
             padding: 1.65rem 1.15rem 1rem;
         }
         .membership-modal-close {
@@ -273,7 +277,9 @@
         const closers = modal.querySelectorAll('[data-membership-modal-close]');
 
         function openModal(event) {
-            event.preventDefault();
+            if (event) {
+                event.preventDefault();
+            }
             modal.classList.add('is-open');
             modal.setAttribute('aria-hidden', 'false');
             document.body.classList.add('membership-modal-open');
@@ -288,6 +294,9 @@
 
         openers.forEach((opener) => opener.addEventListener('click', openModal));
         closers.forEach((closer) => closer.addEventListener('click', closeModal));
+        {% if auto_open_membership_modal and membership_benefit_modal.show_on_homepage %}
+            window.setTimeout(() => openModal(), 400);
+        {% endif %}
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && modal.classList.contains('is-open')) {
                 closeModal();

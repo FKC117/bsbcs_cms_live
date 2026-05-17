@@ -412,8 +412,8 @@ class MembershipBenefitItemInline(admin.TabularInline):
 
 @admin.register(MembershipBenefitModal)
 class MembershipBenefitModalAdmin(admin.ModelAdmin):
-    list_display = ('title', 'subtitle', 'is_active', 'updated_at')
-    list_editable = ('is_active',)
+    list_display = ('title', 'subtitle', 'is_active', 'show_on_homepage', 'updated_at')
+    list_editable = ('is_active', 'show_on_homepage')
     search_fields = ('title', 'subtitle', 'description')
     inlines = [MembershipBenefitItemInline]
 
