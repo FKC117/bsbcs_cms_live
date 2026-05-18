@@ -40,6 +40,7 @@ urlpatterns = [
     path('corporate/events/<int:event_id>/registration/', views.corporate_event_registration, name='corporate_event_registration'),
     path('corporate/events/<int:event_id>/template.csv', views.corporate_event_template_csv, name='corporate_event_template_csv'),
     path('corporate/payments/<int:payment_id>/', views.corporate_payment, name='corporate_payment'),
+    path('corporate/payments/<int:payment_id>/invoice/', views.corporate_payment_invoice, name='corporate_payment_invoice'),
     path('corporate/payments/<int:payment_id>/success/', views.corporate_payment_success, name='corporate_payment_success'),
     path('corporate/payments/<int:payment_id>/finalize/', views.corporate_finalize_payment, name='corporate_finalize_payment'),
     path('corporate/payments/<int:payment_id>/failure/', views.corporate_payment_failure, name='corporate_payment_failure'),

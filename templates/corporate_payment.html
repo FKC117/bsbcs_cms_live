@@ -104,7 +104,12 @@
         </div>
         <form method="post" class="actions">
             {% csrf_token %}
-            <button type="submit" class="button button-primary">Pay with bKash</button>
+            <a href="{% url 'corporate_payment_invoice' corporate_payment.id %}" class="button button-secondary" target="_blank">View Invoice PDF</a>
+            {% if corporate_payment.status != 'completed' and corporate_payment.status != 'paid' and corporate_payment.amount > 0 %}
+                <button type="submit" class="button button-primary">Pay with bKash</button>
+            {% else %}
+                <span class="button button-secondary">No payment due</span>
+            {% endif %}
             <a href="{% url 'corporate_dashboard' %}" class="button button-secondary">Back to Dashboard</a>
         </form>
     </main>

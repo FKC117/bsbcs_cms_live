@@ -6,10 +6,10 @@ from .models import FeatureSpeaker, Participant, AbstractSubmission, Department,
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 from .resources import ParticipantResource, AbstractSubmissionResource, TimeSlotResource, PaymentStatusResource, RegistrationKitResource
 # SchedulingResource
-from .pdf_utils import generate_abstract_pdf
+from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html
@@ -234,16 +234,19 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
 
     def create_corporate_payment_invoice(self, request, queryset):
         created_count = 0
+        emailed_count = 0
         skipped_count = 0
         for corporate_registration in queryset:
             payment, created, reason = create_corporate_payment_for_registration(corporate_registration)
             if created:
                 created_count += 1
+                if send_corporate_invoice_email(payment, request):
+                    emailed_count += 1
             else:
                 skipped_count += 1
                 if reason:
                     self.message_user(request, f"{corporate_registration}: {reason}", messages.WARNING)
-        self.message_user(request, f'{created_count} corporate invoice(s) created. {skipped_count} skipped.')
+        self.message_user(request, f'{created_count} corporate invoice(s) created. {emailed_count} email(s) sent. {skipped_count} skipped.')
     create_corporate_payment_invoice.short_description = 'Step 3 - Create corporate invoice/payment for approved attendees'  # type: ignore
 
     def save_formset(self, request, form, formset, change):
@@ -318,22 +321,45 @@ class CorporateEventAttendeeAdmin(admin.ModelAdmin):
 
 @admin.register(CorporatePayment)
 class CorporatePaymentAdmin(admin.ModelAdmin):
-    list_display = ('corporate_account', 'event', 'amount', 'status', 'merchant_invoice_number', 'transaction_id', 'trxID', 'created_at')
+    list_display = ('corporate_account', 'event', 'amount', 'status', 'merchant_invoice_number', 'invoice_link', 'transaction_id', 'trxID', 'created_at')
     list_filter = ('status', 'event', 'created_at')
     search_fields = ('corporate_account__company_name', 'event__name', 'merchant_invoice_number', 'transaction_id', 'trxID')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('invoice_link', 'created_at', 'updated_at')
     filter_horizontal = ('attendees',)
+    actions = ['regenerate_invoice_pdf', 'send_invoice_email_to_corporate']
     fieldsets = (
         ('Step 4 - Corporate invoice/payment', {
             'fields': ('corporate_registration', 'corporate_account', 'event', 'attendees', 'amount', 'status')
         }),
         ('bKash/payment tracking', {
-            'fields': ('merchant_invoice_number', 'transaction_id', 'trxID', 'invoice', 'email_sent')
+            'fields': ('merchant_invoice_number', 'transaction_id', 'trxID', 'invoice', 'invoice_link', 'email_sent')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at')
         }),
     )
+
+    def invoice_link(self, obj):
+        if obj and obj.invoice:
+            return format_html('<a href="{}" target="_blank">View invoice PDF</a>', obj.invoice.url)
+        return 'Invoice PDF not generated yet'
+    invoice_link.short_description = 'Invoice PDF'  # type: ignore
+
+    def regenerate_invoice_pdf(self, request, queryset):
+        generated = 0
+        for corporate_payment in queryset.prefetch_related('attendees'):
+            generate_corporate_invoice(corporate_payment)
+            generated += 1
+        self.message_user(request, f'{generated} corporate invoice PDF(s) generated.')
+    regenerate_invoice_pdf.short_description = 'Regenerate corporate invoice PDF'  # type: ignore
+
+    def send_invoice_email_to_corporate(self, request, queryset):
+        sent = 0
+        for corporate_payment in queryset.select_related('corporate_registration', 'corporate_account', 'event').prefetch_related('attendees'):
+            if send_corporate_invoice_email(corporate_payment, request):
+                sent += 1
+        self.message_user(request, f'{sent} corporate invoice email(s) sent.')
+    send_invoice_email_to_corporate.short_description = 'Send corporate invoice email'  # type: ignore
 # Register your models here.
 class InvitationAdmin(admin.ModelAdmin):
     list_display = ('name', 'event')
@@ -574,7 +600,79 @@ def create_corporate_payment_for_registration(corporate_registration):
             event=corporate_registration.event,
         ).update(status='completed')
 
+    generate_corporate_invoice(corporate_payment)
     return corporate_payment, True, ''
+
+
+def send_corporate_invoice_email(corporate_payment, request=None):
+    corporate_registration = corporate_payment.corporate_registration
+    account = corporate_payment.corporate_account
+    event = corporate_payment.event
+    attendees = CorporateEventAttendee.objects.filter(registration=corporate_registration)
+    total_count = attendees.count()
+    approved_count = attendees.filter(review_status='approved').count()
+    denied_count = attendees.filter(review_status='denied').count()
+    pending_count = attendees.filter(review_status='pending').count()
+    invoiced_count = corporate_payment.attendees.count()
+
+    invoice_path = None
+    if not corporate_payment.invoice:
+        invoice_path = generate_corporate_invoice(corporate_payment)
+    else:
+        try:
+            invoice_path = corporate_payment.invoice.path
+        except Exception:
+            invoice_path = generate_corporate_invoice(corporate_payment)
+
+    payment_url = ''
+    invoice_url = ''
+    if request:
+        payment_url = request.build_absolute_uri(reverse('corporate_payment', kwargs={'payment_id': corporate_payment.id}))
+        invoice_url = request.build_absolute_uri(reverse('corporate_payment_invoice', kwargs={'payment_id': corporate_payment.id}))
+
+    subject = f"Corporate invoice for {event.name} {event.year}"
+    due_text = (
+        f"Total payable: BDT {corporate_payment.amount}\n"
+        f"Payment status: {corporate_payment.get_status_display()}\n"
+    )
+    if corporate_payment.amount and corporate_payment.amount > 0:
+        due_text += f"Payment link: {payment_url or 'Please log in to the corporate dashboard to complete payment.'}\n"
+    else:
+        due_text += "No payment is due for this invoice.\n"
+
+    message = (
+        f"Dear {account.contact_name},\n\n"
+        f"BSBCS has reviewed the attendee list submitted by {account.company_name} for {event.name} {event.year}.\n\n"
+        "Review summary:\n"
+        f"Total submitted: {total_count}\n"
+        f"Approved: {approved_count}\n"
+        f"Denied: {denied_count}\n"
+        f"Pending review: {pending_count}\n"
+        f"Included in this invoice: {invoiced_count}\n\n"
+        f"Invoice number: {corporate_payment.merchant_invoice_number}\n"
+        f"{due_text}"
+        f"{'Invoice link: ' + invoice_url + chr(10) if invoice_url else ''}\n"
+        "The invoice PDF is attached for your records.\n\n"
+        "Regards,\n"
+        "BSBCS Team"
+    )
+
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[account.email],
+    )
+    if invoice_path and os.path.exists(invoice_path):
+        email.attach_file(invoice_path)
+
+    try:
+        email.send()
+        corporate_payment.email_sent = True
+        corporate_payment.save(update_fields=['email_sent', 'updated_at'])
+        return True
+    except Exception:
+        return False
 
 
 def approve_corporate_attendees(request, queryset):

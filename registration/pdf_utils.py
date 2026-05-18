@@ -136,6 +136,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, inch
 from reportlab.platypus import Table, TableStyle
 from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.enums import TA_RIGHT
 
 def generate_invoice(participant, event, payment_status):
     invoice_amount = payment_status.amount or 0
@@ -242,3 +245,223 @@ def generate_invoice(participant, event, payment_status):
     return file_path
 
 # Invoice Generation End ----------------------------------------------------------------
+
+
+def _format_bdt(amount):
+    amount = amount or 0
+    return f"BDT {float(amount):,.2f}"
+
+
+def _get_site_invoice_logo_path():
+    try:
+        from website.models import SiteSettings
+
+        site_settings = SiteSettings.objects.first()
+        if not site_settings:
+            return None
+        logo = site_settings.membership_invoice_logo or site_settings.logo
+        if logo and os.path.exists(logo.path):
+            return logo.path
+    except Exception:
+        return None
+    return None
+
+
+def generate_corporate_invoice(corporate_payment):
+    event = corporate_payment.event
+    account = corporate_payment.corporate_account
+    is_paid = corporate_payment.status in ['completed', 'paid']
+    payment_label = 'PAID' if is_paid else 'UNPAID'
+    status_color = colors.HexColor('#15803d') if is_paid else colors.HexColor('#b45309')
+    status_background = colors.HexColor('#dcfce7') if is_paid else colors.HexColor('#fef3c7')
+    file_name = f"corporate_invoice_{corporate_payment.id}.pdf"
+    invoices_dir = os.path.join(settings.MEDIA_ROOT, 'media', 'corporate_invoices')
+    os.makedirs(invoices_dir, exist_ok=True)
+    file_path = os.path.join(invoices_dir, file_name)
+
+    doc = SimpleDocTemplate(
+        file_path,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=42,
+        bottomMargin=42,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name='InvoiceTitle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=20,
+        leading=24,
+        spaceAfter=12,
+        textColor=colors.HexColor('#102033'),
+    ))
+    styles.add(ParagraphStyle(
+        name='BrandName',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        leading=17,
+        textColor=colors.HexColor('#1565c0'),
+    ))
+    styles.add(ParagraphStyle(
+        name='SmallMuted',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#5f6b7a'),
+    ))
+    styles.add(ParagraphStyle(
+        name='RightTotal',
+        parent=styles['Normal'],
+        alignment=TA_RIGHT,
+        fontName='Helvetica-Bold',
+        fontSize=13,
+        leading=16,
+        textColor=colors.HexColor('#102033'),
+    ))
+    status_style = ParagraphStyle(
+        name='CorporateInvoiceStatus',
+        parent=styles['Normal'],
+        alignment=1,
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=13,
+        textColor=status_color,
+    )
+
+    logo_path = _get_site_invoice_logo_path()
+    brand_cell = Paragraph("<b>BSBCS</b><br/><font size='9'>Bangladesh Society For Breast Cancer Study</font>", styles['BrandName'])
+    if logo_path:
+        logo_image = Image(logo_path, width=0.75 * inch, height=0.75 * inch)
+        brand_cell = Table([[logo_image, brand_cell]], colWidths=[58, 210])
+        brand_cell.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+
+    status_badge = Table(
+        [[Paragraph(payment_label, status_style)]],
+        colWidths=[92],
+        rowHeights=[28],
+    )
+    status_badge.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), status_background),
+        ('TEXTCOLOR', (0, 0), (-1, -1), status_color),
+        ('BOX', (0, 0), (-1, -1), 0.75, status_color),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+
+    header_table = Table([
+        [
+            brand_cell,
+            Paragraph(
+                f"<b>Corporate Invoice</b><br/>"
+                f"<font size='9'>Invoice: {corporate_payment.merchant_invoice_number}</font><br/>"
+                f"<font size='9'>System status: {corporate_payment.get_status_display()}</font>",
+                styles['Normal'],
+            ),
+            status_badge,
+        ]
+    ], colWidths=[270, 150, 100])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEBELOW', (0, 0), (-1, -1), 1, colors.HexColor('#dce3ec')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+    ]))
+
+    elements = [
+        header_table,
+        Spacer(1, 18),
+        Paragraph("Corporate Event Registration Invoice", styles['InvoiceTitle']),
+        Spacer(1, 4),
+    ]
+
+    info_data = [
+        [
+            Paragraph(
+                f"<b>Bill To</b><br/>{account.company_name}<br/>{account.contact_name}<br/>{account.email}<br/>{account.phone}",
+                styles['Normal']
+            ),
+            Paragraph(
+                f"<b>Event</b><br/>{event.name} {event.year}<br/>"
+                f"{event.start_date.strftime('%B %d, %Y') if event.start_date else ''}<br/>"
+                f"{event.location or ''}",
+                styles['Normal']
+            ),
+        ]
+    ]
+    info_table = Table(info_data, colWidths=[250, 250])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#dce3ec')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.75, colors.HexColor('#dce3ec')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+    ]))
+    elements.extend([info_table, Spacer(1, 18)])
+
+    attendee_rows = [[
+        Paragraph("<b>Attendee</b>", styles['SmallMuted']),
+        Paragraph("<b>Contact</b>", styles['SmallMuted']),
+        Paragraph("<b>Fee category</b>", styles['SmallMuted']),
+        Paragraph("<b>Amount</b>", styles['SmallMuted']),
+    ]]
+    attendees = corporate_payment.attendees.select_related('participant', 'matched_user').all()
+    for attendee in attendees:
+        amount = attendee.participant.get_payable_amount() if attendee.participant else 0
+        attendee_rows.append([
+            Paragraph(attendee.name or "-", styles['Normal']),
+            Paragraph(f"{attendee.email}<br/>{attendee.phone}", styles['SmallMuted']),
+            Paragraph(attendee.applied_fee_label, styles['SmallMuted']),
+            Paragraph(_format_bdt(amount), styles['SmallMuted']),
+        ])
+
+    if len(attendee_rows) == 1:
+        attendee_rows.append([
+            Paragraph("Corporate event registration", styles['Normal']),
+            Paragraph("-", styles['SmallMuted']),
+            Paragraph("Summary invoice", styles['SmallMuted']),
+            Paragraph(_format_bdt(corporate_payment.amount), styles['SmallMuted']),
+        ])
+
+    attendee_table = Table(attendee_rows, colWidths=[160, 150, 130, 80], repeatRows=1)
+    attendee_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#dce3ec')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e8edf4')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.extend([
+        attendee_table,
+        Spacer(1, 16),
+        Paragraph(f"Total payable: {_format_bdt(corporate_payment.amount)}", styles['RightTotal']),
+        Spacer(1, 24),
+        Paragraph("This is a computer-generated invoice and does not need any signature.", styles['SmallMuted']),
+    ])
+
+    doc.build(elements)
+    corporate_payment.invoice.name = f"media/corporate_invoices/{file_name}"
+    corporate_payment.save(update_fields=['invoice', 'updated_at'])
+    return file_path

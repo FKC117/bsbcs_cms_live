@@ -132,6 +132,12 @@
             gap: 12px;
             margin-top: 18px;
         }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
         .button {
             display: inline-flex;
             align-items: center;
@@ -237,6 +243,14 @@
             .event-row .button {
                 width: 100%;
                 margin-top: 12px;
+            }
+            .button-group {
+                display: grid;
+                justify-content: stretch;
+                margin-top: 12px;
+            }
+            .button-group .button {
+                margin-top: 0;
             }
             h1 {
                 font-size: 27px;
@@ -347,11 +361,14 @@
                                         <strong>{{ payment.event.name }} {{ payment.event.year }}</strong>
                                         <small>Invoice {{ payment.merchant_invoice_number }} - BDT {{ payment.amount }} - {{ payment.get_status_display }}</small>
                                     </span>
-                                    {% if payment.status != 'completed' and payment.status != 'paid' %}
-                                        <a href="{% url 'corporate_payment' payment.id %}" class="button button-primary">Pay Invoice</a>
-                                    {% else %}
-                                        <span class="button button-secondary">Paid</span>
-                                    {% endif %}
+                                    <span class="button-group">
+                                        <a href="{% url 'corporate_payment_invoice' payment.id %}" class="button button-secondary" target="_blank">View Invoice</a>
+                                        {% if payment.status != 'completed' and payment.status != 'paid' %}
+                                            <a href="{% url 'corporate_payment' payment.id %}" class="button button-primary">Pay Invoice</a>
+                                        {% else %}
+                                            <span class="button button-secondary">Paid</span>
+                                        {% endif %}
+                                    </span>
                                 </div>
                             {% endfor %}
                         </div>

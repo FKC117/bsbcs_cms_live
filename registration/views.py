@@ -13,7 +13,7 @@ import json
 import logging
 import csv
 import io
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db import transaction
 
@@ -1511,7 +1511,7 @@ import logging
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from registration.pdf_utils import generate_invoice
+from registration.pdf_utils import generate_corporate_invoice, generate_invoice
 @login_required
 def finalize_payment(request, event_id, participant_id):
     try:
@@ -1631,6 +1631,7 @@ def complete_corporate_payment(corporate_payment, execute_response):
     corporate_payment.transaction_id = execute_response.get('paymentID')
     corporate_payment.trxID = execute_response.get('trxID')
     corporate_payment.save()
+    generate_corporate_invoice(corporate_payment)
 
     for attendee in corporate_payment.attendees.select_related('participant').all():
         if not attendee.participant:
@@ -1680,6 +1681,7 @@ def corporate_payment(request, payment_id):
                 corporate_payment.status = 'initiated'
                 corporate_payment.merchant_invoice_number = merchant_invoice_number
                 corporate_payment.save(update_fields=['status', 'merchant_invoice_number', 'updated_at'])
+                generate_corporate_invoice(corporate_payment)
                 return redirect(payment_response["bkashURL"])
 
             messages.error(request, f"Payment failed: {payment_response.get('statusMessage') if payment_response else 'Unable to create payment.'}")
@@ -1693,6 +1695,29 @@ def corporate_payment(request, payment_id):
         'corporate_payment': corporate_payment,
         'event': corporate_payment.event,
     })
+
+
+@login_required
+def corporate_payment_invoice(request, payment_id):
+    corporate_payment = get_object_or_404(
+        CorporatePayment.objects.select_related('corporate_account', 'event').prefetch_related('attendees'),
+        id=payment_id,
+        corporate_account__user=request.user,
+    )
+    if not corporate_payment.invoice:
+        generate_corporate_invoice(corporate_payment)
+    try:
+        invoice_file = corporate_payment.invoice.open('rb')
+    except FileNotFoundError as exc:
+        generate_corporate_invoice(corporate_payment)
+        try:
+            invoice_file = corporate_payment.invoice.open('rb')
+        except FileNotFoundError as retry_exc:
+            raise Http404("Invoice PDF could not be generated.") from retry_exc
+
+    response = FileResponse(invoice_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="corporate_invoice_{corporate_payment.id}.pdf"'
+    return response
 
 
 @login_required
