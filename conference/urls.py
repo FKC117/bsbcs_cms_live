@@ -27,6 +27,7 @@ sitemaps = {
 
 
 urlpatterns = [
+    path('admin/workflow-guide/', views.admin_workflow_guide, name='admin_workflow_guide'),
     path('admin/', admin.site.urls),
     path('dashboard/', global_dashboard, name='global_dashboard'),
     path('', include(('website.urls', 'website'), namespace='website')),

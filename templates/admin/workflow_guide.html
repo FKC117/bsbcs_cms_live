@@ -1,0 +1,682 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Admin Step Guide | {{ site_title|default:_("Django site admin") }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; Admin Step Guide
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .admin-guide {
+        max-width: 1260px;
+        display: grid;
+        gap: 16px;
+    }
+    .guide-hero,
+    .guide-section {
+        border: 1px solid var(--hairline-color, #ddd);
+        border-radius: 8px;
+        background: var(--body-bg, #fff);
+        padding: 18px;
+    }
+    .guide-hero h1 {
+        margin: 0 0 8px;
+        font-size: 26px;
+    }
+    .guide-hero p {
+        margin: 0;
+        line-height: 1.55;
+    }
+    .guide-nav {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 8px;
+    }
+    .guide-nav a {
+        border: 1px solid var(--hairline-color, #ddd);
+        border-radius: 8px;
+        background: var(--darkened-bg, #f8f8f8);
+        padding: 10px 12px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .guide-section h2 {
+        margin: 0 0 12px;
+        border-bottom: 1px solid var(--hairline-color, #ddd);
+        padding-bottom: 10px;
+        font-size: 20px;
+    }
+    .guide-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        gap: 12px;
+    }
+    .step-card {
+        border: 1px solid var(--hairline-color, #ddd);
+        border-radius: 8px;
+        background: var(--darkened-bg, #f8f8f8);
+        padding: 14px;
+    }
+    .step-card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+    }
+    .path {
+        display: inline-block;
+        margin-bottom: 8px;
+        color: var(--body-quiet-color, #666);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .step-card ol,
+    .step-card ul {
+        margin: 0;
+        padding-left: 22px;
+    }
+    .step-card li {
+        margin: 6px 0;
+        line-height: 1.48;
+    }
+    .choice {
+        margin-top: 8px;
+        border-left: 4px solid var(--primary, #79aec8);
+        background: var(--body-bg, #fff);
+        padding: 9px 10px;
+        line-height: 1.5;
+    }
+    .choice strong {
+        display: inline-block;
+        min-width: 86px;
+    }
+    code {
+        border: 1px solid var(--hairline-color, #ddd);
+        border-radius: 4px;
+        background: var(--body-bg, #fff);
+        padding: 1px 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-guide">
+    <section class="guide-hero">
+        <h1>BSBCS Admin Step Guide</h1>
+        <p>Detailed staff guide for daily admin actions. Each card says where to go, what to click, which fields/ticks to set, and what happens after saving.</p>
+    </section>
+
+    <nav class="guide-nav" aria-label="Admin guide sections">
+        <a href="#events">Create Events</a>
+        <a href="#members">Membership</a>
+        <a href="#participants">Participants</a>
+        <a href="#corporate">Corporate</a>
+        <a href="#payments">Payments</a>
+        <a href="#abstracts">Abstracts</a>
+        <a href="#program">Program Content</a>
+        <a href="#website">Website Content</a>
+        <a href="#emails">Emails and Post Event</a>
+        <a href="#deployment">Deployment</a>
+    </nav>
+
+    <section class="guide-section" id="events">
+        <h2>Create and Configure Events</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Admin Home > Registration > Events > Add event</span>
+                <h3>Create a Basic Event</h3>
+                <ol>
+                    <li>Go to <strong>Registration > Events</strong>.</li>
+                    <li>Click <strong>Add event</strong>.</li>
+                    <li>Enter <strong>Name</strong>, <strong>Year</strong>, <strong>Slug</strong> if required, <strong>Start date</strong>, <strong>End date</strong>, and <strong>Location</strong>.</li>
+                    <li>Add <strong>Slogan</strong>, <strong>Description</strong>, keywords, and SEO fields if available.</li>
+                    <li>Upload <strong>Event logo</strong>. This is used as fallback if hero image is missing.</li>
+                    <li>Upload <strong>Event hero image</strong>. This is used in event cards/archive cards first.</li>
+                    <li>Set <strong>Event status</strong> to active/upcoming/open according to current event state.</li>
+                    <li>Set <strong>Registration</strong> open if users should register now; set closed if not ready.</li>
+                    <li>Click <strong>Save</strong>.</li>
+                    <li>Open the public event page and confirm title, date, images, and buttons are correct.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Events > Open event</span>
+                <h3>Set Regular Registration Fee</h3>
+                <ol>
+                    <li>Open the event from <strong>Registration > Events</strong>.</li>
+                    <li>Find the payment/amount section.</li>
+                    <li>If the event is paid, set <strong>Payment required</strong> to true/checked.</li>
+                    <li>Enter the normal attendee fee in <strong>Amount</strong>.</li>
+                    <li>If the event is free for everyone, set <strong>Payment required</strong> false/unchecked or set amount to <code>0</code>.</li>
+                    <li>Click <strong>Save</strong>.</li>
+                </ol>
+                <div class="choice"><strong>Paid:</strong> users need approval and payment before final confirmation.</div>
+                <div class="choice"><strong>Free:</strong> users still need approval, but payment record should become BDT 0/completed.</div>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Events > Open event</span>
+                <h3>Allow Members to Join Free or With Discount</h3>
+                <ol>
+                    <li>Open the event.</li>
+                    <li>Find the member registration fields.</li>
+                    <li>If members should attend free, turn on the member-free setting or set <strong>Member registration fee</strong> to <code>0</code>.</li>
+                    <li>If members should pay less, enter the reduced amount in <strong>Member registration fee</strong>.</li>
+                    <li>If members should pay the same as regular users, leave member fee blank or same as regular fee according to policy.</li>
+                    <li>Save the event.</li>
+                    <li>Test with an active member account and a non-member account.</li>
+                </ol>
+                <div class="choice"><strong>Free:</strong> active member sees free member registration.</div>
+                <div class="choice"><strong>Discount:</strong> active member sees member fee and pays after approval.</div>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Events > Open event</span>
+                <h3>Make an Event Members Only</h3>
+                <ol>
+                    <li>Open the event.</li>
+                    <li>Find <strong>Registration audience</strong> or equivalent member-audience field.</li>
+                    <li>Select <strong>Members only</strong> if only approved active members can register.</li>
+                    <li>Set member fee/free setting as needed.</li>
+                    <li>Save.</li>
+                    <li>Test as non-member: regular form should not open; user should be guided to membership.</li>
+                    <li>Test as active member: member registration should be available.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Events > Open event</span>
+                <h3>Close Registration or Abstract Submission</h3>
+                <ol>
+                    <li>Open the event.</li>
+                    <li>To stop event registration, set <strong>Registration</strong> to closed/off.</li>
+                    <li>To stop abstracts, turn off the publication/abstract tab or related visibility field.</li>
+                    <li>Set event status to closed/completed when the event is over.</li>
+                    <li>Save.</li>
+                    <li>Check public event menu: closed actions should not appear.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="members">
+        <h2>Membership Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Website > Membership Types > Add membership type</span>
+                <h3>Create Membership Type</h3>
+                <ol>
+                    <li>Go to <strong>Website > Membership Types</strong>.</li>
+                    <li>Click <strong>Add membership type</strong>.</li>
+                    <li>Enter name, slug, description, amount, and duration years.</li>
+                    <li>If it is lifetime membership, tick <strong>Is lifetime</strong>.</li>
+                    <li>Tick <strong>Is active</strong> if users should be able to select it.</li>
+                    <li>Set order if you want a specific display order.</li>
+                    <li>Save.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Members</span>
+                <h3>Approve a Membership Application</h3>
+                <ol>
+                    <li>Go to <strong>Website > Members</strong>.</li>
+                    <li>Filter/search pending applications.</li>
+                    <li>Open the member record.</li>
+                    <li>Review user, profile details, institution, position, bio, image, specialties, and membership type.</li>
+                    <li>If accepted, set approval status to approved and active member to true/checked.</li>
+                    <li>If rejected, set approval status to denied/rejected and keep active member false.</li>
+                    <li>If membership expiry is known, set valid-until/expiry date.</li>
+                    <li>If expiry is unknown, leave it blank; frontend should show a friendly message.</li>
+                    <li>Save.</li>
+                </ol>
+                <div class="choice"><strong>Approve:</strong> user gets active member benefits.</div>
+                <div class="choice"><strong>Deny:</strong> user stays normal user, not member.</div>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Membership Payments</span>
+                <h3>Check Membership Payment</h3>
+                <ol>
+                    <li>Go to <strong>Website > Membership Payments</strong>.</li>
+                    <li>Search by member, user, invoice, or transaction ID.</li>
+                    <li>Open the payment record.</li>
+                    <li>Check amount, status, payment ID, trxID, invoice, and email state.</li>
+                    <li>If payment is completed but member is not active, open the related member and activate after confirming payment.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Membership Benefit Modals / Membership Benefit Items</span>
+                <h3>Create Membership Benefits Modal</h3>
+                <ol>
+                    <li>Go to <strong>Membership Benefit Modals</strong>.</li>
+                    <li>Enter heading, subheading, and CTA text if using text modal.</li>
+                    <li>Add benefit rows from <strong>Membership Benefit Items</strong>.</li>
+                    <li>If client provides one designed image, upload it in the modal image field.</li>
+                    <li>If image exists, system shows image modal only.</li>
+                    <li>If no image exists, system shows heading/subheading/items.</li>
+                    <li>If nothing exists, modal does not show.</li>
+                    <li>Tick <strong>Show on homepage</strong> if it should appear on homepage.</li>
+                    <li>Save and check homepage/member pages.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="participants">
+        <h2>Participant Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Participants</span>
+                <h3>Approve or Deny Participant</h3>
+                <ol>
+                    <li>Go to <strong>Registration > Participants</strong>.</li>
+                    <li>Filter by event or search name/email/phone.</li>
+                    <li>Open the participant.</li>
+                    <li>Review participant details and registration type.</li>
+                    <li>If accepted, mark <strong>Approved</strong> true/checked and <strong>Denied</strong> false/unchecked.</li>
+                    <li>If rejected, mark <strong>Denied</strong> true/checked and <strong>Approved</strong> false/unchecked.</li>
+                    <li>Save.</li>
+                    <li>For paid event, confirm a payment status exists and payment email/page is available.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Participants / Payment Statuses</span>
+                <h3>Handle Already Registered User</h3>
+                <ol>
+                    <li>Search participant by event and email/phone.</li>
+                    <li>If participant exists and is pending, tell user it is under review.</li>
+                    <li>If participant is approved but payment status is unpaid, tell user to complete payment.</li>
+                    <li>If participant is approved and payment completed/zero, tell user registration is already confirmed.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Registration Kits</span>
+                <h3>Issue Registration Kit</h3>
+                <ol>
+                    <li>Go to <strong>Registration Kits</strong>.</li>
+                    <li>Search participant/event.</li>
+                    <li>Confirm participant is approved and paid/free completed.</li>
+                    <li>Set kit issued status/date.</li>
+                    <li>Save or export list for event desk.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="corporate">
+        <h2>Corporate Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Corporate Account Requests</span>
+                <h3>Approve Corporate Access</h3>
+                <ol>
+                    <li>Go to <strong>Corporate Account Requests</strong>.</li>
+                    <li>Open the request.</li>
+                    <li>Review company, contact person, designation, email, phone, and notes.</li>
+                    <li>If accepted, set status to approved and save.</li>
+                    <li>If rejected, set status to rejected/denied and save.</li>
+                    <li>On approval, system creates or links a user and creates corporate account.</li>
+                    <li>System sends approval email with corporate login instructions.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Corporate Accounts</span>
+                <h3>Manage Corporate Account</h3>
+                <ol>
+                    <li>Go to <strong>Corporate Accounts</strong>.</li>
+                    <li>Open the company account.</li>
+                    <li>Check linked user, company name, contact email, and phone.</li>
+                    <li>If company should access dashboard, keep status approved/active.</li>
+                    <li>If company should not access dashboard, change status to inactive/disabled according to available choices.</li>
+                    <li>Save.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Corporate Event Registrations</span>
+                <h3>Review Uploaded Corporate List</h3>
+                <ol>
+                    <li>Go to <strong>Corporate Event Registrations</strong>.</li>
+                    <li>Open the event registration submitted by the company.</li>
+                    <li>Review attendee inline rows.</li>
+                    <li>Check each row for matched user, matched member, duplicate/conflict notes, fee category, and review status.</li>
+                    <li>If all pending attendees are acceptable, go back to list page, select this corporate registration, and choose action <strong>Step 2 - Approve all pending attendees and email participants</strong>.</li>
+                    <li>If only some are acceptable, open each attendee or use <strong>Corporate Event Attendees</strong> to approve/deny individually.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Corporate Event Attendees</span>
+                <h3>Approve or Deny One/Few Corporate Attendees</h3>
+                <ol>
+                    <li>Go to <strong>Corporate Event Attendees</strong>.</li>
+                    <li>Filter by event and pending status.</li>
+                    <li>Select attendee rows.</li>
+                    <li>If accepted, choose action <strong>Step 2 - Approve selected attendees and email participants</strong>.</li>
+                    <li>If rejected, choose action <strong>Deny selected attendees</strong>.</li>
+                    <li>Approved attendees become normal participants and receive participant confirmation.</li>
+                    <li>Denied attendees remain excluded from invoice/payment.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Corporate Event Registrations</span>
+                <h3>Create Corporate Invoice After Approval</h3>
+                <ol>
+                    <li>After approving all or some attendees, return to <strong>Corporate Event Registrations</strong>.</li>
+                    <li>Select the corporate registration row.</li>
+                    <li>Choose action <strong>Step 3 - Create corporate invoice/payment for approved attendees</strong>.</li>
+                    <li>System creates corporate payment for approved attendees not already invoiced.</li>
+                    <li>System generates PDF invoice with approved attendee list.</li>
+                    <li>System emails corporate contact with total submitted, approved, denied, pending, included in invoice, amount, payment link, and attached PDF.</li>
+                </ol>
+                <div class="choice"><strong>Mixed list:</strong> approved rows are invoiced; denied rows are excluded; pending rows wait for later review.</div>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Corporate Payments</span>
+                <h3>Resend or Regenerate Corporate Invoice</h3>
+                <ol>
+                    <li>Go to <strong>Corporate Payments</strong>.</li>
+                    <li>Select the payment record.</li>
+                    <li>Choose <strong>Regenerate corporate invoice PDF</strong> if PDF needs update.</li>
+                    <li>Choose <strong>Send corporate invoice email</strong> if company needs the email again.</li>
+                    <li>Open the payment record to view invoice link, status, amount, transaction ID, and attendees.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="payments">
+        <h2>Payment Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Payment Statuses</span>
+                <h3>Check Individual Event Payment</h3>
+                <ol>
+                    <li>Go to <strong>Payment Statuses</strong>.</li>
+                    <li>Search by participant name/email, event, merchant invoice number, transaction ID, or trxID.</li>
+                    <li>Open payment record.</li>
+                    <li>Check amount and status.</li>
+                    <li>If status is unpaid, user still needs payment.</li>
+                    <li>If status is completed/paid, user is financially confirmed.</li>
+                    <li>If status is failed, user must retry payment.</li>
+                    <li>Open invoice file if available.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Bkash Data</span>
+                <h3>Audit bKash Data Before Manual Correction</h3>
+                <ol>
+                    <li>Go to <strong>Bkash Data</strong>.</li>
+                    <li>Search by merchant invoice number, payment ID, or trxID.</li>
+                    <li>Compare amount and transaction status with Payment Status/Corporate Payment.</li>
+                    <li>If bKash says success but app status is wrong, then consider manual correction.</li>
+                    <li>Never manually mark paid without matching bKash evidence.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Pending Payment Reminders</span>
+                <h3>Send/Track Payment Reminder</h3>
+                <ol>
+                    <li>Go to <strong>Pending Payment Reminders</strong>.</li>
+                    <li>Find unpaid participant/payment target.</li>
+                    <li>Check reminder status and last sent date.</li>
+                    <li>Send reminder only according to event/client policy.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="abstracts">
+        <h2>Abstract Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Abstract Submissions</span>
+                <h3>Approve Abstract for Presentation or Poster</h3>
+                <ol>
+                    <li>Go to <strong>Abstract Submissions</strong>.</li>
+                    <li>Filter by event.</li>
+                    <li>Open the abstract.</li>
+                    <li>Review title, authors, institution, introduction, methods, results, conclusion, image, and presentation file.</li>
+                    <li>If accepted for presentation, set presentation approval or use presentation approval action.</li>
+                    <li>If accepted for poster, set poster approval or use poster approval action.</li>
+                    <li>Save or run selected action.</li>
+                    <li>System sends approval email for selected approval type.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Upload Abstract Books / Upload Note Books</span>
+                <h3>Upload Final Abstract Book or Notebook</h3>
+                <ol>
+                    <li>Go to the upload model.</li>
+                    <li>Click add.</li>
+                    <li>Select event.</li>
+                    <li>Upload final PDF/file.</li>
+                    <li>Save.</li>
+                    <li>Check event page download tab/button.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="program">
+        <h2>Program, Speaker, Sponsor, and Media Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Hall Rooms / Program Days / Time Slots</span>
+                <h3>Create Program Timing Structure</h3>
+                <ol>
+                    <li>Create <strong>Hall Room</strong> for each venue/hall.</li>
+                    <li>Create <strong>Program Day</strong> for each event date.</li>
+                    <li>Create <strong>Time Slot</strong> and select program day, hall room, start time, and end time.</li>
+                    <li>Save each item before creating schedule entries.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Chairpersons / Moderators / Panelists / Featured Speakers</span>
+                <h3>Add People for Program</h3>
+                <ol>
+                    <li>Open the relevant person model.</li>
+                    <li>Click add.</li>
+                    <li>Enter name, designation, organization, image, bio, and event where available.</li>
+                    <li>Save.</li>
+                    <li>For Featured Speakers, check public event page and speaker modal.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Program Schedules</span>
+                <h3>Create Program Schedule</h3>
+                <ol>
+                    <li>Go to <strong>Program Schedules</strong>.</li>
+                    <li>Click add.</li>
+                    <li>Select event and time slot.</li>
+                    <li>Enter title/topic and presenter.</li>
+                    <li>Select chairperson, moderator, and panelists if applicable.</li>
+                    <li>Save.</li>
+                    <li>Use schedule email/export actions only after schedule is final.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Sponsors / Event Images / Event Videos / Program Schedule PDFs</span>
+                <h3>Add Event Assets</h3>
+                <ol>
+                    <li>Add sponsors with event, name, logo, category, and order.</li>
+                    <li>Add event images for gallery.</li>
+                    <li>Add event videos with URL/file fields.</li>
+                    <li>Upload schedule PDF if a downloadable PDF is needed.</li>
+                    <li>Save and check public event pages.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="website">
+        <h2>Website Content Admin Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Website > Site Settings</span>
+                <h3>Update Logo, Favicon, Contact, Footer</h3>
+                <ol>
+                    <li>Go to <strong>Site Settings</strong>.</li>
+                    <li>Open existing settings record or add one if none exists.</li>
+                    <li>Upload logo and favicon.</li>
+                    <li>Set contact email, phone, location, footer content, social links.</li>
+                    <li>Upload membership invoice logo if invoices need a special logo.</li>
+                    <li>Save and check frontend header/footer and invoice PDFs.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Navigation Links</span>
+                <h3>Update Menu</h3>
+                <ol>
+                    <li>Go to <strong>Navigation Links</strong>.</li>
+                    <li>Click add for a new menu item or open existing link.</li>
+                    <li>Set label, URL/page, order, and active state.</li>
+                    <li>If it is a dropdown child, select parent/dropdown settings.</li>
+                    <li>Save and check desktop/mobile navigation.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Hero / Carousel / News / Quick Access / Statistics</span>
+                <h3>Update Homepage Blocks</h3>
+                <ol>
+                    <li>Open the relevant homepage model.</li>
+                    <li>Add title, subtitle, link, image, order, and active status where available.</li>
+                    <li>Use active checkbox to show/hide without deleting.</li>
+                    <li>Save and check homepage.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Past Events / Past Event Speakers / Sessions / Sponsors</span>
+                <h3>Create Past Event Archive</h3>
+                <ol>
+                    <li>Go to <strong>Past Events</strong>.</li>
+                    <li>Add title, slug, year, date, venue, description, logo, hero image.</li>
+                    <li>Add past event speakers, sessions, and sponsors.</li>
+                    <li>If hero image exists, cards use hero image.</li>
+                    <li>If hero image is missing, cards use event logo.</li>
+                    <li>If both are missing, cards use site logo.</li>
+                    <li>Save and check <code>/past-events/</code> and detail page.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Website > Board / Committees / Values / Timeline / Partnerships / Awards / Resources / Webinars / Media / Annual Reports</span>
+                <h3>Maintain Other Website Pages</h3>
+                <ol>
+                    <li>Open the relevant model.</li>
+                    <li>Add title/name, description, image/file/link, order, and active status where available.</li>
+                    <li>Use order field to control display order.</li>
+                    <li>Use active checkbox to temporarily hide content.</li>
+                    <li>Save and check the related frontend page.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="emails">
+        <h2>Email, Certificate, Feedback, and Post Event Actions</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Registration > Thank You Emails</span>
+                <h3>Send Thank You Emails</h3>
+                <ol>
+                    <li>Go to <strong>Thank You Emails</strong>.</li>
+                    <li>Create/populate thank-you email records for event.</li>
+                    <li>Review subject and body.</li>
+                    <li>Select records and use send action.</li>
+                    <li>Check sent status/reporting.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Certificates</span>
+                <h3>Prepare Certificates</h3>
+                <ol>
+                    <li>Go to <strong>Certificates</strong>.</li>
+                    <li>Select participant/event and certificate type/details.</li>
+                    <li>Save.</li>
+                    <li>Generate/download/distribute according to event policy.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Feedback Questions / Feedback Responses</span>
+                <h3>Feedback Workflow</h3>
+                <ol>
+                    <li>Create feedback questions for event.</li>
+                    <li>After event, open feedback responses.</li>
+                    <li>Filter/export responses for reporting.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Registration > Email Groups / Bulk Emails / Bulk Email Reporting</span>
+                <h3>Bulk Email Workflow</h3>
+                <ol>
+                    <li>Create or import email group.</li>
+                    <li>Create bulk email subject/body.</li>
+                    <li>Select target group.</li>
+                    <li>Send from admin action.</li>
+                    <li>Check Bulk Email Reporting for delivery/recipient status.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <section class="guide-section" id="deployment">
+        <h2>Deployment and Emergency Steps</h2>
+        <div class="guide-grid">
+            <div class="step-card">
+                <span class="path">Live VM terminal</span>
+                <h3>Deploy New Code</h3>
+                <ol>
+                    <li>Backup database using <code>mysqldump --no-tablespaces</code>.</li>
+                    <li>Backup media folder using <code>tar</code>.</li>
+                    <li>Go to project folder and run <code>git status</code>.</li>
+                    <li>If clean, run <code>git pull origin main</code>.</li>
+                    <li>Activate venv.</li>
+                    <li>Run <code>python manage.py check</code>.</li>
+                    <li>Run <code>python manage.py showmigrations</code>.</li>
+                    <li>Run <code>python manage.py migrate</code>.</li>
+                    <li>Run <code>python manage.py collectstatic --noinput</code>.</li>
+                    <li>Restart Apache.</li>
+                    <li>Check Django log and Apache error log.</li>
+                </ol>
+            </div>
+
+            <div class="step-card">
+                <span class="path">Troubleshooting</span>
+                <h3>Common Admin Checks</h3>
+                <ol>
+                    <li>If migration says duplicate table/column, confirm schema already exists before fake migration.</li>
+                    <li>If invoice is missing, regenerate invoice and check media write permission.</li>
+                    <li>If email is missing, check SMTP settings, spam, recipient email, and logs.</li>
+                    <li>If host error appears, add only real BSBCS domain to allowed hosts; ignore random bot domains.</li>
+                    <li>If payment mismatch appears, check bKash data before editing payment status.</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

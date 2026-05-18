@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
@@ -20,6 +21,11 @@ from django.db import transaction
 
 # Payment logger (writes to payment.log via settings)
 logger = logging.getLogger('payment')
+
+
+@staff_member_required
+def admin_workflow_guide(request):
+    return render(request, 'admin/workflow_guide.html')
 
 
 def _mask_secret(value: str, show: int = 6):
