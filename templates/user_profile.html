@@ -35,10 +35,18 @@
             <section class="w-full rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
                 <p class="text-sm font-bold uppercase tracking-widest text-blue-700">Profile Required</p>
                 <h1 class="mt-2 text-3xl font-bold">This account does not have a BSBCS profile yet.</h1>
-                <p class="mt-3 leading-7 text-gray-600">Create your profile to access membership, event registrations, abstracts, and payments.</p>
+                {% if corporate_account %}
+                    <p class="mt-3 leading-7 text-gray-600">Your corporate account is active separately for organization event registration. Create a personal BSBCS profile only if you want to apply for membership, register yourself for events, submit abstracts, or manage personal payments.</p>
+                {% else %}
+                    <p class="mt-3 leading-7 text-gray-600">Create your profile to access membership, event registrations, abstracts, and payments.</p>
+                {% endif %}
                 <div class="mt-6 flex flex-col gap-3 sm:flex-row">
-                    <a href="{% url 'create_profile' %}?next={% url 'user_profile' %}" class="inline-flex justify-center rounded-lg bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700">Create Profile</a>
-                    <a href="{% url 'admin:index' %}" class="inline-flex justify-center rounded-lg border border-gray-300 px-5 py-3 font-bold text-gray-700 hover:bg-gray-50">Go to Admin</a>
+                    <a href="{% url 'create_profile' %}?next={{ next_url|urlencode }}" class="inline-flex justify-center rounded-lg bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700">Complete Personal Profile</a>
+                    {% if corporate_account %}
+                        <a href="{% url 'corporate_dashboard' %}" class="inline-flex justify-center rounded-lg border border-gray-300 px-5 py-3 font-bold text-gray-700 hover:bg-gray-50">Back to Corporate Dashboard</a>
+                    {% else %}
+                        <a href="{% url 'website:homepage' %}" class="inline-flex justify-center rounded-lg border border-gray-300 px-5 py-3 font-bold text-gray-700 hover:bg-gray-50">Back to Website</a>
+                    {% endif %}
                 </div>
             </section>
         </main>
@@ -319,11 +327,19 @@
                                         {% if participant.payment_statuses %}
                                             <span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{{ participant.payment_statuses.get_status_display }}</span>
                                         {% endif %}
+                                        {% if participant.corporate_attendee %}
+                                            <span class="rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-700">Corporate registration</span>
+                                        {% endif %}
                                     </div>
                                 </div>
+                                {% if participant.corporate_attendee %}
+                                    <div class="mt-4 rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
+                                        Registered through <strong>{{ participant.corporate_attendee.registration.corporate_account.company_name }}</strong>. Payment is handled by the corporate account.
+                                    </div>
+                                {% endif %}
                                 <div class="mt-4 flex flex-wrap gap-3">
                                     <a href="{% url 'registration:home' participant.event.id %}" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">Event Page</a>
-                                    {% if participant.approved and participant.payment_statuses and participant.payment_statuses.amount and participant.payment_statuses.status != 'completed' and participant.payment_statuses.status != 'paid' %}
+                                    {% if not participant.corporate_attendee and participant.approved and participant.payment_statuses and participant.payment_statuses.amount and participant.payment_statuses.status != 'completed' and participant.payment_statuses.status != 'paid' %}
                                         <a href="{% url 'registration:payment' participant.event.id participant.id %}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Complete Payment</a>
                                     {% endif %}
                                 </div>
@@ -377,7 +393,12 @@
                                         <span class="text-sm font-bold">{{ payment.get_status_display }}</span>
                                     </div>
                                     <p class="mt-2 text-sm text-gray-600">Amount: BDT {{ payment.amount|default:"0" }}</p>
-                                    {% if payment.event.event_status == 'active' and payment.participant.approved and payment.amount and payment.status != 'completed' and payment.status != 'paid' %}
+                                    {% if payment.participant.corporate_attendee %}
+                                        <div class="mt-3 rounded-lg bg-purple-50 p-3 text-sm text-purple-900">
+                                            <strong>Corporate registration</strong>
+                                            <p class="mt-1">This registration is covered by {{ payment.participant.corporate_attendee.registration.corporate_account.company_name }}. Payment is handled by the corporate account.</p>
+                                        </div>
+                                    {% elif payment.event.event_status == 'active' and payment.participant.approved and payment.amount and payment.status != 'completed' and payment.status != 'paid' %}
                                         <div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
                                             <strong>Payment needed</strong>
                                             <p class="mt-1">Your registration is approved. Complete payment to confirm your seat for this active event.</p>

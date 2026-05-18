@@ -1,5 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.models import User
+from django.urls import reverse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
@@ -139,18 +141,62 @@ def get_existing_registration_context(participant, event):
 
 # User Profile View STARTS ---------------------------------------------------------------###
 def create_profile(request):
+    next_url = request.POST.get('next') or request.GET.get('next')
+    if request.user.is_authenticated:
+        existing_profile = UserProfile.objects.filter(user=request.user).first()
+        if existing_profile:
+            return redirect(next_url or 'user_profile')
+
+        if request.method == 'POST':
+            name = (request.POST.get('name') or '').strip()
+            email = (request.POST.get('email') or request.user.email or request.user.username or '').strip()
+            phone = (request.POST.get('phone') or '').strip()
+            country = (request.POST.get('country') or '').strip()
+
+            if not name or not email or not phone or not country:
+                messages.error(request, "Please complete all profile fields.")
+            elif UserProfile.objects.filter(email__iexact=email).exists():
+                messages.error(request, "A personal profile already exists with this email address.")
+            elif UserProfile.objects.filter(phone=phone).exists():
+                messages.error(request, "A personal profile already exists with this phone number.")
+            elif User.objects.filter(email__iexact=email).exclude(pk=request.user.pk).exists():
+                messages.error(request, "This email is already linked to another login account.")
+            else:
+                request.user.email = email
+                if not request.user.username:
+                    request.user.username = email
+                request.user.save(update_fields=['email', 'username'])
+                UserProfile.objects.create(
+                    user=request.user,
+                    name=name,
+                    email=email,
+                    phone=phone,
+                    country=country,
+                )
+                messages.success(request, "Your personal BSBCS profile has been created.")
+                return redirect(next_url or 'user_profile')
+
+        form = UserProfileForm(initial={
+            'name': request.user.get_full_name() or request.user.first_name,
+            'email': request.user.email or request.user.username,
+        })
+        return render(request, 'create_profile.html', {
+            'form': form,
+            'next_url': next_url,
+            'completing_existing_profile': True,
+        })
+
     if request.method == 'POST':
         form = UserProfileForm(request.POST)
         if form.is_valid():
             form.save()
-            next_url = request.POST.get('next')
             if next_url:
                 from urllib.parse import quote
                 return redirect(f'{reverse("login")}?next={quote(next_url)}')
             return redirect('login')
     else:
         form = UserProfileForm()
-    return render(request, 'create_profile.html', {'form': form})
+    return render(request, 'create_profile.html', {'form': form, 'next_url': next_url})
 
 
 def corporate_account_request(request):
@@ -182,17 +228,25 @@ def user_profile(request):
     user_profile = UserProfile.objects.filter(user=request.user).first()
     site_settings = SiteSettings.objects.first()
 
+    corporate_account = CorporateAccount.objects.filter(user=request.user).first()
+
     if not user_profile:
         return render(request, 'user_profile.html', {
             'user': request.user,
             'needs_profile': True,
+            'corporate_account': corporate_account,
             'site_settings': site_settings,
+            'next_url': request.GET.get('next') or reverse('user_profile'),
         })
 
     # Fetch related submissions and schedules
     abstract_submissions = AbstractSubmission.objects.filter(user=request.user)
     program_schedules = ProgramSchedule.objects.filter(abstract_submission__in=abstract_submissions)
-    participants = Participant.objects.filter(user=request.user).select_related('event', 'department').order_by('-created_at')
+    participants = (
+        Participant.objects.filter(user=request.user)
+        .select_related('event', 'department', 'corporate_attendee__registration__corporate_account')
+        .order_by('-created_at')
+    )
 
     # Fetch active, upcoming, and closed events
     active_events = Event.objects.filter(event_status='active').order_by('-start_date')
@@ -206,8 +260,14 @@ def user_profile(request):
     ).order_by('start_date')[:6]
 
     # Fetch payment Status for the user's in registered events
-    payment_statuses = PaymentStatus.objects.filter(participant__user=request.user).select_related('event', 'participant')
-    pending_payment_count = payment_statuses.filter(status__in=['unpaid', 'pending', 'initiated']).count()
+    payment_statuses = (
+        PaymentStatus.objects.filter(participant__user=request.user)
+        .select_related('event', 'participant', 'participant__corporate_attendee__registration__corporate_account')
+    )
+    pending_payment_count = payment_statuses.filter(
+        status__in=['unpaid', 'pending', 'initiated'],
+        participant__corporate_attendee__isnull=True,
+    ).count()
     payment_data = []
     for payment in payment_statuses:
         payment_data.append({
@@ -344,6 +404,7 @@ def corporate_login(request):
 @login_required
 def corporate_dashboard(request):
     corporate_account = CorporateAccount.objects.filter(user=request.user).first()
+    has_personal_profile = UserProfile.objects.filter(user=request.user).exists()
     matching_requests = CorporateAccountRequest.objects.filter(email__iexact=request.user.email).order_by('-created_at')
     open_events = Event.objects.filter(event_status='active', registration='Open').order_by('start_date')
     corporate_payments = CorporatePayment.objects.filter(corporate_account=corporate_account).select_related('event', 'corporate_registration')[:8] if corporate_account else []
@@ -373,6 +434,7 @@ def corporate_dashboard(request):
         'corporate_payments': corporate_payments,
         'corporate_registrations': corporate_registrations,
         'dashboard_submissions': dashboard_submissions,
+        'has_personal_profile': has_personal_profile,
     })
 
 
@@ -798,7 +860,11 @@ def registration(request, event_id):
         or event.registration_audience == 'members_only'
     )
 
-    user_profile = UserProfile.objects.get(user=request.user)
+    try:
+        user_profile = UserProfile.objects.get(user=request.user)
+    except UserProfile.DoesNotExist:
+        messages.warning(request, "Please complete your personal BSBCS profile before registering as an individual participant.")
+        return redirect(f'{reverse("create_profile")}?next={request.get_full_path()}')
 
     # Check if the user has already registered for the event
     try:

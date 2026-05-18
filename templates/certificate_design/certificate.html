@@ -1,0 +1,89 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Certificate of Participation</title>
+  <link rel="stylesheet" href="{% static 'css/certificate_design.css' %}">
+</head>
+<body>
+  <main class="certificate-page">
+    <section class="certificate" aria-label="Certificate of participation">
+      <div class="top-band">
+        <div class="top-pattern">
+          <span class="stripe stripe-dark"></span>
+          <span class="stripe stripe-light"></span>
+          <span class="stripe stripe-dark"></span>
+          <span class="stripe stripe-light"></span>
+          <span class="block block-purple"></span>
+          <span class="block block-red"></span>
+          <span class="arc arc-green"></span>
+          <span class="semi semi-purple"></span>
+          <span class="circle circle-white"></span>
+        </div>
+      </div>
+
+      <div class="paper">
+        <img class="brand-logos" src="{% static 'images/certificate_design/top_left_logos.png' %}" alt="Conference organizers">
+        <img class="event-logo" src="{% static 'images/certificate_design/bbcc_logo.png' %}" alt="5th BBCC">
+
+        <div class="certificate-content">
+          <h1>Certificate of Participation</h1>
+          <p class="acknowledged">This Certificate Is Acknowledged To</p>
+
+          <div class="recipient-name">
+            {{ participant_name|default:"" }}
+          </div>
+
+          <div class="name-line"></div>
+
+          <p class="event-copy">
+            For Participating In The 5<sup>th</sup> Bangladesh Breast Cancer Conference 2025<br>
+            28 February 2025, Pan Pacific Sonargaon, Dhaka, Bangladesh.
+          </p>
+
+          <div class="signatures">
+            <div class="signature-block signature-left">
+              <img src="{% static 'images/certificate_design/left_signature.png' %}" alt="">
+              <div class="signature-line"></div>
+              <p>
+                Prof. Dr. Qamruzzaman Chowdhury<br>
+                President<br>
+                Bangladesh Society For Breast<br>
+                Cancer Study
+              </p>
+            </div>
+
+            <div class="signature-block signature-right">
+              <img src="{% static 'images/certificate_design/right_signature.png' %}" alt="">
+              <div class="signature-line"></div>
+              <p>
+                Dr. Don S Dizon<br>
+                Chief Guest<br>
+                Bangladesh Breast Cancer<br>
+                Conference 2025
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-band">
+        <div class="bottom-pattern">
+          <span class="tile tile-purple"></span>
+          <span class="triangle triangle-green"></span>
+          <span class="tile tile-magenta"></span>
+          <span class="triangle triangle-red"></span>
+          <span class="quarter quarter-white"></span>
+          <span class="tile tile-lavender"></span>
+          <span class="triangle triangle-deep"></span>
+          <span class="triangle triangle-white"></span>
+          <span class="triangle triangle-red-up"></span>
+        </div>
+        <p class="contact">info.bsbcs@gmail.com | (+880) 171 311 5575 | www.bsbcs.org</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

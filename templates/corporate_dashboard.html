@@ -291,6 +291,18 @@
                 </aside>
             </section>
 
+            {% if not has_personal_profile %}
+                <section class="grid">
+                    <article class="muted-panel">
+                        <h2>Personal BSBCS Profile</h2>
+                        <p>Your corporate account is for organization event registration and invoices. Create a separate personal profile only if you also want to apply for membership, register yourself as an individual participant, or submit abstracts.</p>
+                        <div class="actions">
+                            <a href="{% url 'create_profile' %}?next={% url 'corporate_dashboard' %}" class="button button-secondary">Complete Personal Profile</a>
+                        </div>
+                    </article>
+                </section>
+            {% endif %}
+
             <section class="grid">
                 <article class="muted-panel">
                     <h2>Open Events</h2>
