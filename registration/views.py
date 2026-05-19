@@ -1958,6 +1958,95 @@ from django.shortcuts import get_object_or_404
 from PIL import Image, ImageDraw, ImageFont
 from .models import Certificate, Participant, Event, RegistrationKit  # Import RegistrationKit
 import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+def _certificate_output_filename(participant_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in participant_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Participant'
+    return f"BBCC_Certificate_{safe_name}.jpg"
+
+
+def _get_chrome_executable():
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
+
+
+def _get_certificate_signatories(certificate):
+    return [
+        {
+            'signature_url': signatory.signature.url if signatory.signature else '',
+            'name': signatory.name,
+            'designation': signatory.designation,
+            'organization': signatory.organization,
+        }
+        for signatory in certificate.signatories.all()
+    ]
+
+
+def _render_html_certificate_to_jpeg(request, participant, event, certificate, output_path):
+    from website.models import SiteSettings
+
+    signatories = _get_certificate_signatories(certificate)
+    if not signatories:
+        raise ValueError("No signatories configured for this HTML certificate.")
+
+    base_url = request.build_absolute_uri('/')
+    html = render_to_string('certificate_design/certificate.html', {
+        'participant_name': participant.name,
+        'site_settings': SiteSettings.objects.first(),
+        'event': event,
+        'certificate': certificate,
+        'signatories': signatories,
+        'signature_count': len(signatories),
+        'capture_mode': True,
+        'base_url': base_url,
+    }, request=request)
+
+    output = Path(output_path)
+    render_dir = output.parent / 'html_render'
+    render_dir.mkdir(parents=True, exist_ok=True)
+    html_path = render_dir / f"{output.stem}.html"
+    png_path = render_dir / f"{output.stem}.png"
+    chrome_profile = Path(tempfile.mkdtemp(prefix=f"{output.stem}_chrome_"))
+    html_path.write_text(html, encoding='utf-8')
+
+    chrome = _get_chrome_executable()
+    if not chrome:
+        raise RuntimeError("Chrome/Edge was not found on the server, so the HTML certificate cannot be rendered to JPEG.")
+
+    file_url = html_path.resolve().as_uri()
+    command = [
+        chrome,
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-crash-reporter",
+        "--disable-crashpad",
+        "--disable-features=Crashpad",
+        "--hide-scrollbars",
+        "--allow-file-access-from-files",
+        f"--user-data-dir={chrome_profile.resolve()}",
+        "--window-size=1632,1155",
+        f"--screenshot={png_path.resolve()}",
+        file_url,
+    ]
+    subprocess.run(command, check=True, timeout=30, cwd=str(settings.BASE_DIR))
+
+    image = Image.open(png_path).convert('RGB')
+    image.save(output_path, 'JPEG', quality=95)
+
 
 def generate_certificate(request, event_id):
     # Fetch the participant details for the current user and event
@@ -1974,54 +2063,40 @@ def generate_certificate(request, event_id):
         }, status=400)
 
     participant_name = participant.name
-    participant_email = participant.email
 
     # Fetch the certificate template for the event
     event = get_object_or_404(Event, id=event_id)
     certificate = get_object_or_404(Certificate, event=event)  # Fetch certificate for the event
-    template_path = certificate.upload_image.path  # Get the full path to the uploaded image
-
-    # Define paths for font and output
-    # TODO: The font path is hardcoded to a Linux path. This will not work on other systems.
-    # Consider adding a font to the project and using a path relative to settings.BASE_DIR
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    output_filename = f"BBCC_Certificate_{participant_name.replace(' ', '_')}.jpg"
+    output_filename = _certificate_output_filename(participant_name)
     output_path = os.path.join(settings.MEDIA_ROOT, 'certificates', output_filename)
 
     # Ensure the output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     try:
-        # Load the image
-        image = Image.open(template_path)
-        draw = ImageDraw.Draw(image)
+        if certificate.design_mode == Certificate.DESIGN_MODE_HTML:
+            _render_html_certificate_to_jpeg(request, participant, event, certificate, output_path)
+        else:
+            if not certificate.upload_image:
+                raise ValueError("No uploaded certificate image configured for this event.")
 
-        # Define the font and size
-        font_size = 40
-        font = ImageFont.truetype(font_path, font_size)
+            template_path = certificate.upload_image.path
+            image = Image.open(template_path)
+            draw = ImageDraw.Draw(image)
 
-        # Define the text and position
-        text_position = (520, 470)  # Adjust the position as needed
-        draw.text(text_position, participant_name, font=font, fill="black")
+            font_size = 40
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
 
-        # Save the modified image
-        image.save(output_path)
+            text_position = (520, 470)
+            draw.text(text_position, participant_name, font=font, fill="black")
+            image.save(output_path)
 
-        # Send the certificate via email
-        email = EmailMessage(
-            subject=f"Your Certificate for {event.name} {event.year}",
-            body=f"Dear {participant_name},\n\nPlease find your certificate attached.\n\nBest regards,\nThe Event Team",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[participant_email],
-        )
-        email.attach_file(output_path)
-        email.send()
-
-        # Return success response
-        return JsonResponse({
-            'success': True,
-            'message': 'Certificate has been sent to your email.',
-        })
+        response = FileResponse(open(output_path, 'rb'), as_attachment=True, filename=output_filename)
+        response['Content-Type'] = 'image/jpeg'
+        return response
 
     except Exception as e:
         return JsonResponse({

@@ -24,9 +24,9 @@
               <a href="{% url 'index' %}" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
                 Back to Home
               </a>
-              <!-- <button id="generate-certificate-btn" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
-                Send Certificate via Email
-              </button> -->
+              <a href="{% url 'registration:generate_certificate' event.id %}" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
+                Download Certificate
+              </a>
             </div>
           </div>
         </div>
@@ -35,42 +35,6 @@
   </div>
 </section>
 
-<!-- JavaScript to Handle Certificate Generation -->
-<script>
-  document.getElementById('generate-certificate-btn').addEventListener('click', function() {
-    const eventId = "{{ event.id }}";  // Pass the event ID to the view
-
-    // Show loading state
-    this.disabled = true;
-    this.textContent = 'Sending...';
-
-    // Call the generate_certificate view
-    fetch(`/event/${eventId}/generate_certificate/`)  // Updated URL with /event/ prefix
-      .then(response => response.json())
-      .then(data => {
-        const messageSection = document.getElementById('message-section');
-        const messageText = document.getElementById('message-text');
-
-        if (data.success) {
-          messageText.textContent = data.message;
-          messageText.classList.add('text-green-600');
-        } else {
-          messageText.textContent = data.error;
-          messageText.classList.add('text-red-600');
-        }
-
-        messageSection.classList.remove('hidden');
-      })
-      .catch(error => {
-        alert('An error occurred while sending the certificate.');
-      })
-      .finally(() => {
-        // Reset button state
-        this.disabled = false;
-        this.textContent = 'Send Certificate via Email';
-      });
-  });
-</script>
 <!-- Custom Styles -->
 <style>
   body {

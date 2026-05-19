@@ -26,6 +26,14 @@ body {
   padding: 24px;
 }
 
+.certificate-page.certificate-capture {
+  width: 1632px;
+  height: 1155px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .certificate {
   position: relative;
   width: min(100%, 1632px);
