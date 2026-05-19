@@ -513,16 +513,7 @@ h1 {
   width: 20%;
   height: 100%;
   background: #ffffff;
-  clip-path: polygon(
-    0 100%,
-    64% 34%,
-    73% 42%,
-    82% 56%,
-    89% 73%,
-    95% 90%,
-    98% 100%,
-    100% 100%
-  );
+  clip-path: path("M 0 125 L 78 42 C 102 55 119 91 124 125 Z");
   z-index: 2;
 }
 
