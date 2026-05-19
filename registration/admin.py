@@ -1187,11 +1187,29 @@ class ThankYouEmailAdmin(admin.ModelAdmin):
 
 # Certificate admin starts ----------------------------------------------------#
 
-from .models import Certificate
+from .models import Certificate, CertificateSignatory
+
+
+class CertificateSignatoryInline(admin.TabularInline):
+    model = CertificateSignatory
+    extra = 2
+    fields = ('order', 'name', 'designation', 'organization', 'signature')
 
 
 class CertificateAdmin(admin.ModelAdmin):
-    list_display = ('id', 'event')
+    list_display = ('id', 'event', 'design_mode')
+    list_filter = ('design_mode', 'event')
+    search_fields = ('event__name',)
+    fieldsets = (
+        (None, {
+            'fields': ('event', 'design_mode', 'upload_image')
+        }),
+        ('HTML design logo overrides', {
+            'fields': ('organizer_logo', 'co_organizer_logo', 'event_logo'),
+            'description': 'Event logo is optional here. If left blank, the certificate uses the logo from the selected event.'
+        }),
+    )
+    inlines = [CertificateSignatoryInline]
 admin.site.register(Certificate, CertificateAdmin)
 
 # Feedback Form Model Starts here----------------------------------------------------------------------------#

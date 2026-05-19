@@ -764,11 +764,41 @@ class ProgramSchedulePdf(models.Model):
 
 # Certificate Model Starts Here----------------------------------------------------------------------------#
 class Certificate(models.Model):
+    DESIGN_MODE_IMAGE = 'image'
+    DESIGN_MODE_HTML = 'html'
+    DESIGN_MODE_CHOICES = [
+        (DESIGN_MODE_IMAGE, 'Uploaded Image'),
+        (DESIGN_MODE_HTML, 'HTML Design'),
+    ]
+
     event = models.ForeignKey('Event', on_delete=models.CASCADE, blank=True, null=True)
+    design_mode = models.CharField(max_length=20, choices=DESIGN_MODE_CHOICES, default=DESIGN_MODE_IMAGE)
     upload_image = models.ImageField(upload_to='media/event_images/', blank=True, null=True)
+    organizer_logo = models.ImageField(upload_to='certificates/logos/', blank=True, null=True)
+    co_organizer_logo = models.ImageField(upload_to='certificates/logos/', blank=True, null=True)
+    event_logo = models.ImageField(upload_to='certificates/event_logos/', blank=True, null=True)
 
     def __str__(self):
-        return f"Certificate"
+        if self.event:
+            return f"{self.event.name} {self.event.year} Certificate"
+        return "Certificate"
+
+
+class CertificateSignatory(models.Model):
+    certificate = models.ForeignKey(Certificate, on_delete=models.CASCADE, related_name='signatories')
+    name = models.CharField(max_length=255)
+    designation = models.CharField(max_length=255, blank=True, null=True)
+    organization = models.TextField(blank=True, null=True)
+    signature = models.ImageField(upload_to='certificates/signatures/', blank=True, null=True)
+    order = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ['order', 'id']
+        verbose_name = 'Certificate signatory'
+        verbose_name_plural = 'Certificate signatories'
+
+    def __str__(self):
+        return self.name
 
 # Certificate Model Ends Here----------------------------------------------------------------------------#
 # Feedback Form Model Starts here----------------------------------------------------------------------------#

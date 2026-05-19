@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Certificate of Participation</title>
-  <link rel="stylesheet" href="{% static 'css/certificate_design.css' %}">
+  <link rel="stylesheet" href="{% static 'css/certificate_design.css' %}?v=20260519-17">
 </head>
 <body>
   <main class="certificate-page">
@@ -25,46 +25,61 @@
       </div>
 
       <div class="paper">
-        <img class="brand-logos" src="{% static 'images/certificate_design/top_left_logos.png' %}" alt="Conference organizers">
-        <img class="event-logo" src="{% static 'images/certificate_design/bbcc_logo.png' %}" alt="5th BBCC">
+        <div class="brand-logos">
+          {% if certificate and certificate.organizer_logo %}
+            <span class="logo-slot"><img src="{{ certificate.organizer_logo.url }}" alt="Organizer logo"></span>
+          {% elif site_settings and site_settings.logo %}
+            <span class="logo-slot"><img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'Organizer' }} logo"></span>
+          {% else %}
+            <span class="logo-slot logo-placeholder">BSBCS</span>
+          {% endif %}
+
+          {% if certificate and certificate.co_organizer_logo %}
+            <span class="logo-slot"><img src="{{ certificate.co_organizer_logo.url }}" alt="Co-organizer logo"></span>
+          {% endif %}
+        </div>
+
+        {% if certificate and certificate.event_logo %}
+          <span class="event-logo"><img src="{{ certificate.event_logo.url }}" alt="Event logo"></span>
+        {% elif event and event.event_logo %}
+          <span class="event-logo"><img src="{{ event.event_logo.url }}" alt="{{ event.name }} logo"></span>
+        {% else %}
+          <span class="event-logo logo-placeholder">5<sup>th</sup> BBCC</span>
+        {% endif %}
 
         <div class="certificate-content">
           <h1>Certificate of Participation</h1>
           <p class="acknowledged">This Certificate Is Acknowledged To</p>
 
-          <div class="recipient-name">
-            {{ participant_name|default:"" }}
-          </div>
+          <div class="recipient-name" data-fit-text data-max-size="45" data-min-size="18">{{ participant_name|default:"" }}</div>
 
           <div class="name-line"></div>
 
           <p class="event-copy">
-            For Participating In The 5<sup>th</sup> Bangladesh Breast Cancer Conference 2025<br>
-            28 February 2025, Pan Pacific Sonargaon, Dhaka, Bangladesh.
+            {% if event %}
+              <span>For Participating In The {{ event.name }} {{ event.year }}</span>
+              <span>{{ event.start_date|date:"j F Y" }}{% if event.location %}, {{ event.location }}{% endif %}.</span>
+            {% else %}
+              <span>For Participating In The 5<sup>th</sup> Bangladesh Breast Cancer Conference 2025</span>
+              <span>28 February 2025, Pan Pacific Sonargaon, Dhaka, Bangladesh.</span>
+            {% endif %}
           </p>
 
-          <div class="signatures">
-            <div class="signature-block signature-left">
-              <img src="{% static 'images/certificate_design/left_signature.png' %}" alt="">
+          <div class="signatures signature-count-{{ signature_count|default:2 }}" style="--signature-count: {{ signature_count|default:2 }};">
+            {% for signatory in signatories %}
+            <div class="signature-block">
+              <div class="signature-image-slot">
+                {% if signatory.signature_url %}
+                  <img src="{{ signatory.signature_url }}" alt="">
+                {% endif %}
+              </div>
               <div class="signature-line"></div>
-              <p>
-                Prof. Dr. Qamruzzaman Chowdhury<br>
-                President<br>
-                Bangladesh Society For Breast<br>
-                Cancer Study
+              <p class="signature-copy" data-fit-block data-max-size="20" data-min-size="10">
+                {{ signatory.name }}{% if signatory.designation %}<br>{{ signatory.designation }}{% endif %}
+                {% if signatory.organization %}<br>{{ signatory.organization|linebreaksbr }}{% endif %}
               </p>
             </div>
-
-            <div class="signature-block signature-right">
-              <img src="{% static 'images/certificate_design/right_signature.png' %}" alt="">
-              <div class="signature-line"></div>
-              <p>
-                Dr. Don S Dizon<br>
-                Chief Guest<br>
-                Bangladesh Breast Cancer<br>
-                Conference 2025
-              </p>
-            </div>
+            {% endfor %}
           </div>
         </div>
       </div>
@@ -81,9 +96,55 @@
           <span class="triangle triangle-white"></span>
           <span class="triangle triangle-red-up"></span>
         </div>
-        <p class="contact">info.bsbcs@gmail.com | (+880) 171 311 5575 | www.bsbcs.org</p>
+        <p class="contact">info.bsbcs@gmail.com | (+880) 197 311 5575 | www.bsbcs.info</p>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      const fitText = (element) => {
+        const certificate = element.closest(".certificate");
+        const baseWidth = certificate ? certificate.clientWidth : 1632;
+        const maxSize = Math.min(Number(element.dataset.maxSize || 54), baseWidth * 0.033);
+        const minSize = Math.max(Number(element.dataset.minSize || 16), baseWidth * 0.014);
+
+        element.textContent = element.textContent.trim().replace(/\s+/g, " ");
+        element.style.whiteSpace = "nowrap";
+        element.style.lineHeight = "1";
+        element.style.fontSize = `${maxSize}px`;
+        while (element.scrollWidth > element.clientWidth && parseFloat(element.style.fontSize) > minSize) {
+          element.style.fontSize = `${parseFloat(element.style.fontSize) - 0.5}px`;
+        }
+      };
+
+      const fitAll = () => {
+        document.querySelectorAll("[data-fit-text]").forEach(fitText);
+        document.querySelectorAll("[data-fit-block]").forEach(fitBlock);
+      };
+
+      const fitBlock = (element) => {
+        const certificate = element.closest(".certificate");
+        const baseWidth = certificate ? certificate.clientWidth : 1632;
+        const maxSize = Math.min(Number(element.dataset.maxSize || 20), baseWidth * 0.0122);
+        const minSize = Math.max(Number(element.dataset.minSize || 10), baseWidth * 0.0068);
+
+        element.style.fontSize = `${maxSize}px`;
+        while (
+          (element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth) &&
+          parseFloat(element.style.fontSize) > minSize
+        ) {
+          element.style.fontSize = `${parseFloat(element.style.fontSize) - 0.5}px`;
+        }
+      };
+
+      document.addEventListener("DOMContentLoaded", fitAll);
+      window.addEventListener("load", fitAll);
+      window.addEventListener("resize", fitAll);
+      if (document.fonts) {
+        document.fonts.ready.then(fitAll);
+      }
+      requestAnimationFrame(fitAll);
+    })();
+  </script>
 </body>
 </html>

@@ -30,6 +30,59 @@ def admin_workflow_guide(request):
     return render(request, 'admin/workflow_guide.html')
 
 
+# TEMP CERTIFICATE DESIGN PREVIEW: remove this view once the HTML/CSS design is approved.
+def temp_certificate_design_preview(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    event_id = request.GET.get('event_id')
+    event_qs = Event.objects.all()
+    if event_id:
+        event = event_qs.filter(id=event_id).first()
+    else:
+        event = event_qs.filter(event_logo__isnull=False).exclude(event_logo='').order_by('-year', '-start_date').first()
+    certificate = Certificate.objects.filter(event=event).first() if event else None
+
+    if certificate:
+        signatories = [
+            {
+                'signature_url': signatory.signature.url if signatory.signature else '',
+                'name': signatory.name,
+                'designation': signatory.designation,
+                'organization': signatory.organization,
+            }
+            for signatory in certificate.signatories.all()
+        ]
+    else:
+        signatories = []
+
+    if not signatories:
+        # TEMP CERTIFICATE SIGNATORY DATA: remove after real CertificateSignatory rows are added.
+        signatories = [
+            {
+                'signature_url': '/static/images/certificate_design/left_signature.png',
+                'name': 'Prof. Dr. Qamruzzaman Chowdhury',
+                'designation': 'President',
+                'organization': 'Bangladesh Society For Breast\nCancer Study',
+            },
+            {
+                'signature_url': '/static/images/certificate_design/right_signature.png',
+                'name': 'Dr. Don S Dizon',
+                'designation': 'Chief Guest',
+                'organization': 'Bangladesh Breast Cancer\nConference 2025',
+            },
+        ]
+
+    return render(request, 'certificate_design/certificate.html', {
+        'participant_name': request.GET.get('name', 'Dr. Sample Participant'),
+        'site_settings': site_settings,
+        'event': event,
+        'certificate': certificate,
+        'signatories': signatories,
+        'signature_count': len(signatories),
+    })
+
+
 def _mask_secret(value: str, show: int = 6):
     if not value:
         return None

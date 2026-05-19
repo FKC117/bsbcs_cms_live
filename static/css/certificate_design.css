@@ -65,31 +65,66 @@ body {
 
 .brand-logos {
   position: absolute;
-  top: 3.2%;
-  left: 5.2%;
-  width: 13%;
-  height: auto;
+  top: 3.5%;
+  left: 5.8%;
+  width: 13.2%;
+  height: 7.8%;
+  display: flex;
+  align-items: center;
+  gap: 5.5%;
+}
+
+.logo-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 47.25%;
+  width: 47.25%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.logo-slot img,
+.event-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
 }
 
 .event-logo {
   position: absolute;
-  top: 4.2%;
-  right: 5.3%;
-  width: 12.8%;
-  height: auto;
+  top: 4%;
+  right: 5.8%;
+  width: 10.8%;
+  height: 7.8%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.logo-placeholder {
+  color: var(--magenta);
+  font-size: clamp(10px, 1.45vw, 24px);
+  line-height: 1;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .certificate-content {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   text-align: center;
-  padding: 9.2% 8% 4.6%;
+  padding: 0 8%;
 }
 
 h1 {
+  position: absolute;
+  top: 14%;
+  left: 8%;
+  right: 8%;
   margin: 0;
   color: var(--magenta);
   font-size: clamp(20px, 3.3vw, 54px);
@@ -100,7 +135,11 @@ h1 {
 }
 
 .acknowledged {
-  margin: 4.1% 0 0;
+  position: absolute;
+  top: 26.7%;
+  left: 8%;
+  right: 8%;
+  margin: 0;
   font-size: clamp(12px, 1.7vw, 30px);
   line-height: 1.2;
   font-weight: 800;
@@ -109,29 +148,51 @@ h1 {
 }
 
 .recipient-name {
-  width: 54%;
-  min-height: 15%;
-  margin-top: 4.8%;
-  display: grid;
-  place-items: end center;
+  position: absolute;
+  top: 36%;
+  left: 17%;
+  right: 17%;
+  width: auto;
+  height: 7.8%;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(22px, 3.3vw, 58px);
+  font-size: 45px;
   line-height: 1;
   color: #111111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
 }
 
 .name-line {
-  width: 50%;
+  position: absolute;
+  top: 44%;
+  left: 31%;
+  width: 38%;
   border-top: 2px solid #1b1b1b;
 }
 
 .event-copy {
-  margin: 3.1% 0 0;
-  font-size: clamp(12px, 1.7vw, 28px);
-  line-height: 1.4;
+  position: absolute;
+  top: 49.8%;
+  left: 7%;
+  right: 7%;
+  width: 86%;
+  margin: 0 auto;
+  font-size: clamp(10px, 1.45vw, 24px);
+  line-height: 1.32;
   font-weight: 800;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.event-copy span {
+  display: block;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .event-copy sup {
@@ -140,59 +201,132 @@ h1 {
 }
 
 .signatures {
-  width: 76%;
-  margin-top: auto;
+  position: absolute;
+  left: 11%;
+  right: 11%;
+  top: 69.6%;
+  width: 78%;
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 28%;
+  grid-template-columns: repeat(var(--signature-count, 2), minmax(0, 1fr));
+  column-gap: clamp(14px, 4vw, 64px);
   align-items: end;
 }
 
-.signature-block {
-  text-align: left;
+.signatures.signature-count-2 {
+  left: 13.5%;
+  right: 13.5%;
+  width: 73%;
+  column-gap: 18%;
 }
 
-.signature-block img {
+.signature-block {
+  min-width: 0;
+  text-align: center;
+}
+
+.signature-image-slot {
+  width: 62%;
+  height: clamp(48px, 6.3vw, 88px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.signature-image-slot img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   object-fit: contain;
+  object-position: center bottom;
 }
 
 .signature-line {
+  width: 62%;
+  margin: 0 auto;
   border-top: 2px solid #1b1b1b;
 }
 
-.signature-block p {
+.signature-copy {
+  width: 100%;
+  height: clamp(64px, 7.8vw, 112px);
   margin: 6.5% 0 0;
-  font-size: clamp(9px, 1.28vw, 22px);
+  overflow: hidden;
+  font-size: clamp(8px, 1.04vw, 18px);
   line-height: 1.18;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-wrap: balance;
 }
 
-.signature-left p {
+.signature-count-2 .signature-block:first-child .signature-copy {
   text-align: right;
 }
 
-.signature-right p {
+.signature-count-2 .signature-block:last-child .signature-copy {
   text-align: left;
+}
+
+.signature-count-2 .signature-block:first-child .signature-image-slot {
+  margin-left: auto;
+  margin-right: 0;
+  justify-content: flex-end;
+}
+
+.signature-count-2 .signature-block:last-child .signature-image-slot {
+  margin-left: 0;
+  margin-right: auto;
+  justify-content: flex-start;
+}
+
+.signature-count-2 .signature-block:first-child .signature-line {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.signature-count-2 .signature-block:last-child .signature-line {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.signatures:not(.signature-count-2) .signature-copy {
+  text-align: center;
 }
 
 .top-pattern {
   position: absolute;
   top: 0;
   right: 0;
-  width: 30.4%;
+  width: 30.35%;
   height: 100%;
-  display: flex;
+  display: block;
   overflow: hidden;
+  background: var(--red);
+}
+
+.top-pattern::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 25%;
+  background:
+    linear-gradient(
+      90deg,
+      var(--green) 0 13.5%,
+      var(--dark-green) 13.5% 28%,
+      var(--green) 28% 41.5%,
+      var(--dark-green) 41.5% 56%,
+      var(--green) 56% 69.5%,
+      var(--dark-green) 69.5% 84%,
+      var(--green) 84% 100%
+    );
 }
 
 .stripe {
-  width: 3.7%;
-  height: 100%;
+  display: none;
 }
 
 .stripe-dark {
@@ -204,12 +338,14 @@ h1 {
 }
 
 .block {
-  position: relative;
-  width: 12.7%;
+  position: absolute;
+  top: 0;
   height: 100%;
 }
 
 .block-purple {
+  left: 25%;
+  width: 12.5%;
   background: var(--purple);
 }
 
@@ -222,6 +358,8 @@ h1 {
 }
 
 .block-red {
+  left: 37.5%;
+  width: 12.5%;
   background: var(--red);
 }
 
@@ -234,6 +372,9 @@ h1 {
 }
 
 .arc {
+  position: absolute;
+  top: 0;
+  left: 50%;
   width: 25%;
   height: 100%;
   background: var(--green);
@@ -251,6 +392,9 @@ h1 {
 }
 
 .semi {
+  position: absolute;
+  top: 0;
+  left: 75%;
   width: 12.5%;
   height: 100%;
   background: var(--purple);
@@ -259,6 +403,9 @@ h1 {
 }
 
 .circle-white {
+  position: absolute;
+  top: 0;
+  right: 0;
   width: 12.5%;
   height: 100%;
   background: #ffffff;
@@ -270,7 +417,7 @@ h1 {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 38.5%;
+  width: 36.5%;
   height: 100%;
   display: flex;
   overflow: hidden;
@@ -334,10 +481,10 @@ h1 {
 .contact {
   position: absolute;
   right: 7.5%;
-  bottom: 34%;
+  bottom: 38%;
   margin: 0;
   color: #ffffff;
-  font-size: clamp(9px, 1.45vw, 23px);
+  font-size: clamp(9px, 1.32vw, 21px);
   line-height: 1;
   letter-spacing: 0.07em;
 }

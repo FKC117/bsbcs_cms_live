@@ -30,6 +30,7 @@ from .views import (
     download_abstract_book,
     event_feedback_view,
     generate_certificate,
+    temp_certificate_design_preview,
 )
 
 app_name = 'registration'  # Define app_name
@@ -38,6 +39,8 @@ app_name = 'registration'  # Define app_name
 urlpatterns = [
     # HTML sitemap for the registration/events area (shares the website sitemap view)
     path('sitemap/', website_views.sitemap_table, name='sitemap_table'),
+    # TEMP CERTIFICATE DESIGN PREVIEW: remove this URL once the HTML/CSS design is approved.
+    path('certificate-design-preview/', temp_certificate_design_preview, name='certificate_design_preview'),
     # URL patterns for the app.
     path('<int:event_id>/home/', views.home, name='home'),  # Ensure this path is correct
 
