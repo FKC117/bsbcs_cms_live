@@ -14,7 +14,12 @@ from registration.sitemaps import (
     PastEventSitemap,
 )
 from registration import views
-from registration.views import global_dashboard
+from registration.views import (
+    global_dashboard,
+    dashboard_attention_queue,
+    dashboard_event_ledger,
+    dashboard_participant_preview,
+)
 
 sitemaps = {
     'events': EventSitemap,
@@ -30,6 +35,9 @@ urlpatterns = [
     path('admin/workflow-guide/', views.admin_workflow_guide, name='admin_workflow_guide'),
     path('admin/', admin.site.urls),
     path('dashboard/', global_dashboard, name='global_dashboard'),
+    path('dashboard/attention-queue/', dashboard_attention_queue, name='dashboard_attention_queue'),
+    path('dashboard/event-ledger/', dashboard_event_ledger, name='dashboard_event_ledger'),
+    path('dashboard/participant-preview/', dashboard_participant_preview, name='dashboard_participant_preview'),
     path('', include(('website.urls', 'website'), namespace='website')),
     path('index/', views.index, name='index'),
 

@@ -2180,6 +2180,7 @@ from registration.models import (
     PaymentStatus,
     Event,
     AbstractSubmission,
+    ProgramSchedule,
     CorporateAccountRequest,
     CorporateEventRegistration,
     CorporateEventAttendee,
@@ -2216,10 +2217,153 @@ def build_event_metrics_chart_data(event_metrics):
     }
 
 
-def build_dashboard_operations(events, event_filter=None, event_status_filter=None):
-    from website.models import Member, MembershipPayment
+def build_event_metrics(events, event_filter=None):
+    event_metrics = []
+    for event in events:
+        if event_filter and str(event.id) != event_filter:  # type: ignore[attr-defined]
+            continue
+        metrics = {
+            'name': event.name,
+            'approved_participants': Participant.objects.filter(event=event).count(),
+            'pending_payments': PaymentStatus.objects.filter(
+                event=event, status__in=UNPAID_PAYMENT_STATUSES
+            ).count(),
+            'revenue_collected': PaymentStatus.objects.filter(
+                event=event, status__in=PAID_PAYMENT_STATUSES
+            ).aggregate(total=Sum('amount'))['total'] or 0,
+        }
+        event_metrics.append(metrics)
+    return event_metrics
 
-    event_ids = list(events.values_list('id', flat=True))
+
+def get_dashboard_scoped_events(events, event_filter=None):
+    scoped_events = events
+    if event_filter:
+        scoped_events = scoped_events.filter(id=event_filter)
+    return scoped_events
+
+
+def build_attention_queue(events, event_filter=None, page_number=None, per_page=8):
+    from website.models import Member
+
+    scoped_events = get_dashboard_scoped_events(events, event_filter)
+    event_ids = list(scoped_events.values_list('id', flat=True))
+    event_scope = {'event_id__in': event_ids}
+    entries = []
+
+    pending_participants = Participant.objects.filter(
+        **event_scope,
+        approved=False,
+        denied=False,
+    ).select_related('event').order_by('-created_at')
+    entries.extend([
+        {
+            'label': 'Participant',
+            'title': f'{item.name} - {item.event.name}',
+            'meta': item.email,
+            'status': 'Pending approval',
+            'url': admin_change_url(item),
+            'sort_date': item.created_at,
+        }
+        for item in pending_participants
+    ])
+
+    approved_unpaid_payments = PaymentStatus.objects.filter(
+        **event_scope,
+        participant__approved=True,
+        status__in=UNPAID_PAYMENT_STATUSES,
+    ).select_related('event', 'participant').order_by('-updated_at')
+    entries.extend([
+        {
+            'label': 'Payment',
+            'title': f'{item.participant.name} - {item.event.name}',
+            'meta': f'BDT {item.amount or 0}',
+            'status': item.get_status_display(),
+            'url': admin_change_url(item),
+            'sort_date': item.updated_at,
+        }
+        for item in approved_unpaid_payments
+    ])
+
+    pending_corporate_attendees = CorporateEventAttendee.objects.filter(
+        registration__event_id__in=event_ids,
+        review_status='pending',
+    ).select_related('registration__event', 'registration__corporate_account').order_by('-created_at')
+    entries.extend([
+        {
+            'label': 'Corporate',
+            'title': f'{item.name} - {item.registration.event.name}',
+            'meta': item.registration.corporate_account.company_name,
+            'status': item.get_review_status_display(),
+            'url': admin_change_url(item),
+            'sort_date': item.created_at,
+        }
+        for item in pending_corporate_attendees
+    ])
+
+    pending_abstracts = AbstractSubmission.objects.filter(
+        event_id__in=event_ids,
+        approved_for_presentation=False,
+        approved_for_poster=False,
+    ).select_related('event', 'user').order_by('-updated_at')
+    entries.extend([
+        {
+            'label': 'Abstract',
+            'title': f'{item.title} - {item.event.name}',
+            'meta': item.user.email,
+            'status': 'Needs review',
+            'url': admin_change_url(item),
+            'sort_date': item.updated_at,
+        }
+        for item in pending_abstracts
+    ])
+
+    if event_filter:
+        pending_members = Member.objects.filter(
+            user_profile__pending_event_intents__event_id__in=event_ids,
+            user_profile__pending_event_intents__status='pending',
+            approval_status='pending',
+        ).select_related('user_profile').distinct().order_by('-created_at')
+    else:
+        pending_members = Member.objects.filter(
+            approval_status='pending'
+        ).select_related('user_profile').order_by('-created_at')
+    entries.extend([
+        {
+            'label': 'Member',
+            'title': item.user_profile.name,
+            'meta': item.user_profile.email,
+            'status': item.get_approval_status_display(),
+            'url': admin_change_url(item),
+            'sort_date': item.created_at,
+        }
+        for item in pending_members
+    ])
+
+    if not event_filter:
+        pending_corporate_requests = CorporateAccountRequest.objects.filter(status='pending').order_by('-created_at')
+        entries.extend([
+            {
+                'label': 'Corporate access',
+                'title': item.company_name,
+                'meta': f'{item.contact_name} - {item.email}',
+                'status': item.get_status_display(),
+                'url': admin_change_url(item),
+                'sort_date': item.created_at,
+            }
+            for item in pending_corporate_requests
+        ])
+
+    entries.sort(key=lambda item: item['sort_date'], reverse=True)
+    return Paginator(entries, per_page).get_page(page_number)
+
+
+def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None):
+    from website.models import Member, MembershipPayment, SiteSettings, MembershipBenefitModal
+
+    scoped_events = get_dashboard_scoped_events(events, event_filter)
+
+    event_ids = list(scoped_events.values_list('id', flat=True))
     event_scope = {'event_id__in': event_ids}
     event_filter_query = {}
     if event_filter:
@@ -2238,6 +2382,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     ).select_related('event', 'participant').order_by('-updated_at')
 
     pending_corporate_requests = CorporateAccountRequest.objects.filter(status='pending').order_by('-created_at')
+    corporate_access_request_count = 0 if event_filter else pending_corporate_requests.count()
     pending_corporate_attendees = CorporateEventAttendee.objects.filter(
         registration__event_id__in=event_ids,
         review_status='pending',
@@ -2258,17 +2403,26 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     ).select_related('event', 'user').order_by('-updated_at')
 
     pending_members = Member.objects.filter(approval_status='pending').select_related('user_profile').order_by('-created_at')
+    pending_event_members = Member.objects.filter(
+        user_profile__pending_event_intents__event_id__in=event_ids,
+        user_profile__pending_event_intents__status='pending',
+        approval_status='pending',
+    ).select_related('user_profile').distinct().order_by('-created_at')
     pending_membership_payments = MembershipPayment.objects.filter(
         status__in=['initiated', 'pending', 'failed']
     ).select_related('user_profile', 'membership_type').order_by('-updated_at')
+    if event_filter:
+        pending_membership_payment_count = MembershipPayment.objects.filter(
+            user_profile__pending_event_intents__event_id__in=event_ids,
+            user_profile__pending_event_intents__status='pending',
+            status__in=['initiated', 'pending', 'failed'],
+        ).distinct().count()
+    else:
+        pending_membership_payment_count = pending_membership_payments.count()
 
-    open_events = Event.objects.filter(
+    open_events = scoped_events.filter(
         Q(event_status='active') | Q(registration='Open')
     ).order_by('start_date')
-    if event_status_filter:
-        open_events = open_events.filter(event_status=event_status_filter)
-    if event_filter:
-        open_events = open_events.filter(id=event_filter)
 
     event_health = []
     for event in open_events[:8]:
@@ -2322,9 +2476,9 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Corporate review',
-            'count': pending_corporate_attendees.count() + pending_corporate_requests.count(),
+            'count': pending_corporate_attendees.count() + corporate_access_request_count,
             'tone': 'primary',
-            'description': 'Corporate access requests and attendee rows waiting for review.',
+            'description': 'Corporate access requests and attendee rows waiting for review.' if not event_filter else 'Corporate attendee rows waiting for review for this event.',
             'url': admin_changelist_url(CorporateEventAttendee, {
                 'registration__event__id__exact': event_filter,
                 'review_status__exact': 'pending',
@@ -2332,9 +2486,9 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Membership approvals',
-            'count': pending_members.count(),
+            'count': pending_event_members.count() if event_filter else pending_members.count(),
             'tone': 'success',
-            'description': 'Membership applications waiting for approval or rejection.',
+            'description': 'Membership applications waiting for approval or rejection.' if not event_filter else 'Membership applications tied to this event through member-event intent.',
             'url': admin_changelist_url(Member, {'approval_status__exact': 'pending'}),
         },
         {
@@ -2356,45 +2510,19 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
     ]
 
-    latest_queue = [
-        {
-            'label': 'Participant',
-            'title': f'{item.name} - {item.event.name}',
-            'meta': item.email,
-            'status': 'Pending approval',
-            'url': admin_change_url(item),
-        }
-        for item in pending_participants[:5]
-    ]
-    latest_queue.extend([
-        {
-            'label': 'Payment',
-            'title': f'{item.participant.name} - {item.event.name}',
-            'meta': f'BDT {item.amount or 0}',
-            'status': item.get_status_display(),
-            'url': admin_change_url(item),
-        }
-        for item in approved_unpaid_payments[:5]
-    ])
-    latest_queue.extend([
-        {
-            'label': 'Corporate',
-            'title': f'{item.name} - {item.registration.event.name}',
-            'meta': item.registration.corporate_account.company_name,
-            'status': item.get_review_status_display(),
-            'url': admin_change_url(item),
-        }
-        for item in pending_corporate_attendees[:5]
-    ])
-    latest_queue = latest_queue[:10]
-
     return {
         'action_cards': action_cards,
         'event_health': event_health,
-        'latest_queue': latest_queue,
+        'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number),
         'pending_corporate_registrations_count': pending_corporate_registrations.count(),
-        'pending_membership_payments_count': pending_membership_payments.count(),
+        'pending_membership_payments_count': pending_membership_payment_count,
+        'is_event_filtered': bool(event_filter),
         'admin_links': {
+            'create_event': reverse('admin:registration_event_add'),
+            'create_bulk_email': reverse('admin:registration_bulkemail_add'),
+            'program_schedules': admin_changelist_url(ProgramSchedule),
+            'site_settings': admin_changelist_url(SiteSettings),
+            'membership_benefits': admin_changelist_url(MembershipBenefitModal),
             'participants': admin_changelist_url(Participant),
             'payments': admin_changelist_url(PaymentStatus),
             'corporate_registrations': admin_changelist_url(CorporateEventRegistration),
@@ -2410,34 +2538,23 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
 
 @staff_member_required
 def global_dashboard(request):
+    from website.models import SiteSettings
+
     event_filter = request.GET.get('event')
     event_status_filter = request.GET.get('event_status')
     page_number = request.GET.get('page')
     event_page_number = request.GET.get('event_page')
     org_page_number = request.GET.get('org_page')
+    queue_page_number = request.GET.get('queue_page')
 
     events = Event.objects.all()
     if event_status_filter:
         events = events.filter(event_status=event_status_filter)
-    operations = build_dashboard_operations(events, event_filter, event_status_filter)
+    operations = build_dashboard_operations(events, event_filter, event_status_filter, queue_page_number)
 
-    event_metrics = []
-    for event in events:
-        if event_filter and str(event.id) != event_filter:  # type: ignore[attr-defined]
-            continue
-        metrics = {
-            'name': event.name,
-            'approved_participants': Participant.objects.filter(event=event).count(),
-            'pending_payments': PaymentStatus.objects.filter(
-                event=event, status__in=['unpaid', 'pending', 'failed', 'initiated']
-            ).count(),
-            'revenue_collected': PaymentStatus.objects.filter(
-                event=event, status__in=['paid', 'completed']
-            ).aggregate(total=Sum('amount'))['total'] or 0,
-        }
-        event_metrics.append(metrics)
+    event_metrics = build_event_metrics(events, event_filter)
 
-    event_paginator = Paginator(event_metrics, 10)
+    event_paginator = Paginator(event_metrics, 8)
     event_page_obj = event_paginator.get_page(event_page_number)
 
     totals = {
@@ -2457,6 +2574,7 @@ def global_dashboard(request):
     query_string = urlencode(query_params)
 
     context = {
+        'site_settings': SiteSettings.objects.first(),
         'all_events': Event.objects.all(),
         'event_page_obj': event_page_obj,
         'totals': totals,
@@ -2474,11 +2592,79 @@ def global_dashboard(request):
             'event_status': event_status_filter
         },
         'query_string': query_string,
+        'event_query_string': query_string,
+        'participant_query_string': query_string,
     }
 
     if request.headers.get('HX-Request'):
         return render(request, 'partials/dashboard_content.html', context)
     return render(request, 'dashboard.html', context)
+
+
+@staff_member_required
+def dashboard_event_ledger(request):
+    event_filter = request.GET.get('event')
+    event_status_filter = request.GET.get('event_status')
+    event_page_number = request.GET.get('event_page')
+
+    events = Event.objects.all()
+    if event_status_filter:
+        events = events.filter(event_status=event_status_filter)
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if event_status_filter:
+        query_params['event_status'] = event_status_filter
+
+    event_page_obj = Paginator(build_event_metrics(events, event_filter), 8).get_page(event_page_number)
+    return render(request, 'partials/dashboard_event_ledger.html', {
+        'event_page_obj': event_page_obj,
+        'event_query_string': urlencode(query_params),
+    })
+
+
+@staff_member_required
+def dashboard_participant_preview(request):
+    event_filter = request.GET.get('event')
+    event_status_filter = request.GET.get('event_status')
+    page_number = request.GET.get('page')
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if event_status_filter:
+        query_params['event_status'] = event_status_filter
+
+    participant_summary, _, _, _, _ = get_participant_summary(request)
+    page_obj = Paginator(participant_summary, 10).get_page(page_number)
+    return render(request, 'partials/dashboard_participant_preview.html', {
+        'page_obj': page_obj,
+        'participant_query_string': urlencode(query_params),
+    })
+
+
+@staff_member_required
+def dashboard_attention_queue(request):
+    event_filter = request.GET.get('event')
+    event_status_filter = request.GET.get('event_status')
+    queue_page_number = request.GET.get('queue_page')
+
+    events = Event.objects.all()
+    if event_status_filter:
+        events = events.filter(event_status=event_status_filter)
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if event_status_filter:
+        query_params['event_status'] = event_status_filter
+
+    context = {
+        'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number),
+        'queue_query_string': urlencode(query_params),
+    }
+    return render(request, 'partials/dashboard_attention_queue.html', context)
 
 
 def get_participant_summary(request, org_page_number=None):
