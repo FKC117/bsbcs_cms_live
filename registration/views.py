@@ -2172,6 +2172,7 @@ def event_feedback_view(request, event_id):
 # Admin Dashboard Starts Here ------------------------------------------------------------------------------------#
 
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.admin.models import LogEntry
 from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.urls import reverse
@@ -2400,6 +2401,49 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
     return Paginator(entries, per_page).get_page(page_number), queue_type
 
 
+def build_staff_activity(page_number=None, per_page=8):
+    activity_rows = []
+    log_entries = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
+
+    for entry in log_entries[:80]:
+        model_class = entry.content_type.model_class() if entry.content_type else None
+        detail_url = ''
+        if model_class and entry.object_id and not entry.is_deletion():
+            try:
+                detail_url = reverse(
+                    f'admin:{entry.content_type.app_label}_{entry.content_type.model}_change',
+                    args=[entry.object_id],
+                )
+            except Exception:
+                detail_url = ''
+
+        if entry.is_addition():
+            action_label = 'Added'
+            tone = 'success'
+        elif entry.is_change():
+            action_label = 'Changed'
+            tone = 'info'
+        elif entry.is_deletion():
+            action_label = 'Deleted'
+            tone = 'danger'
+        else:
+            action_label = entry.get_action_flag_display()
+            tone = 'neutral'
+
+        activity_rows.append({
+            'staff': entry.user.get_full_name() or entry.user.get_username(),
+            'action': action_label,
+            'tone': tone,
+            'object': entry.object_repr,
+            'model': entry.content_type.name.title() if entry.content_type else 'Admin record',
+            'message': entry.get_change_message(),
+            'time': entry.action_time,
+            'detail_url': detail_url,
+        })
+
+    return Paginator(activity_rows, per_page).get_page(page_number)
+
+
 def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None, queue_type='all'):
     from website.models import Member, MembershipPayment, SiteSettings, MembershipBenefitModal
 
@@ -2590,6 +2634,7 @@ def global_dashboard(request):
     event_page_number = request.GET.get('event_page')
     org_page_number = request.GET.get('org_page')
     queue_page_number = request.GET.get('queue_page')
+    activity_page_number = request.GET.get('activity_page')
     queue_type = request.GET.get('queue_type', 'all')
 
     events = Event.objects.all()
@@ -2634,6 +2679,7 @@ def global_dashboard(request):
         'page_obj': page_obj,
         'participant_totals': participant_totals,
         'organization_page_obj': organization_page_obj,
+        'staff_activity_page_obj': build_staff_activity(activity_page_number),
         'dashboard_chart_data': {
             'event_metrics': build_event_metrics_chart_data(event_metrics),
             'participant_status': participant_chart_data,
@@ -2647,6 +2693,7 @@ def global_dashboard(request):
         'query_string': query_string,
         'event_query_string': query_string,
         'participant_query_string': query_string,
+        'activity_query_string': query_string,
     }
 
     if request.headers.get('HX-Request'):
@@ -2694,6 +2741,24 @@ def dashboard_participant_preview(request):
     return render(request, 'partials/dashboard_participant_preview.html', {
         'page_obj': page_obj,
         'participant_query_string': urlencode(query_params),
+    })
+
+
+@staff_member_required
+def dashboard_staff_activity(request):
+    event_filter = request.GET.get('event')
+    event_status_filter = request.GET.get('event_status')
+    activity_page_number = request.GET.get('activity_page')
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if event_status_filter:
+        query_params['event_status'] = event_status_filter
+
+    return render(request, 'partials/dashboard_staff_activity.html', {
+        'staff_activity_page_obj': build_staff_activity(activity_page_number),
+        'activity_query_string': urlencode(query_params),
     })
 
 

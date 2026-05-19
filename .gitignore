@@ -12,3 +12,4 @@ tmp/
 static/charts/
 *.pdf
 tasks.md
+admin_workflow_tasks.md

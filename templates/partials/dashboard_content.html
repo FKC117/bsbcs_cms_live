@@ -12,7 +12,7 @@
 
     <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {% for card in operations.action_cards %}
-        <a href="{{ card.url }}" class="group block rounded-2xl border border-line bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:border-bsbcs-blue hover:bg-white hover:shadow-quiet">
+        <a href="{{ card.url }}" target="_blank" rel="noopener noreferrer" class="group block rounded-2xl border border-line bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:border-bsbcs-blue hover:bg-white hover:shadow-quiet">
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">{{ card.label }}</div>
@@ -37,12 +37,12 @@
       <h2 class="mt-1 text-xl font-black text-ink">Start common work</h2>
     </div>
     <div class="grid grid-cols-2 gap-2">
-      <a href="{{ operations.admin_links.create_event }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Create event</a>
-      <a href="{{ operations.admin_links.program_schedules }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program</a>
-      <a href="{{ operations.admin_links.create_bulk_email }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
-      <a href="{{ operations.admin_links.abstracts }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts</a>
-      <a href="{{ operations.admin_links.membership_benefits }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Benefits</a>
-      <a href="{{ operations.admin_links.site_settings }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Settings</a>
+      <a href="{{ operations.admin_links.create_event }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Create event</a>
+      <a href="{{ operations.admin_links.program_schedules }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program</a>
+      <a href="{{ operations.admin_links.create_bulk_email }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
+      <a href="{{ operations.admin_links.abstracts }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts</a>
+      <a href="{{ operations.admin_links.membership_benefits }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Benefits</a>
+      <a href="{{ operations.admin_links.site_settings }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Settings</a>
     </div>
     <div class="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
       Use these for starting work. Use the workflow lanes for clearing pending actions.
@@ -84,7 +84,7 @@
         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Queue</div>
         <h2 class="mt-1 text-xl font-black text-ink">Needs attention</h2>
       </div>
-      <a href="{{ operations.admin_links.participants }}" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">All participants</a>
+      <a href="{{ operations.admin_links.participants }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">All participants</a>
     </div>
 
     <div id="attention-queue-panel">
@@ -100,12 +100,12 @@
         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event setup</div>
         <h2 class="mt-1 text-xl font-black text-ink">Open event health</h2>
       </div>
-      <a href="{{ operations.admin_links.events }}" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Events</a>
+      <a href="{{ operations.admin_links.events }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Events</a>
     </div>
 
     <div class="space-y-2">
       {% for row in operations.event_health %}
-        <a href="{{ row.admin_url }}" class="block rounded-xl border border-line bg-slate-50/70 p-3 hover:border-bsbcs-blue hover:bg-white">
+        <a href="{{ row.admin_url }}" target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-line bg-slate-50/70 p-3 hover:border-bsbcs-blue hover:bg-white">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="truncate text-sm font-black text-ink">{{ row.event.name }} {{ row.event.year }}</div>
@@ -170,7 +170,7 @@
         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event ledger</div>
         <h2 class="mt-1 text-xl font-black text-ink">Registration and revenue</h2>
       </div>
-      <a href="{{ operations.admin_links.payments }}" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payments</a>
+      <a href="{{ operations.admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payments</a>
     </div>
     <div id="event-ledger-panel">
       {% include "partials/dashboard_event_ledger.html" %}
@@ -195,13 +195,13 @@
   <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">People</div>
-        <h2 class="mt-1 text-xl font-black text-ink">Participant preview</h2>
+        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Audit trail</div>
+        <h2 class="mt-1 text-xl font-black text-ink">Staff activity</h2>
       </div>
-      <a href="{{ operations.admin_links.participants }}" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Manage</a>
+      <span class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 ring-1 ring-line">Site-wide</span>
     </div>
-    <div id="participant-preview-panel">
-      {% include "partials/dashboard_participant_preview.html" %}
+    <div id="staff-activity-panel">
+      {% include "partials/dashboard_staff_activity.html" %}
     </div>
   </div>
 
@@ -211,11 +211,11 @@
       <h2 class="mt-1 text-xl font-black text-ink">Admin links</h2>
     </div>
     <div class="grid gap-2">
-      <a href="{{ operations.admin_links.corporate_registrations }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate registrations</a>
-      <a href="{{ operations.admin_links.corporate_payments }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate payments</a>
-      <a href="{{ operations.admin_links.membership }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership applications</a>
-      <a href="{{ operations.admin_links.membership_payments }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership payments</a>
-      <a href="{{ operations.admin_links.abstracts }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstract submissions</a>
+      <a href="{{ operations.admin_links.corporate_registrations }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate registrations</a>
+      <a href="{{ operations.admin_links.corporate_payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate payments</a>
+      <a href="{{ operations.admin_links.membership }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership applications</a>
+      <a href="{{ operations.admin_links.membership_payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership payments</a>
+      <a href="{{ operations.admin_links.abstracts }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstract submissions</a>
     </div>
   </div>
 </section>

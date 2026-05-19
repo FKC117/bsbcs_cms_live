@@ -20,13 +20,13 @@
     <div class="grid gap-2 py-3 md:grid-cols-[122px_minmax(0,1fr)_auto] md:items-center">
       <span class="w-fit rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-slate-600">{{ item.label }}</span>
       <div class="min-w-0">
-        <a href="{{ item.url }}" class="block truncate text-sm font-black text-ink hover:text-bsbcs-blue">{{ item.title }}</a>
+        <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="block truncate text-sm font-black text-ink hover:text-bsbcs-blue">{{ item.title }}</a>
         <div class="truncate text-xs font-medium text-slate-500">{{ item.meta }}</div>
       </div>
       <div class="flex flex-wrap items-center gap-2 md:justify-end">
         <span class="w-fit rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">{{ item.status }}</span>
-        <a href="{{ item.url }}" class="rounded-lg bg-bsbcs-blue px-2.5 py-1.5 text-xs font-black text-white hover:bg-bsbcs-navy">Workflow</a>
-        <a href="{{ item.detail_url }}" class="rounded-lg border border-line px-2.5 py-1.5 text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">View</a>
+        <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-bsbcs-blue px-2.5 py-1.5 text-xs font-black text-white hover:bg-bsbcs-navy">Workflow</a>
+        <a href="{{ item.detail_url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-2.5 py-1.5 text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">View</a>
       </div>
     </div>
   {% empty %}

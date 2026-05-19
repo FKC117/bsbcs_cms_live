@@ -19,6 +19,7 @@ from registration.views import (
     dashboard_attention_queue,
     dashboard_event_ledger,
     dashboard_participant_preview,
+    dashboard_staff_activity,
 )
 
 sitemaps = {
@@ -38,6 +39,7 @@ urlpatterns = [
     path('dashboard/attention-queue/', dashboard_attention_queue, name='dashboard_attention_queue'),
     path('dashboard/event-ledger/', dashboard_event_ledger, name='dashboard_event_ledger'),
     path('dashboard/participant-preview/', dashboard_participant_preview, name='dashboard_participant_preview'),
+    path('dashboard/staff-activity/', dashboard_staff_activity, name='dashboard_staff_activity'),
     path('', include(('website.urls', 'website'), namespace='website')),
     path('index/', views.index, name='index'),
 
