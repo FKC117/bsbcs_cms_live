@@ -1200,6 +1200,7 @@ class CertificateAdmin(admin.ModelAdmin):
     list_display = ('id', 'event', 'design_mode')
     list_filter = ('design_mode', 'event')
     search_fields = ('event__name',)
+    list_display_links = ('id', 'event')
     fieldsets = (
         (None, {
             'fields': ('event', 'design_mode', 'upload_image')

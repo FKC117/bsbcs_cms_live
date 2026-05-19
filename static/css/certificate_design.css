@@ -417,26 +417,33 @@ h1 {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 36.5%;
+  width: 38.5%;
   height: 100%;
-  display: flex;
+  display: block;
   overflow: hidden;
+  background: var(--magenta);
 }
 
 .tile {
+  position: absolute;
+  top: 0;
   width: 20%;
   height: 100%;
 }
 
 .tile-purple {
+  left: 0;
   background: var(--purple);
 }
 
 .tile-magenta {
+  left: 20%;
   background: var(--magenta);
+  z-index: 0;
 }
 
 .tile-lavender {
+  left: 60%;
   background: var(--purple);
 }
 
@@ -447,35 +454,76 @@ h1 {
 }
 
 .triangle-green {
+  position: absolute;
+  top: 0;
+  left: 20%;
   background: var(--green);
   clip-path: polygon(0 0, 100% 100%, 0 100%);
+  z-index: 1;
 }
 
 .triangle-red {
+  position: absolute;
+  top: 0;
+  left: 40%;
+  background: var(--magenta);
+  clip-path: none;
+  z-index: 1;
+}
+
+.triangle-red::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
   background: var(--red);
-  clip-path: polygon(0 0, 100% 0, 0 100%);
+  clip-path: circle(93% at 0 100%);
 }
 
 .triangle-deep {
+  position: absolute;
+  top: 0;
+  left: 60%;
   background: var(--deep-magenta);
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 
 .triangle-white {
+  position: absolute;
+  top: 0;
+  left: 80%;
   background: #ffffff;
   clip-path: polygon(50% 0, 0 50%, 100% 50%);
 }
 
 .triangle-red-up {
+  position: absolute;
+  top: 50%;
+  left: 80%;
   background: var(--red);
   clip-path: polygon(50% 0, 0 100%, 100% 100%);
 }
 
 .quarter {
+  position: absolute;
+  top: 0;
+  left: 40%;
   width: 20%;
   height: 100%;
   background: #ffffff;
-  border-top-left-radius: 100%;
+  clip-path: polygon(
+    0 100%,
+    64% 34%,
+    73% 42%,
+    82% 56%,
+    89% 73%,
+    95% 90%,
+    98% 100%,
+    100% 100%
+  );
+  z-index: 2;
 }
 
 .contact {
