@@ -80,11 +80,12 @@
                       class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift"
                       hx-get="/dashboard/"
                       hx-trigger="change"
-                      hx-target="#dashboard-content">
+                      hx-target="#dashboard-content"
+                      hx-push-url="true">
                     <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
                         <div>
                             <label class="mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-500" for="event">Event</label>
-                            <select name="event" class="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-bsbcs-blue/15" id="event">
+                            <select name="event" autocomplete="off" class="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-bsbcs-blue/15" id="event">
                                 <option value="">All events</option>
                                 {% for event in all_events %}
                                     <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
@@ -93,7 +94,7 @@
                         </div>
                         <div>
                             <label class="mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-500" for="event_status">Status</label>
-                            <select name="event_status" class="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-bsbcs-blue/15" id="event_status">
+                            <select name="event_status" autocomplete="off" class="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-bsbcs-blue/15" id="event_status">
                                 <option value="">All</option>
                                 <option value="active" {% if current_filters.event_status == 'active' %}selected{% endif %}>Active</option>
                                 <option value="closed" {% if current_filters.event_status == 'closed' %}selected{% endif %}>Closed</option>

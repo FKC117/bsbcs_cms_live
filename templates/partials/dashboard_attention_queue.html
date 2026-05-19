@@ -1,3 +1,20 @@
+<div class="mb-3 flex flex-wrap gap-2">
+  {% for choice_slug, choice_label in queue_type_choices %}
+    <button
+      type="button"
+      class="rounded-full px-3 py-1.5 text-xs font-black {% if queue_type == choice_slug %}bg-bsbcs-blue text-white{% else %}bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-bsbcs-blue{% endif %}"
+      hx-get="{% url 'dashboard_attention_queue' %}?queue_type={{ choice_slug }}{% if queue_filter_query_string %}&{{ queue_filter_query_string }}{% endif %}"
+      hx-target="#attention-queue-panel"
+      hx-swap="innerHTML">
+      {{ choice_label }}
+    </button>
+  {% endfor %}
+</div>
+
+<div class="mb-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+  Open a row to use the filtered admin list and its bulk/admin actions. Use View when you only need the individual record.
+</div>
+
 <div class="divide-y divide-line">
   {% for item in queue_page_obj %}
     <div class="grid gap-2 py-3 md:grid-cols-[122px_minmax(0,1fr)_auto] md:items-center">
@@ -6,7 +23,11 @@
         <a href="{{ item.url }}" class="block truncate text-sm font-black text-ink hover:text-bsbcs-blue">{{ item.title }}</a>
         <div class="truncate text-xs font-medium text-slate-500">{{ item.meta }}</div>
       </div>
-      <span class="w-fit rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">{{ item.status }}</span>
+      <div class="flex flex-wrap items-center gap-2 md:justify-end">
+        <span class="w-fit rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">{{ item.status }}</span>
+        <a href="{{ item.url }}" class="rounded-lg bg-bsbcs-blue px-2.5 py-1.5 text-xs font-black text-white hover:bg-bsbcs-navy">Workflow</a>
+        <a href="{{ item.detail_url }}" class="rounded-lg border border-line px-2.5 py-1.5 text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">View</a>
+      </div>
     </div>
   {% empty %}
     <div class="rounded-xl bg-green-50 p-4 text-sm font-semibold text-bsbcs-green">No urgent approval or payment items found for this filter.</div>

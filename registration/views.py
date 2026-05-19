@@ -2243,104 +2243,145 @@ def get_dashboard_scoped_events(events, event_filter=None):
     return scoped_events
 
 
-def build_attention_queue(events, event_filter=None, page_number=None, per_page=8):
+QUEUE_TYPE_CHOICES = [
+    ('all', 'All'),
+    ('participants', 'Participants'),
+    ('payments', 'Payments'),
+    ('corporate', 'Corporate'),
+    ('members', 'Members'),
+    ('abstracts', 'Abstracts'),
+]
+
+
+def build_attention_queue(events, event_filter=None, page_number=None, queue_type='all', per_page=8):
     from website.models import Member
+
+    if queue_type not in {choice[0] for choice in QUEUE_TYPE_CHOICES}:
+        queue_type = 'all'
 
     scoped_events = get_dashboard_scoped_events(events, event_filter)
     event_ids = list(scoped_events.values_list('id', flat=True))
     event_scope = {'event_id__in': event_ids}
+    event_filter_query = {}
+    if event_filter:
+        event_filter_query['event__id__exact'] = event_filter
     entries = []
 
-    pending_participants = Participant.objects.filter(
-        **event_scope,
-        approved=False,
-        denied=False,
-    ).select_related('event').order_by('-created_at')
-    entries.extend([
-        {
-            'label': 'Participant',
-            'title': f'{item.name} - {item.event.name}',
-            'meta': item.email,
-            'status': 'Pending approval',
-            'url': admin_change_url(item),
-            'sort_date': item.created_at,
-        }
-        for item in pending_participants
-    ])
+    if queue_type in ('all', 'participants'):
+        participant_workflow_url = admin_changelist_url(Participant, {
+            **event_filter_query,
+            'approved__exact': '0',
+            'denied__exact': '0',
+        })
+        pending_participants = Participant.objects.filter(
+            **event_scope,
+            approved=False,
+            denied=False,
+        ).select_related('event').order_by('-created_at')
+        entries.extend([
+            {
+                'label': 'Participant',
+                'title': f'{item.name} - {item.event.name}',
+                'meta': item.email,
+                'status': 'Pending approval',
+                'url': participant_workflow_url,
+                'detail_url': admin_change_url(item),
+                'sort_date': item.created_at,
+            }
+            for item in pending_participants
+        ])
 
-    approved_unpaid_payments = PaymentStatus.objects.filter(
-        **event_scope,
-        participant__approved=True,
-        status__in=UNPAID_PAYMENT_STATUSES,
-    ).select_related('event', 'participant').order_by('-updated_at')
-    entries.extend([
-        {
-            'label': 'Payment',
-            'title': f'{item.participant.name} - {item.event.name}',
-            'meta': f'BDT {item.amount or 0}',
-            'status': item.get_status_display(),
-            'url': admin_change_url(item),
-            'sort_date': item.updated_at,
-        }
-        for item in approved_unpaid_payments
-    ])
+    if queue_type in ('all', 'payments'):
+        approved_unpaid_payments = PaymentStatus.objects.filter(
+            **event_scope,
+            participant__approved=True,
+            status__in=UNPAID_PAYMENT_STATUSES,
+        ).select_related('event', 'participant').order_by('-updated_at')
+        entries.extend([
+            {
+                'label': 'Payment',
+                'title': f'{item.participant.name} - {item.event.name}',
+                'meta': f'BDT {item.amount or 0}',
+                'status': item.get_status_display(),
+                'url': admin_changelist_url(PaymentStatus, {
+                    **event_filter_query,
+                    'status__exact': item.status,
+                }),
+                'detail_url': admin_change_url(item),
+                'sort_date': item.updated_at,
+            }
+            for item in approved_unpaid_payments
+        ])
 
-    pending_corporate_attendees = CorporateEventAttendee.objects.filter(
-        registration__event_id__in=event_ids,
-        review_status='pending',
-    ).select_related('registration__event', 'registration__corporate_account').order_by('-created_at')
-    entries.extend([
-        {
-            'label': 'Corporate',
-            'title': f'{item.name} - {item.registration.event.name}',
-            'meta': item.registration.corporate_account.company_name,
-            'status': item.get_review_status_display(),
-            'url': admin_change_url(item),
-            'sort_date': item.created_at,
-        }
-        for item in pending_corporate_attendees
-    ])
+    if queue_type in ('all', 'corporate'):
+        pending_corporate_attendees = CorporateEventAttendee.objects.filter(
+            registration__event_id__in=event_ids,
+            review_status='pending',
+        ).select_related('registration__event', 'registration__corporate_account').order_by('-created_at')
+        corporate_attendee_workflow_url = admin_changelist_url(CorporateEventAttendee, {
+            'registration__event__id__exact': event_filter,
+            'review_status__exact': 'pending',
+        } if event_filter else {'review_status__exact': 'pending'})
+        entries.extend([
+            {
+                'label': 'Corporate',
+                'title': f'{item.name} - {item.registration.event.name}',
+                'meta': item.registration.corporate_account.company_name,
+                'status': item.get_review_status_display(),
+                'url': corporate_attendee_workflow_url,
+                'detail_url': admin_change_url(item),
+                'sort_date': item.created_at,
+            }
+            for item in pending_corporate_attendees
+        ])
 
-    pending_abstracts = AbstractSubmission.objects.filter(
-        event_id__in=event_ids,
-        approved_for_presentation=False,
-        approved_for_poster=False,
-    ).select_related('event', 'user').order_by('-updated_at')
-    entries.extend([
-        {
-            'label': 'Abstract',
-            'title': f'{item.title} - {item.event.name}',
-            'meta': item.user.email,
-            'status': 'Needs review',
-            'url': admin_change_url(item),
-            'sort_date': item.updated_at,
-        }
-        for item in pending_abstracts
-    ])
+    if queue_type in ('all', 'abstracts'):
+        abstract_workflow_url = admin_changelist_url(AbstractSubmission, event_filter_query)
+        pending_abstracts = AbstractSubmission.objects.filter(
+            event_id__in=event_ids,
+            approved_for_presentation=False,
+            approved_for_poster=False,
+        ).select_related('event', 'user').order_by('-updated_at')
+        entries.extend([
+            {
+                'label': 'Abstract',
+                'title': f'{item.title} - {item.event.name}',
+                'meta': item.user.email,
+                'status': 'Needs review',
+                'url': abstract_workflow_url,
+                'detail_url': admin_change_url(item),
+                'sort_date': item.updated_at,
+            }
+            for item in pending_abstracts
+        ])
 
-    if event_filter:
-        pending_members = Member.objects.filter(
-            user_profile__pending_event_intents__event_id__in=event_ids,
-            user_profile__pending_event_intents__status='pending',
-            approval_status='pending',
-        ).select_related('user_profile').distinct().order_by('-created_at')
-    else:
-        pending_members = Member.objects.filter(
-            approval_status='pending'
-        ).select_related('user_profile').order_by('-created_at')
-    entries.extend([
-        {
-            'label': 'Member',
-            'title': item.user_profile.name,
-            'meta': item.user_profile.email,
-            'status': item.get_approval_status_display(),
-            'url': admin_change_url(item),
-            'sort_date': item.created_at,
-        }
-        for item in pending_members
-    ])
+    if queue_type in ('all', 'members'):
+        if event_filter:
+            pending_members = Member.objects.filter(
+                user_profile__pending_event_intents__event_id__in=event_ids,
+                user_profile__pending_event_intents__status='pending',
+                approval_status='pending',
+            ).select_related('user_profile').distinct().order_by('-created_at')
+        else:
+            pending_members = Member.objects.filter(
+                approval_status='pending'
+            ).select_related('user_profile').order_by('-created_at')
+        member_workflow_url = admin_changelist_url(Member, {'approval_status__exact': 'pending'})
+        entries.extend([
+            {
+                'label': 'Member',
+                'title': item.user_profile.name,
+                'meta': item.user_profile.email,
+                'status': item.get_approval_status_display(),
+                'url': member_workflow_url,
+                'detail_url': admin_change_url(item),
+                'sort_date': item.created_at,
+            }
+            for item in pending_members
+        ])
 
-    if not event_filter:
+    if queue_type in ('all', 'corporate') and not event_filter:
+        corporate_access_workflow_url = admin_changelist_url(CorporateAccountRequest, {'status__exact': 'pending'})
         pending_corporate_requests = CorporateAccountRequest.objects.filter(status='pending').order_by('-created_at')
         entries.extend([
             {
@@ -2348,17 +2389,18 @@ def build_attention_queue(events, event_filter=None, page_number=None, per_page=
                 'title': item.company_name,
                 'meta': f'{item.contact_name} - {item.email}',
                 'status': item.get_status_display(),
-                'url': admin_change_url(item),
+                'url': corporate_access_workflow_url,
+                'detail_url': admin_change_url(item),
                 'sort_date': item.created_at,
             }
             for item in pending_corporate_requests
         ])
 
     entries.sort(key=lambda item: item['sort_date'], reverse=True)
-    return Paginator(entries, per_page).get_page(page_number)
+    return Paginator(entries, per_page).get_page(page_number), queue_type
 
 
-def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None):
+def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None, queue_type='all'):
     from website.models import Member, MembershipPayment, SiteSettings, MembershipBenefitModal
 
     scoped_events = get_dashboard_scoped_events(events, event_filter)
@@ -2513,7 +2555,9 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     return {
         'action_cards': action_cards,
         'event_health': event_health,
-        'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number),
+        'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number, queue_type)[0],
+        'queue_type': queue_type,
+        'queue_type_choices': QUEUE_TYPE_CHOICES,
         'pending_corporate_registrations_count': pending_corporate_registrations.count(),
         'pending_membership_payments_count': pending_membership_payment_count,
         'is_event_filtered': bool(event_filter),
@@ -2546,11 +2590,12 @@ def global_dashboard(request):
     event_page_number = request.GET.get('event_page')
     org_page_number = request.GET.get('org_page')
     queue_page_number = request.GET.get('queue_page')
+    queue_type = request.GET.get('queue_type', 'all')
 
     events = Event.objects.all()
     if event_status_filter:
         events = events.filter(event_status=event_status_filter)
-    operations = build_dashboard_operations(events, event_filter, event_status_filter, queue_page_number)
+    operations = build_dashboard_operations(events, event_filter, event_status_filter, queue_page_number, queue_type)
 
     event_metrics = build_event_metrics(events, event_filter)
 
@@ -2657,6 +2702,7 @@ def dashboard_attention_queue(request):
     event_filter = request.GET.get('event')
     event_status_filter = request.GET.get('event_status')
     queue_page_number = request.GET.get('queue_page')
+    queue_type = request.GET.get('queue_type', 'all')
 
     events = Event.objects.all()
     if event_status_filter:
@@ -2667,10 +2713,18 @@ def dashboard_attention_queue(request):
         query_params['event'] = event_filter
     if event_status_filter:
         query_params['event_status'] = event_status_filter
+    queue_filter_query_string = urlencode(query_params)
+    if queue_type:
+        query_params['queue_type'] = queue_type
+
+    queue_page_obj, normalized_queue_type = build_attention_queue(events, event_filter, queue_page_number, queue_type)
 
     context = {
-        'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number),
+        'queue_page_obj': queue_page_obj,
+        'queue_type': normalized_queue_type,
+        'queue_type_choices': QUEUE_TYPE_CHOICES,
         'queue_query_string': urlencode(query_params),
+        'queue_filter_query_string': queue_filter_query_string,
     }
     return render(request, 'partials/dashboard_attention_queue.html', context)
 

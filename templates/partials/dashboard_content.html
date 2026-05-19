@@ -88,7 +88,7 @@
     </div>
 
     <div id="attention-queue-panel">
-      {% with queue_page_obj=operations.queue_page_obj queue_query_string=query_string %}
+      {% with queue_page_obj=operations.queue_page_obj queue_query_string=query_string queue_filter_query_string=query_string queue_type=operations.queue_type queue_type_choices=operations.queue_type_choices %}
         {% include "partials/dashboard_attention_queue.html" %}
       {% endwith %}
     </div>
