@@ -495,7 +495,7 @@ h1 {
   top: 0;
   left: 79%;
   background: #ffffff;
-  width: 21%;
+  width: 19.4%;
   height: 78%;
   clip-path: polygon(50% 0, 0 64%, 100% 64%);
 }
@@ -503,8 +503,8 @@ h1 {
 .triangle-red-up {
   position: absolute;
   top: 50%;
-  left: 79%;
-  width: 22%;
+  left: 79.2%;
+  width: 19.4%;
   height: 50%;
   background: var(--red);
   clip-path: polygon(50% 0, 0 100%, 100% 100%);
