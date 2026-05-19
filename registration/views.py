@@ -2562,6 +2562,14 @@ def global_dashboard(request):
         'pending_payments': sum(m['pending_payments'] for m in event_metrics),
         'revenue': sum(m['revenue_collected'] for m in event_metrics)
     }
+    scoped_events = get_dashboard_scoped_events(events, event_filter)
+    scoped_event_ids = scoped_events.values_list('id', flat=True)
+    scoped_participants = Participant.objects.filter(event_id__in=scoped_event_ids)
+    totals.update({
+        'unique_participants': scoped_participants.values('email').distinct().count(),
+        'member_participants': scoped_participants.filter(registration_type='member').count(),
+        'regular_participants': scoped_participants.exclude(registration_type='member').count(),
+    })
 
     participant_summary, participant_totals, participant_chart_data, organization_page_obj, organization_chart_data = get_participant_summary(request, org_page_number)
 

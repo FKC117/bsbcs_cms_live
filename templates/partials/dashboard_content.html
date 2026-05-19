@@ -50,22 +50,30 @@
   </aside>
 </section>
 
-<section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-  <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+<section class="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
     <div class="text-xs font-black uppercase tracking-wide text-slate-500">Participants</div>
-    <div class="mt-1 text-3xl font-black text-ink">{{ totals.participants }}</div>
+    <div class="mt-1 text-2xl font-black text-ink">{{ totals.participants }}</div>
   </div>
-  <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Unique people</div>
+    <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.unique_participants }}</div>
+  </div>
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Members</div>
+    <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.member_participants }}</div>
+  </div>
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Regular</div>
+    <div class="mt-1 text-2xl font-black text-ink">{{ totals.regular_participants }}</div>
+  </div>
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
     <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending payment</div>
-    <div class="mt-1 text-3xl font-black text-bsbcs-pink">{{ totals.pending_payments }}</div>
+    <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending_payments }}</div>
   </div>
-  <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+  <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
     <div class="text-xs font-black uppercase tracking-wide text-slate-500">Revenue collected</div>
     <div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.revenue }}</div>
-  </div>
-  <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
-    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Corporate lists</div>
-    <div class="mt-1 text-3xl font-black text-ink">{{ operations.pending_corporate_registrations_count }}</div>
   </div>
 </section>
 
@@ -129,7 +137,6 @@
   <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet xl:col-span-2">
     <div class="mb-3 flex items-center justify-between gap-3">
       <div>
-        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Chart.js</div>
         <h2 class="mt-1 text-xl font-black text-ink">Registration pressure by event</h2>
       </div>
     </div>
@@ -144,7 +151,6 @@
 
   <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
     <div class="mb-3">
-      <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Chart.js</div>
       <h2 class="mt-1 text-xl font-black text-ink">Approval status</h2>
     </div>
     {% if dashboard_chart_data.participant_status.labels %}
@@ -173,7 +179,6 @@
 
   <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
     <div class="mb-3">
-      <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Chart.js</div>
       <h2 class="mt-1 text-xl font-black text-ink">Organizations</h2>
     </div>
     {% if dashboard_chart_data.organizations.labels %}
