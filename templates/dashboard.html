@@ -2,110 +2,502 @@
 {% load static %}
 
 {% block extrahead %}
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .dashboard-container {
-            margin-left: 280px;
-            padding: 20px;
+        :root {
+            --ops-ink: #102033;
+            --ops-muted: #607083;
+            --ops-line: #d9e4ef;
+            --ops-bg: #eef6fb;
+            --ops-surface: #ffffff;
+            --ops-blue: #1769c2;
+            --ops-blue-deep: #0d3d75;
+            --ops-teal: #087f8c;
+            --ops-pink: #d92878;
+            --ops-green: #16864d;
+            --ops-yellow: #b77905;
+        }
+
+        #content {
+            padding: 0 !important;
+        }
+
+        .dashboard-shell {
             min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(8, 127, 140, .16), transparent 32rem),
+                linear-gradient(180deg, #f8fcff 0%, var(--ops-bg) 52%, #f7fafc 100%);
+            color: var(--ops-ink);
         }
 
-        .filter-sidebar {
-            position: fixed;
-            left: 0;
+        .ops-topbar {
+            background: linear-gradient(135deg, #0d2747 0%, #124c85 54%, #0b7d88 100%);
+            color: #fff;
+            padding: 26px 0 86px;
+            box-shadow: 0 20px 50px rgba(15, 32, 51, .22);
+        }
+
+        .ops-topbar-inner,
+        .ops-main,
+        .ops-footer-inner {
+            width: min(1320px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .ops-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .ops-brand {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .ops-brand-mark {
+            display: grid;
+            place-items: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .28);
+            font-weight: 850;
+        }
+
+        .ops-brand-title {
+            font-weight: 850;
+            line-height: 1.1;
+        }
+
+        .ops-brand-subtitle {
+            color: rgba(255, 255, 255, .72);
+            font-size: 13px;
+        }
+
+        .ops-header-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 28px;
+            align-items: end;
+        }
+
+        .ops-kicker {
+            color: #9be7df;
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .ops-title {
+            font-size: clamp(30px, 4vw, 48px);
+            font-weight: 850;
+            letter-spacing: 0;
+            margin: 8px 0;
+        }
+
+        .ops-subtitle {
+            color: rgba(255, 255, 255, .78);
+            max-width: 760px;
+            margin: 0;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .ops-header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .ops-main {
+            margin-top: -58px;
+            padding-bottom: 42px;
+        }
+
+        .ops-filter-panel {
+            background: rgba(255, 255, 255, .96);
+            border: 1px solid rgba(217, 228, 239, .92);
+            border-radius: 18px;
+            box-shadow: 0 22px 54px rgba(15, 32, 51, .13);
+            padding: 18px;
+            margin-bottom: 24px;
+            position: sticky;
             top: 0;
-            bottom: 0;
-            width: 280px;
-            background: #f8f9fa;
-            padding: 20px;
-            overflow-y: auto;
-            z-index: 1000;
-            border-right: 1px solid #dee2e6;
+            z-index: 20;
+            backdrop-filter: blur(12px);
         }
 
-        .scrollable-main {
-            max-height: calc(100vh - 100px);
-            overflow-y: auto;
-            padding-right: 20px;
+        .ops-filter-form {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.4fr) minmax(180px, .8fr) auto;
+            gap: 14px;
+            align-items: end;
         }
 
-        .metric-card {
-            transition: transform 0.2s;
-            min-height: 150px;
+        .ops-filter-panel .form-label {
+            color: var(--ops-muted);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .04em;
+            text-transform: uppercase;
         }
 
-        .metric-card:hover {
-            transform: translateY(-5px);
+        .ops-filter-panel .form-select {
+            min-height: 46px;
+            border-color: var(--ops-line);
+            border-radius: 12px;
         }
 
-        @media (max-width: 768px) {
-            .filter-sidebar {
-                position: relative;
-                width: 100%;
-                height: auto;
-                margin-bottom: 20px;
+        .ops-card {
+            background: var(--ops-surface);
+            border: 1px solid var(--ops-line);
+            border-radius: 16px;
+            box-shadow: 0 16px 42px rgba(15, 32, 51, .07);
+        }
+
+        .ops-card .card-title {
+            color: var(--ops-ink);
+            font-weight: 850;
+        }
+
+        .action-card {
+            min-height: 188px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .action-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 5px;
+            background: var(--ops-blue);
+        }
+
+        .action-card.ops-tone-danger::before { background: var(--ops-pink); }
+        .action-card.ops-tone-warning::before { background: var(--ops-yellow); }
+        .action-card.ops-tone-success::before { background: var(--ops-green); }
+        .action-card.ops-tone-info::before { background: var(--ops-teal); }
+        .action-card.ops-tone-secondary::before { background: #667085; }
+
+        .action-count {
+            color: var(--ops-ink);
+            font-size: 38px;
+            font-weight: 850;
+            line-height: 1;
+        }
+
+        .metric-chip {
+            border-radius: 999px;
+            background: #eef5fb;
+            color: var(--ops-blue-deep);
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .queue-row {
+            display: grid;
+            grid-template-columns: 98px minmax(0, 1fr) auto;
+            gap: 14px;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px solid #e7edf5;
+        }
+
+        .queue-row:last-child {
+            border-bottom: 0;
+        }
+
+        .queue-title {
+            color: var(--ops-ink);
+            font-weight: 750;
+        }
+
+        .queue-meta {
+            color: var(--ops-muted);
+            font-size: 13px;
+        }
+
+        .dashboard-chart-frame {
+            position: relative;
+            min-height: 320px;
+            height: 360px;
+        }
+
+        .dashboard-chart-frame.is-compact {
+            height: 300px;
+        }
+
+        .table {
+            --bs-table-hover-bg: #f4f9fd;
+        }
+
+        .table thead th {
+            color: #526176;
+            font-size: 12px;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .ops-footer {
+            border-top: 1px solid var(--ops-line);
+            background: #fff;
+            color: var(--ops-muted);
+            padding: 18px 0;
+        }
+
+        .ops-footer-inner {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 13px;
+        }
+
+        @media (max-width: 900px) {
+            .ops-header-grid,
+            .ops-filter-form {
+                grid-template-columns: 1fr;
             }
-            
-            .dashboard-container {
-                margin-left: 0;
-                padding: 15px;
+
+            .ops-header-actions {
+                justify-content: flex-start;
+            }
+
+            .ops-filter-panel {
+                position: static;
+            }
+
+            .queue-row {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard-chart-frame,
+            .dashboard-chart-frame.is-compact {
+                height: 280px;
             }
         }
     </style>
 {% endblock %}
 
 {% block content %}
+<div class="dashboard-shell">
+    <header class="ops-topbar">
+        <div class="ops-topbar-inner">
+            <div class="ops-nav">
+                <div class="ops-brand">
+                    <div class="ops-brand-mark">B</div>
+                    <div>
+                        <div class="ops-brand-title">BSBCS</div>
+                        <div class="ops-brand-subtitle">Administration workspace</div>
+                    </div>
+                </div>
+                <a href="{% url 'admin:index' %}" class="btn btn-light">Back to Admin</a>
+            </div>
+            <div class="ops-header-grid">
+                <div>
+                    <div class="ops-kicker">Operations Dashboard</div>
+                    <h1 class="ops-title">Today&apos;s admin cockpit</h1>
+                    <p class="ops-subtitle">Track approvals, payments, corporate bookings, abstracts, membership work, and event health without jumping through every model first.</p>
+                </div>
+                <div class="ops-header-actions">
+                    <a href="{% url 'admin:registration_event_changelist' %}" class="btn btn-outline-light">Events</a>
+                    <a href="{% url 'admin:registration_participant_changelist' %}" class="btn btn-outline-light">Participants</a>
+                    <a href="{% url 'admin:registration_paymentstatus_changelist' %}" class="btn btn-outline-light">Payments</a>
+                </div>
+            </div>
+        </div>
+    </header>
 
-<div class="container-fluid">
-    <div class="row">
-        <!-- Fixed Filter Sidebar -->
-        <div class="filter-sidebar col-md-3">
-            <h4 class="mb-4">Dashboard Filters</h4>
-            <form method="get" id="filter-form" 
-                  hx-get="/dashboard/" 
-                  hx-trigger="change" 
+    <main class="ops-main">
+        <section class="ops-filter-panel">
+            <form method="get" id="filter-form"
+                  class="ops-filter-form"
+                  hx-get="/dashboard/"
+                  hx-trigger="change"
                   hx-target="#dashboard-content">
-                <div class="mb-4">
-                    <label class="form-label">Select Event</label>
+                <div>
+                    <label class="form-label" for="event">Event</label>
                     <select name="event" class="form-select" id="event">
-                        <option value="">All Events</option>
+                        <option value="">All events</option>
                         {% for event in all_events %}
                         <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>
-                            {{ event.name }}
+                            {{ event.name }} {{ event.year }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
-
-                <div class="mb-4">
-                    <label class="form-label">Event Status</label>
+                <div>
+                    <label class="form-label" for="event_status">Event status</label>
                     <select name="event_status" class="form-select" id="event_status">
-                        <option value="">All Statuses</option>
+                        <option value="">All statuses</option>
                         <option value="active" {% if current_filters.event_status == 'active' %}selected{% endif %}>Active</option>
                         <option value="closed" {% if current_filters.event_status == 'closed' %}selected{% endif %}>Closed</option>
                         <option value="upcoming" {% if current_filters.event_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
                     </select>
                 </div>
+                <a href="/dashboard/" class="btn btn-outline-secondary">Reset</a>
             </form>
-        </div>
+        </section>
 
-        <!-- Main Content -->
-        <div class="dashboard-container col-md-9">
-            <div class="scrollable-main">
-                <h1 class="mb-4">Event Analytics Dashboard</h1>
-                <div id="dashboard-content">
-                    {% include "partials/dashboard_content.html" %}
-                </div>
-            </div>
+        <div id="dashboard-content">
+            {% include "partials/dashboard_content.html" %}
         </div>
-    </div>
+    </main>
+
+    <footer class="ops-footer">
+        <div class="ops-footer-inner">
+            <span>BSBCS CMS operations dashboard</span>
+            <span>Use model admin pages for final approval, payment edits, and content changes.</span>
+        </div>
+    </footer>
 </div>
 
-<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function () {
+        const activeCharts = {};
+
+        function getChartData() {
+            const dataScript = document.getElementById('dashboard-chart-data');
+            if (!dataScript) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(dataScript.textContent);
+            } catch (error) {
+                console.error('Unable to parse dashboard chart data.', error);
+                return null;
+            }
+        }
+
+        function resetChart(key) {
+            if (activeCharts[key]) {
+                activeCharts[key].destroy();
+                delete activeCharts[key];
+            }
+        }
+
+        function renderBarChart(key, canvasId, config) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas || !config.labels || !config.labels.length || !window.Chart) {
+                resetChart(key);
+                return;
+            }
+
+            resetChart(key);
+            activeCharts[key] = new Chart(canvas, {
+                type: config.type || 'bar',
+                data: {
+                    labels: config.labels,
+                    datasets: config.datasets,
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: config.indexAxis || 'x',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 12, usePointStyle: true },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { autoSkip: false, maxRotation: 45, minRotation: 0 },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(96, 112, 131, .14)' },
+                        },
+                    },
+                },
+            });
+        }
+
+        function initDashboardCharts() {
+            const data = getChartData();
+            if (!data) {
+                return;
+            }
+
+            const eventMetrics = data.event_metrics || {};
+            renderBarChart('eventMetrics', 'eventMetricsChart', {
+                labels: eventMetrics.labels || [],
+                datasets: [
+                    {
+                        label: 'Approved participants',
+                        data: eventMetrics.approved || [],
+                        backgroundColor: 'rgba(23, 105, 194, 0.78)',
+                        borderColor: 'rgb(23, 105, 194)',
+                        borderWidth: 1,
+                    },
+                    {
+                        label: 'Pending payments',
+                        data: eventMetrics.pending_payments || [],
+                        backgroundColor: 'rgba(183, 121, 5, 0.72)',
+                        borderColor: 'rgb(183, 121, 5)',
+                        borderWidth: 1,
+                    },
+                ],
+            });
+
+            const participantStatus = data.participant_status || {};
+            renderBarChart('participantStatus', 'participantStatusChart', {
+                labels: participantStatus.labels || [],
+                datasets: [
+                    {
+                        label: 'Approved',
+                        data: participantStatus.approved || [],
+                        backgroundColor: 'rgba(22, 134, 77, 0.76)',
+                    },
+                    {
+                        label: 'Pending',
+                        data: participantStatus.pending || [],
+                        backgroundColor: 'rgba(183, 121, 5, 0.72)',
+                    },
+                    {
+                        label: 'Denied',
+                        data: participantStatus.denied || [],
+                        backgroundColor: 'rgba(217, 40, 120, 0.70)',
+                    },
+                ],
+            });
+
+            const organizations = data.organizations || {};
+            renderBarChart('organizations', 'organizationChart', {
+                labels: organizations.labels || [],
+                datasets: [
+                    {
+                        label: 'Participants',
+                        data: organizations.counts || [],
+                        backgroundColor: 'rgba(8, 127, 140, 0.74)',
+                        borderColor: 'rgb(8, 127, 140)',
+                        borderWidth: 1,
+                    },
+                ],
+                indexAxis: 'y',
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboardCharts);
+        document.body.addEventListener('htmx:afterSwap', function (event) {
+            if (event.detail.target && event.detail.target.id === 'dashboard-content') {
+                initDashboardCharts();
+            }
+        });
+    })();
+</script>
 {% endblock %}
-
-

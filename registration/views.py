@@ -2173,75 +2173,239 @@ def event_feedback_view(request, event_id):
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
-from django.db.models import Sum
-from django.conf import settings
-import os
-import matplotlib
-matplotlib.use('Agg')  # Set backend before importing pyplot
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-from registration.models import Participant, PaymentStatus, Event
-from datetime import datetime
-from django.core.cache import cache
+from django.db.models import Sum, Q
+from django.urls import reverse
+from registration.models import (
+    Participant,
+    PaymentStatus,
+    Event,
+    AbstractSubmission,
+    CorporateAccountRequest,
+    CorporateEventRegistration,
+    CorporateEventAttendee,
+    CorporatePayment,
+)
 from django.core.paginator import Paginator
 from urllib.parse import urlencode
+from collections import Counter, defaultdict
 
 
-def generate_chart(event_metrics):
-    cache_key = f"chart_{hash(str(event_metrics))}"
-    cached_chart = cache.get(cache_key)
-    if cached_chart:
-        return cached_chart
-    if not event_metrics:
-        return None
+UNPAID_PAYMENT_STATUSES = ['unpaid', 'pending', 'failed', 'initiated']
+PAID_PAYMENT_STATUSES = ['paid', 'completed']
 
-    try:
-        df = pd.DataFrame(event_metrics)
-        df = df.rename(columns={
-            'approved_participants': 'Approved Participants',
-            'pending_payments': 'Pending Payments',
-            'revenue_collected': 'Revenue Collected'
+
+def admin_changelist_url(model, query_params=None):
+    opts = model._meta
+    url = reverse(f'admin:{opts.app_label}_{opts.model_name}_changelist')
+    if query_params:
+        return f'{url}?{urlencode(query_params, doseq=True)}'
+    return url
+
+
+def admin_change_url(obj):
+    opts = obj._meta
+    return reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[obj.pk])
+
+
+def build_event_metrics_chart_data(event_metrics):
+    return {
+        'labels': [metric['name'] for metric in event_metrics],
+        'approved': [metric['approved_participants'] for metric in event_metrics],
+        'pending_payments': [metric['pending_payments'] for metric in event_metrics],
+        'revenue': [float(metric['revenue_collected']) for metric in event_metrics],
+    }
+
+
+def build_dashboard_operations(events, event_filter=None, event_status_filter=None):
+    from website.models import Member, MembershipPayment
+
+    event_ids = list(events.values_list('id', flat=True))
+    event_scope = {'event_id__in': event_ids}
+    event_filter_query = {}
+    if event_filter:
+        event_filter_query['event__id__exact'] = event_filter
+
+    pending_participants = Participant.objects.filter(
+        **event_scope,
+        approved=False,
+        denied=False,
+    ).select_related('event').order_by('-created_at')
+
+    approved_unpaid_payments = PaymentStatus.objects.filter(
+        **event_scope,
+        participant__approved=True,
+        status__in=UNPAID_PAYMENT_STATUSES,
+    ).select_related('event', 'participant').order_by('-updated_at')
+
+    pending_corporate_requests = CorporateAccountRequest.objects.filter(status='pending').order_by('-created_at')
+    pending_corporate_attendees = CorporateEventAttendee.objects.filter(
+        registration__event_id__in=event_ids,
+        review_status='pending',
+    ).select_related('registration__event', 'registration__corporate_account').order_by('-created_at')
+    pending_corporate_registrations = CorporateEventRegistration.objects.filter(
+        event_id__in=event_ids,
+        status__in=['submitted', 'under_review'],
+    ).select_related('event', 'corporate_account').order_by('-created_at')
+    unpaid_corporate_payments = CorporatePayment.objects.filter(
+        event_id__in=event_ids,
+        status__in=UNPAID_PAYMENT_STATUSES,
+    ).select_related('event', 'corporate_account').order_by('-created_at')
+
+    pending_abstracts = AbstractSubmission.objects.filter(
+        event_id__in=event_ids,
+        approved_for_presentation=False,
+        approved_for_poster=False,
+    ).select_related('event', 'user').order_by('-updated_at')
+
+    pending_members = Member.objects.filter(approval_status='pending').select_related('user_profile').order_by('-created_at')
+    pending_membership_payments = MembershipPayment.objects.filter(
+        status__in=['initiated', 'pending', 'failed']
+    ).select_related('user_profile', 'membership_type').order_by('-updated_at')
+
+    open_events = Event.objects.filter(
+        Q(event_status='active') | Q(registration='Open')
+    ).order_by('start_date')
+    if event_status_filter:
+        open_events = open_events.filter(event_status=event_status_filter)
+    if event_filter:
+        open_events = open_events.filter(id=event_filter)
+
+    event_health = []
+    for event in open_events[:8]:
+        approved_count = Participant.objects.filter(event=event, approved=True).count()
+        pending_count = Participant.objects.filter(event=event, approved=False, denied=False).count()
+        unpaid_count = PaymentStatus.objects.filter(
+            event=event,
+            participant__approved=True,
+            status__in=UNPAID_PAYMENT_STATUSES,
+        ).count()
+        warnings = []
+        if event.registration == 'Open' and event.event_status == 'closed':
+            warnings.append('Registration open while event is closed')
+        if event.payment_required and not event.amount:
+            warnings.append('Payment required but regular fee is empty')
+        if event.member_registration_enabled and event.member_registration_fee is None:
+            warnings.append('Member fee not set, treated as free')
+        if event.registration_audience == 'members_only' and not event.member_registration_enabled:
+            warnings.append('Members-only event without member flow enabled')
+
+        event_health.append({
+            'event': event,
+            'approved_count': approved_count,
+            'pending_count': pending_count,
+            'unpaid_count': unpaid_count,
+            'warnings': warnings,
+            'admin_url': admin_change_url(event),
         })
 
-        df_melted = df.melt(
-            id_vars=['name'],
-            value_vars=['Approved Participants', 'Pending Payments'],
-            var_name='Metric',
-            value_name='Count'
-        )
+    action_cards = [
+        {
+            'label': 'Participant approvals',
+            'count': pending_participants.count(),
+            'tone': 'warning',
+            'description': 'Individual event registrations waiting for admin approval.',
+            'url': admin_changelist_url(Participant, {
+                **event_filter_query,
+                'approved__exact': '0',
+                'denied__exact': '0',
+            }),
+        },
+        {
+            'label': 'Approved but unpaid',
+            'count': approved_unpaid_payments.count(),
+            'tone': 'danger',
+            'description': 'Approved participants who still need payment completion.',
+            'url': admin_changelist_url(PaymentStatus, {
+                **event_filter_query,
+                'status__in': UNPAID_PAYMENT_STATUSES,
+            }),
+        },
+        {
+            'label': 'Corporate review',
+            'count': pending_corporate_attendees.count() + pending_corporate_requests.count(),
+            'tone': 'primary',
+            'description': 'Corporate access requests and attendee rows waiting for review.',
+            'url': admin_changelist_url(CorporateEventAttendee, {
+                'registration__event__id__exact': event_filter,
+                'review_status__exact': 'pending',
+            } if event_filter else {'review_status__exact': 'pending'}),
+        },
+        {
+            'label': 'Membership approvals',
+            'count': pending_members.count(),
+            'tone': 'success',
+            'description': 'Membership applications waiting for approval or rejection.',
+            'url': admin_changelist_url(Member, {'approval_status__exact': 'pending'}),
+        },
+        {
+            'label': 'Abstract review',
+            'count': pending_abstracts.count(),
+            'tone': 'info',
+            'description': 'Abstracts not yet marked for oral or poster presentation.',
+            'url': admin_changelist_url(AbstractSubmission, event_filter_query),
+        },
+        {
+            'label': 'Corporate invoices',
+            'count': unpaid_corporate_payments.count(),
+            'tone': 'secondary',
+            'description': 'Corporate invoices not marked paid or completed.',
+            'url': admin_changelist_url(CorporatePayment, {
+                'event__id__exact': event_filter,
+                'status__in': UNPAID_PAYMENT_STATUSES,
+            } if event_filter else {'status__in': UNPAID_PAYMENT_STATUSES}),
+        },
+    ]
 
-        plt.figure(figsize=(12, 7))
-        sns.set_style("whitegrid")
-        ax = sns.barplot(
-            x='name',
-            y='Count',
-            hue='Metric',
-            data=df_melted,
-            palette="viridis"
-        )
-        plt.title('Event Metrics Comparison', fontsize=14)
-        plt.xlabel('Events', fontsize=12)
-        plt.ylabel('Count', fontsize=12)
-        plt.xticks(rotation=45, ha='right')
-        plt.legend(title='Metrics', bbox_to_anchor=(1.05, 1), loc='upper left')
+    latest_queue = [
+        {
+            'label': 'Participant',
+            'title': f'{item.name} - {item.event.name}',
+            'meta': item.email,
+            'status': 'Pending approval',
+            'url': admin_change_url(item),
+        }
+        for item in pending_participants[:5]
+    ]
+    latest_queue.extend([
+        {
+            'label': 'Payment',
+            'title': f'{item.participant.name} - {item.event.name}',
+            'meta': f'BDT {item.amount or 0}',
+            'status': item.get_status_display(),
+            'url': admin_change_url(item),
+        }
+        for item in approved_unpaid_payments[:5]
+    ])
+    latest_queue.extend([
+        {
+            'label': 'Corporate',
+            'title': f'{item.name} - {item.registration.event.name}',
+            'meta': item.registration.corporate_account.company_name,
+            'status': item.get_review_status_display(),
+            'url': admin_change_url(item),
+        }
+        for item in pending_corporate_attendees[:5]
+    ])
+    latest_queue = latest_queue[:10]
 
-        chart_dir = os.path.join(settings.MEDIA_ROOT, 'charts')
-        os.makedirs(chart_dir, exist_ok=True)
-        chart_filename = f'metrics_{datetime.now().timestamp()}.png'
-        chart_path = os.path.join(chart_dir, chart_filename)
-
-        plt.tight_layout()
-        plt.savefig(chart_path)
-        plt.close()
-
-        chart_url = f'charts/{chart_filename}'
-        cache.set(cache_key, chart_url, timeout=3600)
-        return chart_url
-
-    except Exception as e:
-        logger.exception("Chart Error: %s", e)
-        return None
+    return {
+        'action_cards': action_cards,
+        'event_health': event_health,
+        'latest_queue': latest_queue,
+        'pending_corporate_registrations_count': pending_corporate_registrations.count(),
+        'pending_membership_payments_count': pending_membership_payments.count(),
+        'admin_links': {
+            'participants': admin_changelist_url(Participant),
+            'payments': admin_changelist_url(PaymentStatus),
+            'corporate_registrations': admin_changelist_url(CorporateEventRegistration),
+            'corporate_attendees': admin_changelist_url(CorporateEventAttendee),
+            'corporate_payments': admin_changelist_url(CorporatePayment),
+            'membership': admin_changelist_url(Member),
+            'membership_payments': admin_changelist_url(MembershipPayment),
+            'abstracts': admin_changelist_url(AbstractSubmission),
+            'events': admin_changelist_url(Event),
+        },
+    }
 
 
 @staff_member_required
@@ -2255,6 +2419,7 @@ def global_dashboard(request):
     events = Event.objects.all()
     if event_status_filter:
         events = events.filter(event_status=event_status_filter)
+    operations = build_dashboard_operations(events, event_filter, event_status_filter)
 
     event_metrics = []
     for event in events:
@@ -2274,7 +2439,6 @@ def global_dashboard(request):
 
     event_paginator = Paginator(event_metrics, 10)
     event_page_obj = event_paginator.get_page(event_page_number)
-    chart_path = generate_chart(event_metrics.copy()) if event_metrics else None
 
     totals = {
         'participants': sum(m['approved_participants'] for m in event_metrics),
@@ -2282,7 +2446,7 @@ def global_dashboard(request):
         'revenue': sum(m['revenue_collected'] for m in event_metrics)
     }
 
-    participant_summary, participant_totals, participant_chart_path, organization_page_obj, organization_chart_path = get_participant_summary(request)
+    participant_summary, participant_totals, participant_chart_data, organization_page_obj, organization_chart_data = get_participant_summary(request, org_page_number)
 
     paginator = Paginator(participant_summary, 10)
     page_obj = paginator.get_page(page_number)
@@ -2296,18 +2460,20 @@ def global_dashboard(request):
         'all_events': Event.objects.all(),
         'event_page_obj': event_page_obj,
         'totals': totals,
-        'chart_path': chart_path,
         'page_obj': page_obj,
         'participant_totals': participant_totals,
-        'participant_chart_path': participant_chart_path,
         'organization_page_obj': organization_page_obj,
-        'organization_chart_path': organization_chart_path,
+        'dashboard_chart_data': {
+            'event_metrics': build_event_metrics_chart_data(event_metrics),
+            'participant_status': participant_chart_data,
+            'organizations': organization_chart_data,
+        },
+        'operations': operations,
         'current_filters': {
             'event': event_filter,
             'event_status': event_status_filter
         },
         'query_string': query_string,
-        'MEDIA_URL': settings.MEDIA_URL,  # 👈 Add this
     }
 
     if request.headers.get('HX-Request'):
@@ -2326,133 +2492,79 @@ def get_participant_summary(request, org_page_number=None):
         events = events.filter(id=event_filter)
 
     if not events.exists():
-        return [], {}, None, [], None
+        return [], {}, {'labels': [], 'approved': [], 'denied': [], 'pending': []}, [], {'labels': [], 'counts': []}
 
     event_ids = events.values_list('id', flat=True)
 
-    participant_qs = Participant.objects.filter(event_id__in=event_ids).values(
+    participant_rows = list(Participant.objects.filter(event_id__in=event_ids).values(
         'name', 'email', 'approved', 'denied', 'event__name', 'country', 'organization'
-    )
+    ))
+    if not participant_rows:
+        return [], {}, {'labels': [], 'approved': [], 'denied': [], 'pending': []}, [], {'labels': [], 'counts': []}
 
-    df = pd.DataFrame(list(participant_qs))
-    if df.empty:
-        return [], {}, None, [], None
-
-    df = df.rename(columns={'event__name': 'event_name'})
-
+    participant_summary = []
+    organization_counts = Counter()
+    status_by_event = defaultdict(lambda: {'approved': 0, 'denied': 0, 'pending': 0})
     totals = {
-        'total_participants': len(df),
-        'approved_participants': df['approved'].sum(),
-        'denied_participants': df['denied'].sum(),
-        'pending_participants': len(df) - df['approved'].sum() - df['denied'].sum(),
-        'local_participants': df['country'].fillna('').str.contains('Bangladesh', case=False).sum(),
-        'foreign_participants': len(df) - df['country'].fillna('').str.contains('Bangladesh', case=False).sum(),
+        'total_participants': 0,
+        'approved_participants': 0,
+        'denied_participants': 0,
+        'pending_participants': 0,
+        'local_participants': 0,
+        'foreign_participants': 0,
     }
 
-    organization_summary = df.groupby('organization').size().reset_index(name='participant_count')
-    organization_paginator = Paginator(organization_summary.to_dict(orient='records'), 10)
+    for participant in participant_rows:
+        event_name = participant.get('event__name') or 'Untitled event'
+        organization = (participant.get('organization') or 'Not specified').strip() or 'Not specified'
+        country = participant.get('country') or ''
+        approved = bool(participant.get('approved'))
+        denied = bool(participant.get('denied'))
+
+        participant_summary.append({
+            'name': participant.get('name') or '',
+            'email': participant.get('email') or '',
+            'approved': approved,
+            'denied': denied,
+            'event_name': event_name,
+            'country': country,
+            'organization': organization,
+        })
+
+        totals['total_participants'] += 1
+        organization_counts[organization] += 1
+
+        if approved:
+            totals['approved_participants'] += 1
+            status_by_event[event_name]['approved'] += 1
+        elif denied:
+            totals['denied_participants'] += 1
+            status_by_event[event_name]['denied'] += 1
+        else:
+            totals['pending_participants'] += 1
+            status_by_event[event_name]['pending'] += 1
+
+        if 'bangladesh' in country.lower():
+            totals['local_participants'] += 1
+        else:
+            totals['foreign_participants'] += 1
+
+    organization_summary = [
+        {'organization': organization, 'participant_count': count}
+        for organization, count in organization_counts.most_common()
+    ]
+    organization_paginator = Paginator(organization_summary, 10)
     organization_page_obj = organization_paginator.get_page(org_page_number)
 
-    chart_path = generate_participant_summary_chart(df)
-    org_chart_path = generate_organization_chart(organization_summary)
+    participant_chart_data = {
+        'labels': list(status_by_event.keys()),
+        'approved': [counts['approved'] for counts in status_by_event.values()],
+        'denied': [counts['denied'] for counts in status_by_event.values()],
+        'pending': [counts['pending'] for counts in status_by_event.values()],
+    }
+    organization_chart_data = {
+        'labels': [item['organization'] for item in organization_summary[:15]],
+        'counts': [item['participant_count'] for item in organization_summary[:15]],
+    }
 
-    return df.to_dict(orient='records'), totals, chart_path, organization_page_obj, org_chart_path
-
-
-def generate_participant_summary_chart(df):
-    if df.empty:
-        return None
-
-    cache_key = f"participant_summary_chart_{hash(pd.util.hash_pandas_object(df).sum())}"
-    cached_chart = cache.get(cache_key)
-    if cached_chart:
-        return cached_chart
-
-    summary_df = df.groupby('event_name').agg({
-        'approved': 'sum',
-        'denied': 'sum',
-    }).reset_index()
-    summary_df['pending'] = df.groupby('event_name').apply(
-        lambda x: len(x) - x['approved'].sum() - x['denied'].sum()
-    ).values
-
-    summary_df = summary_df.rename(columns={
-        'approved': 'Approved Participants',
-        'denied': 'Denied Participants',
-        'pending': 'Pending Participants'
-    })
-
-    df_melted = summary_df.melt(
-        id_vars=['event_name'],
-        value_vars=['Approved Participants', 'Denied Participants', 'Pending Participants'],
-        var_name='Status',
-        value_name='Count'
-    )
-
-    plt.figure(figsize=(12, 7))
-    sns.set_style("whitegrid")
-    sns.barplot(
-        x='event_name',
-        y='Count',
-        hue='Status',
-        data=df_melted,
-        palette='pastel'
-    )
-    plt.title('Participant approval status per event', fontsize=16)
-    plt.xlabel('Event', fontsize=14)
-    plt.ylabel('Count', fontsize=14)
-    plt.xticks(rotation=45, ha='right', fontsize=12)
-    plt.yticks(fontsize=12)
-    plt.tight_layout()
-
-    chart_dir = os.path.join(settings.MEDIA_ROOT, 'charts')
-    os.makedirs(chart_dir, exist_ok=True)
-    chart_filename = f'participant_summary_status_{datetime.now().timestamp()}.png'
-    chart_path = os.path.join(chart_dir, chart_filename)
-    plt.savefig(chart_path)
-    plt.close()
-
-    chart_url = f'charts/{chart_filename}'
-    cache.set(cache_key, chart_url, timeout=3600)
-    return chart_url
-
-
-def generate_organization_chart(organization_summary):
-    if organization_summary.empty:
-        return None
-
-    try:
-        cache_key = f"organization_chart_{hash(pd.util.hash_pandas_object(organization_summary).sum())}"
-        cached_chart = cache.get(cache_key)
-        if cached_chart:
-            return cached_chart
-
-        plt.figure(figsize=(12, 7))
-        sns.set_style("whitegrid")
-        sns.barplot(
-            x="participant_count",
-            y="organization",
-            data=organization_summary.sort_values('participant_count', ascending=False),
-            hue="organization",
-            palette="pastel",
-            legend=False
-        )
-
-        plt.title("Participants Per Organization", fontsize=16)
-        plt.xlabel("Number of Participants", fontsize=14)
-        plt.ylabel("Organization", fontsize=14)
-        plt.tight_layout()
-
-        chart_dir = os.path.join(settings.MEDIA_ROOT, 'charts')
-        os.makedirs(chart_dir, exist_ok=True)
-        chart_filename = f'organization_participant_chart_{datetime.now().timestamp()}.png'
-        chart_path = os.path.join(chart_dir, chart_filename)
-        plt.savefig(chart_path)
-        plt.close()
-
-        chart_url = f'charts/{chart_filename}'
-        cache.set(cache_key, chart_url, timeout=3600)
-        return chart_url
-    except Exception as e:
-        logger.exception("Chart Error: %s", e)
-        return None
+    return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
