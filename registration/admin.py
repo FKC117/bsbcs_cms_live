@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -867,6 +867,7 @@ class DepartmentAdmin(admin.ModelAdmin):
 class HallRoomAdmin(admin.ModelAdmin):
     list_display = ('name', 'location', 'event')
     list_filter = ('event',)
+    search_fields = ('name', 'location', 'event__name')
 admin.site.register(HallRoom, HallRoomAdmin)
 class TimeSlotAdmin(ImportExportModelAdmin):
     resource_class = TimeSlotResource
@@ -879,6 +880,7 @@ admin.site.register(TimeSlot, TimeSlotAdmin)
 class ProgramDayAdmin(admin.ModelAdmin):
     list_display = ('event', 'date', 'name')
     list_filter = ('event', 'date', 'name')
+    search_fields = ('name', 'event__name')
 admin.site.register(ProgramDay, ProgramDayAdmin)
 
 # Abstracts admin view START------------------------------------------------------------------------------#
@@ -1013,6 +1015,117 @@ class ProgramScheduleAdmin(admin.ModelAdmin):
 
 admin.site.register(ProgramSchedule, ProgramScheduleAdmin)
 # Program Schedule admin view END-----------------------------------------------------------------------------#
+
+
+@admin.register(ProgramPerson)
+class ProgramPersonAdmin(admin.ModelAdmin):
+    list_display = ('name', 'degree', 'designation', 'institution', 'email', 'country')
+    list_filter = ('country',)
+    search_fields = ('name', 'degree', 'designation', 'institution', 'email', 'phone')
+    readonly_fields = ('image_preview',)
+    fieldsets = (
+        ('Identity', {
+            'fields': ('name', 'degree', 'designation', 'institution')
+        }),
+        ('Contact', {
+            'fields': ('email', 'phone', 'country')
+        }),
+        ('Profile', {
+            'fields': ('biography', 'image', 'image_preview')
+        }),
+    )
+
+    def image_preview(self, obj):
+        if obj and obj.image:
+            return format_html('<img src="{}" style="height: 90px; width: 90px; object-fit: cover; border-radius: 10px;" />', obj.image.url)
+        return "No image uploaded"
+    image_preview.short_description = 'Current image'  # type: ignore
+
+
+class ProgramSessionFacultyInline(admin.TabularInline):
+    model = ProgramSessionFaculty
+    extra = 1
+    autocomplete_fields = ('person',)
+    fields = ('person', 'role', 'order')
+    ordering = ('role', 'order')
+
+
+class ProgramSessionItemInline(admin.TabularInline):
+    model = ProgramSessionItem
+    extra = 1
+    autocomplete_fields = ('abstract_submission',)
+    fields = ('order', 'start_time', 'end_time', 'title', 'abstract_submission')
+    ordering = ('order', 'start_time')
+
+
+@admin.register(ProgramSession)
+class ProgramSessionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'event', 'program_day', 'hall_room', 'start_time', 'end_time', 'order', 'get_chairpersons', 'get_moderators', 'get_panelists')
+    list_filter = ('event', 'program_day', 'hall_room')
+    search_fields = ('title', 'event__name', 'faculty_roles__person__name', 'items__title', 'items__abstract_submission__title')
+    autocomplete_fields = ('event', 'program_day', 'hall_room')
+    inlines = [ProgramSessionFacultyInline, ProgramSessionItemInline]
+    fieldsets = (
+        ('Session', {
+            'fields': ('event', 'title', 'description', 'order')
+        }),
+        ('Timing and room', {
+            'fields': ('program_day', 'hall_room', 'start_time', 'end_time')
+        }),
+    )
+
+    def _people_for_role(self, obj, role):
+        return ', '.join(
+            obj.faculty_roles.filter(role=role).select_related('person').values_list('person__name', flat=True)
+        )
+
+    def get_chairpersons(self, obj):
+        return self._people_for_role(obj, ProgramSessionFaculty.ROLE_CHAIRPERSON)
+    get_chairpersons.short_description = 'Chairpersons'  # type: ignore
+
+    def get_moderators(self, obj):
+        return self._people_for_role(obj, ProgramSessionFaculty.ROLE_MODERATOR)
+    get_moderators.short_description = 'Moderators'  # type: ignore
+
+    def get_panelists(self, obj):
+        return self._people_for_role(obj, ProgramSessionFaculty.ROLE_PANELIST)
+    get_panelists.short_description = 'Panelists'  # type: ignore
+
+
+class ProgramItemFacultyInline(admin.TabularInline):
+    model = ProgramItemFaculty
+    extra = 1
+    autocomplete_fields = ('person',)
+    fields = ('person', 'role', 'order')
+    ordering = ('role', 'order')
+
+
+@admin.register(ProgramSessionItem)
+class ProgramSessionItemAdmin(admin.ModelAdmin):
+    list_display = ('display_title', 'session', 'get_event', 'start_time', 'end_time', 'order', 'get_speakers')
+    list_filter = ('session__event', 'session__program_day', 'session__hall_room')
+    search_fields = ('title', 'abstract_submission__title', 'session__title', 'faculty_roles__person__name')
+    autocomplete_fields = ('session', 'abstract_submission')
+    inlines = [ProgramItemFacultyInline]
+    fieldsets = (
+        ('Talk or activity', {
+            'fields': ('session', 'title', 'abstract_submission', 'description', 'order')
+        }),
+        ('Timing', {
+            'fields': ('start_time', 'end_time')
+        }),
+    )
+
+    def get_event(self, obj):
+        return obj.session.event
+    get_event.short_description = 'Event'  # type: ignore
+
+    def get_speakers(self, obj):
+        return ', '.join(
+            obj.faculty_roles.select_related('person').values_list('person__name', flat=True)
+        )
+    get_speakers.short_description = 'People'  # type: ignore
+
 
 class SponsorAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'event')

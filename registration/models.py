@@ -618,6 +618,126 @@ class ProgramSchedule(models.Model):
         return f"{self.title} by {self.authors}"
 # ProgramSchedule Model END------------------------------------------------------------------------------------#
 
+
+class ProgramPerson(models.Model):
+    name = models.CharField(max_length=150)
+    degree = models.CharField(max_length=120, blank=True, null=True)
+    designation = models.CharField(max_length=180, blank=True, null=True)
+    institution = models.CharField(max_length=180, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    country = models.CharField(max_length=100, default='Bangladesh')
+    biography = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='images/program_people/', blank=True, null=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Program Person'
+        verbose_name_plural = 'Program People'
+
+    def __str__(self):
+        details = self.institution or self.designation
+        return f"{self.name} - {details}" if details else self.name
+
+
+class ProgramSession(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_sessions')
+    program_day = models.ForeignKey(ProgramDay, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')
+    hall_room = models.ForeignKey(HallRoom, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')
+    title = models.CharField(max_length=255)
+    start_time = models.TimeField(blank=True, null=True)
+    end_time = models.TimeField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['program_day__date', 'start_time', 'order', 'id']
+        verbose_name = 'Smart Program Session'
+        verbose_name_plural = 'Smart Program Sessions'
+
+    def __str__(self):
+        return f"{self.event} - {self.title}"
+
+
+class ProgramSessionFaculty(models.Model):
+    ROLE_CHAIRPERSON = 'chairperson'
+    ROLE_MODERATOR = 'moderator'
+    ROLE_PANELIST = 'panelist'
+    ROLE_CHOICES = [
+        (ROLE_CHAIRPERSON, 'Chairperson'),
+        (ROLE_MODERATOR, 'Moderator'),
+        (ROLE_PANELIST, 'Panelist'),
+    ]
+
+    session = models.ForeignKey(ProgramSession, on_delete=models.CASCADE, related_name='faculty_roles')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='session_roles')
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['role', 'order', 'person__name']
+        unique_together = ('session', 'person', 'role')
+        verbose_name = 'Session Faculty Role'
+        verbose_name_plural = 'Session Faculty Roles'
+
+    def __str__(self):
+        return f"{self.person} as {self.get_role_display()} in {self.session.title}"
+
+
+class ProgramSessionItem(models.Model):
+    session = models.ForeignKey(ProgramSession, on_delete=models.CASCADE, related_name='items')
+    abstract_submission = models.ForeignKey(AbstractSubmission, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_session_items')
+    title = models.CharField(max_length=400, blank=True, null=True, help_text='Use this for non-abstract talks or manual titles.')
+    start_time = models.TimeField(blank=True, null=True)
+    end_time = models.TimeField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'start_time', 'id']
+        verbose_name = 'Smart Program Item'
+        verbose_name_plural = 'Smart Program Items'
+
+    @property
+    def display_title(self):
+        return self.title or (self.abstract_submission.title if self.abstract_submission else 'Untitled program item')
+
+    def clean(self):
+        super().clean()
+        if not self.abstract_submission and not self.title:
+            raise ValidationError(_('Add either an abstract submission or a text-based title.'))
+        if self.abstract_submission and self.session and self.abstract_submission.event_id != self.session.event_id:
+            raise ValidationError(_('Selected abstract must belong to the same event as the session.'))
+
+    def __str__(self):
+        return self.display_title
+
+
+class ProgramItemFaculty(models.Model):
+    ROLE_SPEAKER = 'speaker'
+    ROLE_PRESENTER = 'presenter'
+    ROLE_DISCUSSANT = 'discussant'
+    ROLE_CHOICES = [
+        (ROLE_SPEAKER, 'Speaker'),
+        (ROLE_PRESENTER, 'Presenter'),
+        (ROLE_DISCUSSANT, 'Discussant'),
+    ]
+
+    item = models.ForeignKey(ProgramSessionItem, on_delete=models.CASCADE, related_name='faculty_roles')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='item_roles')
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default=ROLE_SPEAKER)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['role', 'order', 'person__name']
+        unique_together = ('item', 'person', 'role')
+        verbose_name = 'Item Faculty Role'
+        verbose_name_plural = 'Item Faculty Roles'
+
+    def __str__(self):
+        return f"{self.person} as {self.get_role_display()} for {self.item.display_title}"
+
+
 # Invitation Model START------------------------------------------------------------------------------------#
 class Invitation(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
