@@ -10,6 +10,8 @@ Use this file as the shared place for bugs, abrupt behavior, and verification no
 | 002 | 2026-05-20 11:50-11:53 | U2 Account Login, Logout, Password | medium | Password change page used old Bootstrap-era template instead of current BSBCS/Tailwind account style. | `/accounts/password_change/` returned 200 but rendered `change_password.html` with Bootstrap CDN and `form.as_p`; success page also used old Bootstrap card. | fixed | Retest `/accounts/password_change/` and successful password change done page. |
 | 003 | 2026-05-20 11:55-11:56 | U2 Account Login, Logout, Password | medium | Password reset flow used old Bootstrap-era templates instead of current BSBCS/Tailwind account style. | `/accounts/password_reset/` and related reset templates used Bootstrap CDN, `main.css`, and old card markup. | fixed | Retest reset request, email-sent page, reset-token form, invalid token state, and completion page. |
 | 004 | 2026-05-20 12:11-12:18 | U5 Regular Event Registration | medium | Event homepage showed separate Register Now and Register as Member CTAs; logged-out registration prompt did not present the expected regular/member fee choice cards. Mobile homepage CTA also sat awkwardly inside the hero color band. | Event homepage contained direct member-registration links. `/event/7/registration/` rendered a generic attention screen instead of prominent registration option cards. Hero/mobile CTA placement was visually abrupt. | fixed | Retest logged-out event homepage on desktop and mobile, confirm one centered CTA section appears directly below the hero image, click `Register Now`, verify regular/member fee cards and login/profile/member actions. |
+| 005 | 2026-05-20 12:30-12:40 | Event Template Tailwind Migration | medium | Event website was still using Tailwind CDN and several legacy Bootstrap-style templates instead of the compiled BSBCS Tailwind system. | `gene_base.html` loaded Tailwind 2.2 CDN. Tailwind config did not scan Django templates. Several event templates still use Bootstrap-style classes and custom CSS. | in progress | Test `/event/7/home/` first as the migrated pure compiled-CSS event page; then migrate remaining event templates one by one. |
+| 006 | 2026-05-20 13:45-13:53 | Public Website Membership Modal | medium | Membership benefits modal overlapped the fixed navbar on desktop and mobile. | Modal container centered against full viewport with insufficient top clearance for the fixed site header; on mobile the bottom-sheet style panel could start underneath the mobile header. | fixed | Retest homepage Join Society modal on desktop and mobile; confirm the modal starts below the header and actions remain visible. |
 
 ## Verification Notes
 
@@ -79,6 +81,26 @@ Use this file as the shared place for bugs, abrupt behavior, and verification no
 - Retest steps: Open `/event/7/home/` logged out on desktop and mobile, confirm no `Register as Member` button appears, confirm `Register Now` is centered directly below the hero image, click `Register Now`, and confirm `/event/7/registration/` shows the member card first, regular card second, and correct actions.
 
 ### Template
+
+### Event Tailwind Migration - 2026-05-20
+
+- Flow: Event template migration alongside U5 registration testing
+- Related records: `templates/gene_base.html`, `templates/home.html`, `templates/registration.html`, `static/js/tailwind.config.js`, `manual_test_flows/05_event_tailwind_template_migration.md`
+- What happened: User noted the event website was not using the same Tailwind system as the rest of the site.
+- Finding: Confirmed. The shared event base used Tailwind CDN, Tailwind config did not scan Django templates, and event registration templates mixed old Bootstrap-style classes/custom CSS.
+- Fix in progress: Added Django templates to Tailwind content scanning. Updated `gene_base.html` to load `site_main.css` and added a temporary `legacy_event_styles` block so templates can opt out one by one. Migrated `home.html` and `registration.html` to opt out of the CDN and use compiled design-system classes.
+- Verification: `npm run build:css` now succeeds and regenerated `static/css/site_main.css`. `python manage.py check` passes. `/event/7/home/` returns 200, uses `site_main.css`, does not load Tailwind CDN, and has one `Register Now`. `/event/7/registration/` returns 200, uses `site_main.css`, does not load Tailwind CDN, and shows the registration path choice.
+- Retest steps: Test `/event/7/home/` and `/event/7/registration/` on desktop/mobile first. Remaining event templates will stay on the legacy fallback until migrated.
+
+### Membership Modal Navbar Overlap - 2026-05-20
+
+- Flow: Public website homepage membership CTA
+- Related record: `templates/partials/membership_benefits_modal.html`
+- What happened: User found the membership benefits modal overlapped with the fixed navbar on desktop and mobile.
+- Finding: Confirmed from screenshots. The modal used full-viewport centering/bottom alignment without reserving header space.
+- Fix: Increased modal z-index, aligned the modal panel from the top with explicit top padding for desktop and mobile, reduced max-height calculations to account for the header, and kept the action buttons visible inside the panel.
+- Verification: `python manage.py check` passes. `/` returns 200 and includes the updated modal CSS. Desktop and mobile headless screenshots confirm the modal starts below the navbar instead of overlapping it.
+- Retest steps: Open homepage, trigger `Join Society`, verify desktop and mobile modal clearance, close button, `Apply for Membership`, and `Maybe Later`.
 
 - Flow:
 - Tester/account:

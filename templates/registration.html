@@ -2,127 +2,106 @@
 {% load crispy_forms_tags %}
 
 {% block title %}Registration{% endblock %}
+{% block legacy_event_styles %}{% endblock %}
 
 {% block content %}
-<br/>
-<section class="min-h-screen bg-pink-100 py-10 mt-10">
-  <div class="container">
-    <!-- Header Section -->
-    <div class="text-center mb-5">
-      <h1 class="text-4xl font-bold text-pink-900">Register for {{ event.name }} {{ event.year }}</h1>
-      <h2 class="text-2xl font-bold text-pink-900">{{ event.slogan }}</h2>
-      <p class="text-lg text-gray-700 mt-2">Sign up and be part of our community supporting awareness, early detection, and research.</p>
-      <!-- ✅ Show "Free" for free events, amount for paid events -->
-      {% if event.payment_required and event.amount %}
-        <h3 class="text-2xl text-gray-700 mt-2">Fees: BDT {{ event.amount }}</h3>
-      {% else %}
-        <h3 class="text-2xl text-green-600 mt-2 font-bold">🎉 FREE EVENT - No Registration Fee Required</h3>
-      {% endif %}
-    </div>
-
-    <!-- Form Section (Tailwind) -->
-    <div class="w-full flex justify-center">
-      <div class="w-full max-w-4xl px-4 mx-auto">
-        {% if show_registration_choice %}
-          <div class="overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
-            <div class="p-5 text-center sm:p-7">
-              <p class="text-xs font-bold uppercase tracking-widest text-pink-600">Choose your registration path</p>
-              <h2 class="mx-auto mt-2 max-w-2xl text-3xl font-bold text-gray-950">Register normally, or become a BSBCS member for eligible event benefits.</h2>
-              <p class="mx-auto mt-3 max-w-2xl text-base leading-7 text-gray-700">
-                You can continue as a regular participant today. If you apply for BSBCS membership and become approved,
-                this event may offer member pricing or complimentary member attendance.
-              </p>
-            </div>
-
-            <div class="grid gap-4 px-5 pb-5 md:grid-cols-2 sm:px-7 sm:pb-7">
-              <div class="rounded-xl border border-gray-200 bg-white p-5">
-                <p class="text-sm font-bold uppercase tracking-widest text-gray-500">Event registration fee</p>
-                <div class="mt-3 text-3xl font-bold text-gray-950">
-                  {% if regular_registration_fee %}
-                    BDT {{ regular_registration_fee }}
-                  {% else %}
-                    Free
-                  {% endif %}
-                </div>
-                <p class="mt-3 text-sm leading-6 text-gray-600">
-                  Continue with the standard event registration form. Your participant application will follow the usual approval process.
-                </p>
-                <a href="?mode=regular"
-                   class="mt-5 inline-flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-bold text-gray-900 transition hover:border-pink-300 hover:bg-pink-50">
-                  Continue Event Registration
-                </a>
-              </div>
-
-              <div class="rounded-xl border border-pink-200 bg-pink-50 p-5">
-                <p class="text-sm font-bold uppercase tracking-widest text-pink-600">Registration fee for members</p>
-                <div class="mt-3 text-3xl font-bold text-gray-950">
-                  {% if member_registration_fee %}
-                    BDT {{ member_registration_fee }}
-                  {% else %}
-                    Free
-                  {% endif %}
-                </div>
-                <p class="mt-3 text-sm leading-6 text-gray-700">
-                  Approved active members can register with member benefits when this program allows it. Membership approval and payment may be required first.
-                </p>
-                <a href="{% url 'website:membership_form' %}?event_intent={{ event.id }}"
-                   class="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-pink-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-pink-700">
-                  Apply for Membership
-                </a>
-              </div>
-            </div>
-          </div>
+<section class="section bg-background">
+  <div class="container-custom">
+    <div class="mx-auto max-w-4xl text-center">
+      <p class="text-sm font-bold uppercase tracking-widest text-secondary">Event Registration</p>
+      <h1 class="mt-4 text-4xl font-bold text-text-primary">Register for {{ event.name }} {{ event.year }}</h1>
+      <p class="mt-4 text-lg text-text-secondary">{{ event.slogan }}</p>
+      <p class="mt-4 text-base text-text-secondary">Sign up and be part of our community supporting awareness, early detection, and research.</p>
+      <div class="mt-4">
+        {% if event.payment_required and event.amount %}
+          <span class="inline-flex rounded-md border border-border bg-surface px-4 py-2 font-bold text-text-primary">Fees: BDT {{ event.amount }}</span>
         {% else %}
-          {% if show_membership_nudge %}
-            <div class="mb-5 rounded-2xl border border-pink-200 bg-white p-5 shadow-sm">
-              <p class="text-xs font-bold uppercase tracking-widest text-pink-600">Member benefits available</p>
-              <h2 class="mt-2 text-2xl font-bold text-gray-950">You are continuing with regular registration.</h2>
-              <p class="mt-2 text-base leading-7 text-gray-700">
-                Event registration fee:
-                <strong>{% if regular_registration_fee %}BDT {{ regular_registration_fee }}{% else %}Free{% endif %}</strong>.
-                Registration fee for members:
-                <strong>{% if member_registration_fee %}BDT {{ member_registration_fee }}{% else %}Free{% endif %}</strong>.
-              </p>
-            </div>
-          {% endif %}
-
-          <div class="bg-white shadow border border-gray-200 p-6 rounded-lg">
-            <h2 class="text-center text-2xl text-black font-bold mb-4">Register here</h2>
-            <form method="POST" action="{% url 'registration:registration' event.id %}">
-              {% csrf_token %}
-              <!-- Crispy Form Rendering -->
-              {{ form|crispy }}
-
-              <!-- Submit Button -->
-              <div class="mt-3">
-                <button type="submit" class="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 rounded">
-                  Register
-                </button>
-              </div>
-            </form>
-          </div>
+          <span class="inline-flex rounded-md border border-border bg-success-light px-4 py-2 font-bold text-success-dark">Free event - no registration fee required</span>
         {% endif %}
       </div>
     </div>
 
-    <!-- Footer Section -->
-    <div class="text-center mt-5">
-      <p class="text-sm text-gray-600">Already Registered? <a href="{% url 'registration:abstract_submission' event.id %}" class="text-pink-600 font-bold">Submit Abstract</a></p>
+    <div class="mx-auto mt-8 max-w-4xl">
+      {% if show_registration_choice %}
+        <div class="card-elevated overflow-hidden">
+          <div class="text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-secondary">Choose your registration path</p>
+            <h2 class="mx-auto mt-4 max-w-2xl text-3xl font-bold text-text-primary">Register normally, or become a BSBCS member for eligible event benefits.</h2>
+            <p class="mx-auto mt-4 max-w-2xl text-base text-text-secondary">
+              You can continue as a regular participant today. If you apply for BSBCS membership and become approved,
+              this event may offer member pricing or complimentary member attendance.
+            </p>
+          </div>
+
+          <div class="mt-8 grid gap-4 md:grid-cols-2">
+            <div class="card">
+              <p class="text-sm font-bold uppercase tracking-widest text-text-tertiary">Event registration fee</p>
+              <div class="mt-4 text-3xl font-bold text-text-primary">
+                {% if regular_registration_fee %}
+                  BDT {{ regular_registration_fee }}
+                {% else %}
+                  Free
+                {% endif %}
+              </div>
+              <p class="mt-4 text-sm text-text-secondary">
+                Continue with the standard event registration form. Your participant application will follow the usual approval process.
+              </p>
+              <a href="?mode=regular" class="btn-outline mt-6 w-full">
+                Continue Event Registration
+              </a>
+            </div>
+
+            <div class="card border-secondary bg-secondary-50">
+              <p class="text-sm font-bold uppercase tracking-widest text-secondary">Registration fee for members</p>
+              <div class="mt-4 text-3xl font-bold text-text-primary">
+                {% if member_registration_fee %}
+                  BDT {{ member_registration_fee }}
+                {% else %}
+                  Free
+                {% endif %}
+              </div>
+              <p class="mt-4 text-sm text-text-secondary">
+                Approved active members can register with member benefits when this program allows it. Membership approval and payment may be required first.
+              </p>
+              <a href="{% url 'website:membership_form' %}?event_intent={{ event.id }}" class="btn-secondary mt-6 w-full">
+                Apply for Membership
+              </a>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        {% if show_membership_nudge %}
+          <div class="card mb-4 border-secondary bg-secondary-50">
+            <p class="text-sm font-bold uppercase tracking-widest text-secondary">Member benefits available</p>
+            <h2 class="mt-4 text-2xl font-bold text-text-primary">You are continuing with regular registration.</h2>
+            <p class="mt-4 text-base text-text-secondary">
+              Event registration fee:
+              <strong>{% if regular_registration_fee %}BDT {{ regular_registration_fee }}{% else %}Free{% endif %}</strong>.
+              Registration fee for members:
+              <strong>{% if member_registration_fee %}BDT {{ member_registration_fee }}{% else %}Free{% endif %}</strong>.
+            </p>
+          </div>
+        {% endif %}
+
+        <div class="card-elevated">
+          <h2 class="text-center text-2xl font-bold text-text-primary">Register here</h2>
+          <form method="POST" action="{% url 'registration:registration' event.id %}" class="mt-6">
+            {% csrf_token %}
+            {{ form|crispy }}
+
+            <div class="mt-6">
+              <button type="submit" class="btn-secondary w-full">
+                Register
+              </button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="mt-8 text-center">
+      <p class="text-sm text-text-secondary">Already registered? <a href="{% url 'registration:abstract_submission' event.id %}" class="font-bold text-secondary">Submit Abstract</a></p>
     </div>
   </div>
 </section>
-<style>
-  body {
-    font-family: 'Arial', sans-serif;
-    background-color: #fce4ec;
-  }
-  .btn-pink {
-    background-color: #ec407a;
-    border-color: #ec407a;
-  }
-  .btn-pink:hover {
-    background-color: #d81b60;
-    border-color: #d81b60;
-  }
-</style>
 {% endblock %}

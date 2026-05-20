@@ -3,6 +3,9 @@ django.log*
 *.log
 *.gz
 venv/
+node_modules/
+static/js/node_modules/
+static/js/public/
 __pycache__/
 *.pyc
 media/

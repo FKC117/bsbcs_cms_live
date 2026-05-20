@@ -9,8 +9,7 @@
     <meta name="description" content="{{ event.description }}">
     <meta name="keywords" content="{{ event.keywords }}">
     <meta name="author" content="{{ event.author }}">
-    
-    <!-- Open Graph Metadata for Social Sharing -->
+
     <meta property="og:title" content="{{ event.name }} {{ event.year }}">
     <meta property="og:description" content="{{ event.description }}">
     {% if event.og_image %}
@@ -20,170 +19,156 @@
     {% endif %}
     <meta property="og:url" content="{{ request.build_absolute_uri }}">
     <meta property="og:type" content="website">
-    
+
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% block legacy_event_styles %}
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    {% endblock %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script src="{% static 'js/htmx.js' %}"></script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
 </head>
 
-<body>
-
-  <header class="fixed inset-x-0 top-0 z-50 bg-white shadow">
-    <nav class="flex items-center justify-between p-6 lg:px-8">
-      <div class="flex lg:flex-1">
-        <a href="{% if event %}{% url 'registration:home' event.id %}{% else %}{% url 'website:homepage' %}{% endif %}" class="-m-0.5 p-0.5">
-          <span class="sr-only">{{ event.name|default:"BSBCS" }}</span>
-          {% if event.event_logo %}
-          <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="w-12 h-12">
-          {% else %}
-          <h1 class="text-xl font-bold">{{ event.name|default:"BSBCS" }} {{ event.year|default:"" }}</h1>
-          {% endif %}
-        </a>
-      </div>
-      <div class="lg:hidden text-center py-2">
-        <span class ="text-xl font-bold text-gray-800">
-          {% if event %}
-          <a href="{% url 'registration:home' event.id %}">{{ event.name }} {{ event.year }}
+<body class="min-h-screen bg-background">
+  <div class="flex min-h-screen flex-col">
+    <header class="fixed inset-x-0 top-0 z-50 bg-surface shadow-md">
+      <nav class="container-custom flex items-center justify-between gap-4 py-4">
+        <div class="flex flex-shrink-0 items-center">
+          <a href="{% if event %}{% url 'registration:home' event.id %}{% else %}{% url 'website:homepage' %}{% endif %}">
+            <span class="sr-only">{{ event.name|default:"BSBCS" }}</span>
+            {% if event.event_logo %}
+            <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="h-12 w-12">
+            {% else %}
+            <span class="text-2xl font-bold text-text-primary">{{ event.name|default:"BSBCS" }} {{ event.year|default:"" }}</span>
+            {% endif %}
           </a>
-          {% else %}
-          <a href="{% url 'website:homepage' %}">BSBCS</a>
+        </div>
+
+        <div class="lg:hidden text-center">
+          <a href="{% if event %}{% url 'registration:home' event.id %}{% else %}{% url 'website:homepage' %}{% endif %}" class="text-lg font-bold text-text-primary">
+            {% if event %}{{ event.name }} {{ event.year }}{% else %}BSBCS{% endif %}
+          </a>
+        </div>
+
+        <div class="hidden flex-1 flex-wrap items-center justify-center gap-4 lg:flex">
+          <a href="{% url 'website:homepage' %}" class="text-sm font-semibold leading-4 text-text-primary">Main Website</a>
+          {% if event %}
+          <a href="{% url 'registration:home' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Home</a>
+          <a href="{% url 'registration:about' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">About</a>
+          <a href="{% url 'registration:invitation' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Invitation</a>
+          <a href="{% url 'registration:speakers' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Speakers</a>
+          <a href="{% url 'registration:schedule' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Schedule</a>
+          <a href="{% url 'registration:participant_list' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Participants</a>
+          {% if event.show_publication_tab %}
+          <a href="{% url 'registration:publication_list' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Publication</a>
           {% endif %}
-        </span>
-      </div>
-      <div class="hidden lg:flex lg:gap-x-10">
-        <a href="{% url 'website:homepage' %}" class="text-sm font-semibold leading-4 text-gray-900">Main Website</a>
-        {% if event %}
-        <a href="{% url 'registration:home' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Home</a>
-        <a href="{% url 'registration:about' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">About</a>
-        <a href="{% url 'registration:invitation' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Invitation</a>
-        <a href="{% url 'registration:speakers' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Speakers</a>
-        <a href="{% url 'registration:schedule' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Schedule</a>
-        <a href="{% url 'registration:participant_list' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Participants</a>
-        {% if event.show_publication_tab %}
-          <a href="{% url 'registration:publication_list' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Publication</a>
-        {% endif %}
-        
-        {% if event.registration_audience == 'members_only' %}
-          <a href="{% url 'registration:member_registration' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Member Registration</a>
-        {% else %}
-          <a href="{% url 'registration:registration' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Registration</a>
-        {% endif %}
-       
-        {% if event.event_status != 'closed' %}
-          <a href="{% url 'registration:abstract_submission' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Abstract Submission</a>
-        {% endif %}
-          
-        <a href="{% url 'registration:sponsor_list' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Sponsorship</a>
-        <a href="{% url 'registration:event_gallery' event.id %}" class="text-sm font-semibold leading-4 text-gray-900">Gallery</a>
-        {% endif %}
-      </div>
-      <div class="hidden lg:flex lg:flex-1 lg:justify-end">
-        {% if user.is_authenticated %}
-          {% comment %} <span class="text-sm font-semibold leading-4 text-gray-900">Welcome {{ user_profile.name }}</span> {% endcomment %}
-          <span class="text-sm font-semibold leading-6 text-gray-900"></span>
-          <a href="{% url 'logout' %}" class="ml-1 text-sm font-semibold leading-4 text-gray-900">Logout</a>
-          <span class="ml-2 text-sm font-semibold leading-4 text-gray-900">|</span>
-          <a href="{% url 'user_profile' %}" class="ml-2 text-sm font-semibold leading-4 text-gray-900">User Profile</a>
-        {% else %}
-          <a href="{% url 'create_profile' %}" class="text-sm font-semibold leading-4 text-gray-900">Create Profile</a>
-          <span class="ml-2 text-sm font-semibold leading-4 text-gray-900">|</span>
-          <a href="{% url 'login' %}" class="ml-1 text-sm font-semibold leading-4 text-gray-900">Login</a>
-        {% endif %}
-      </div>
-      <div class="lg:hidden">
-        <button type="button" class="text-gray-500 hover:text-gray-900 focus:outline-none focus:text-gray-900" aria-controls="mobile-menu" aria-expanded="false" onclick="toggleMenu()">
-          <span class="sr-only">Open main menu</span>
-          <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-    </nav>
+          {% if event.registration_audience == 'members_only' %}
+          <a href="{% url 'registration:member_registration' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Member Registration</a>
+          {% else %}
+          <a href="{% url 'registration:registration' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Registration</a>
+          {% endif %}
+          {% if event.event_status != 'closed' %}
+          <a href="{% url 'registration:abstract_submission' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Abstract Submission</a>
+          {% endif %}
+          <a href="{% url 'registration:sponsor_list' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Sponsorship</a>
+          <a href="{% url 'registration:event_gallery' event.id %}" class="text-sm font-semibold leading-4 text-text-primary">Gallery</a>
+          {% endif %}
+        </div>
 
-    <div class="lg:hidden" id="mobile-menu" style="display: none;">      
-      <div class="px-2 pt-2 pb-3 space-y-1">
-        <a href="{% url 'website:homepage' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Main Website</a>
-        {% if event %}
-        <a href="{% url 'registration:home' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Home</a>
-        <a href="{% url 'registration:about' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">About</a>
-        <a href="{% url 'registration:invitation' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Invitation</a>
-        <a href="{% url 'registration:speakers' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Speakers</a>
-        <a href="{% url 'registration:schedule' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Schedule</a>
-        <a href="{% url 'registration:participant_list' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Participants</a>
-        {% if event.show_publication_tab %}
-        <a href="{% url 'registration:publication_list' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Publication</a>
-        {% endif %}
-        
-        {% if event.registration_audience == 'members_only' %}
-        <a href="{% url 'registration:member_registration' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Member Registration</a>
-        {% else %}
-        <a href="{% url 'registration:registration' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Registration</a>
-        {% endif %}
+        <div class="hidden flex-shrink-0 items-center gap-3 lg:flex">
+          {% if user.is_authenticated %}
+          <a href="{% url 'logout' %}" class="text-sm font-semibold leading-4 text-text-primary">Logout</a>
+          <span class="text-sm font-semibold leading-4 text-text-tertiary">|</span>
+          <a href="{% url 'user_profile' %}" class="text-sm font-semibold leading-4 text-text-primary">User Profile</a>
+          {% else %}
+          <a href="{% url 'create_profile' %}" class="text-sm font-semibold leading-4 text-text-primary">Create Profile</a>
+          <span class="text-sm font-semibold leading-4 text-text-tertiary">|</span>
+          <a href="{% url 'login' %}" class="text-sm font-semibold leading-4 text-text-primary">Login</a>
+          {% endif %}
+        </div>
 
-        {% if event.event_status != 'closed' %}
-        <a href="{% url 'registration:abstract_submission' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Abstract Submission</a>
-        {% endif %}
-            
-        <a href="{% url 'registration:sponsor_list' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Sponsorship</a>
-        <a href="{% url 'registration:event_gallery' event.id %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Gallery</a>
-        {% endif %}
-        {% if user.is_authenticated %}
-          <a href="{% url 'user_profile' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Profile</a>
-          <a href="{% url 'logout' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Logout</a>
-        {% else %}
-          <a href="{% url 'login' %}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">Login</a>
-        {% endif %}
+        <div class="lg:hidden">
+          <button type="button" class="text-text-secondary hover:text-text-primary focus:outline-none" aria-controls="mobile-menu" aria-expanded="false" onclick="toggleMenu()">
+            <span class="sr-only">Open main menu</span>
+            <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <div class="lg:hidden" id="mobile-menu" style="display: none;">
+        <div class="px-4 pb-4 pt-2">
+          <a href="{% url 'website:homepage' %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Main Website</a>
+          {% if event %}
+          <a href="{% url 'registration:home' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Home</a>
+          <a href="{% url 'registration:about' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">About</a>
+          <a href="{% url 'registration:invitation' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Invitation</a>
+          <a href="{% url 'registration:speakers' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Speakers</a>
+          <a href="{% url 'registration:schedule' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Schedule</a>
+          <a href="{% url 'registration:participant_list' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Participants</a>
+          {% if event.show_publication_tab %}
+          <a href="{% url 'registration:publication_list' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Publication</a>
+          {% endif %}
+          {% if event.registration_audience == 'members_only' %}
+          <a href="{% url 'registration:member_registration' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Member Registration</a>
+          {% else %}
+          <a href="{% url 'registration:registration' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Registration</a>
+          {% endif %}
+          {% if event.event_status != 'closed' %}
+          <a href="{% url 'registration:abstract_submission' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Abstract Submission</a>
+          {% endif %}
+          <a href="{% url 'registration:sponsor_list' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Sponsorship</a>
+          <a href="{% url 'registration:event_gallery' event.id %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Gallery</a>
+          {% endif %}
+          {% if user.is_authenticated %}
+          <a href="{% url 'user_profile' %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Profile</a>
+          <a href="{% url 'logout' %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Logout</a>
+          {% else %}
+          <a href="{% url 'login' %}" class="block rounded-md px-3 py-2 text-base font-medium text-text-secondary hover:bg-background hover:text-text-primary">Login</a>
+          {% endif %}
+        </div>
       </div>
-    </div>
-  </header>
-  <div class="pt-16">
-    {% block content %}
-    {% endblock %}
+    </header>
+
+    <main class="flex-1 pt-20">
+      {% block content %}
+      {% endblock %}
+    </main>
+
+    <footer class="bg-text-primary text-white">
+      <div class="container-custom flex flex-col items-center justify-between gap-6 py-8 md:flex-row">
+        <div class="flex items-center gap-3">
+          <a href="{% if event %}{% url 'registration:home' event.id %}{% else %}{% url 'website:homepage' %}{% endif %}">
+            <span class="sr-only">{{ event.name|default:"BSBCS" }}</span>
+            {% if event.event_logo %}
+            <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="h-12 w-12">
+            {% else %}
+            <span class="text-xl font-bold text-white">{{ event.name|default:"BSBCS" }} {{ event.year|default:"" }}</span>
+            {% endif %}
+          </a>
+          <p class="text-sm text-white">&copy; {{ event.year|default:"" }} {{ event.name|default:"BSBCS" }}. All rights reserved.</p>
+        </div>
+
+        <div class="text-center md:text-left">
+          <h5 class="font-bold text-white">Quick Links</h5>
+          <ul class="mt-2 text-white">
+            <li><a href="{% url 'django.contrib.sitemaps.views.sitemap' %}" class="text-white hover:underline">Sitemap</a></li>
+            <li><a href="https://wordpress.bsbcs.org/contact/" class="text-white hover:underline">Contact</a></li>
+          </ul>
+        </div>
+
+        <div class="text-center md:text-left">
+          <h5 class="font-bold text-white">Follow Us</h5>
+          <ul class="mt-2 flex gap-4 text-white">
+            <li><a href="https://www.facebook.com/BSBreastCS" class="text-white hover:underline"><i class="fab fa-facebook fa-2x"></i></a></li>
+            <li><a href="https://www.youtube.com/@bsbcs" class="text-white hover:underline"><i class="fab fa-youtube fa-2x"></i></a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
   </div>
-
-
-
-
-  <footer class="bg-gray-800 text-white p-6">
-    <div class="container mx-auto flex flex-wrap justify-center items-center space-x-12">
-      <!-- Logo and Title -->
-      <div class="flex items-center">
-        <a href="{% if event %}{% url 'registration:home' event.id %}{% else %}{% url 'website:homepage' %}{% endif %}" class="-m-0.5 p-0.5">
-          <span class="sr-only">{{ event.name|default:"BSBCS" }}</span>
-          {% if event.event_logo %}
-          <img src="{{ event.event_logo.url }}" alt="{{ event.name }}" class="w-12 h-12">
-          {% else %}
-          <h1 class="text-xl font-bold">{{ event.name|default:"BSBCS" }} {{ event.year|default:"" }}</h1>
-          {% endif %}
-        </a>
-        <p class="text-white text-sm">© {{ event.year|default:"" }} {{ event.name|default:"BSBCS" }}. All rights reserved.</p>
-      </div>
-      <!-- Quick Links -->
-      <div class="text-center md:text-left">
-        <h5 class="font-bold mb-2">Quick Links</h5>
-        <ul class="text-gray-400">
-          <li><a href="{% url 'django.contrib.sitemaps.views.sitemap' %}" class="hover:underline">Sitemap</a></li>
-          <li><a href="https://wordpress.bsbcs.org/contact/" class="hover:underline">Contact</a></li>
-        </ul>
-      </div>
-      <!-- Follow Us -->
-      <div class="text-center md:text-left">
-        <h5 class="font-bold mb-2">Follow Us</h5>
-        <ul class="text-gray-400 flex space-x-4">
-          <li><a href="https://www.facebook.com/BSBreastCS" class="hover:underline">
-            <i class="fab fa-facebook fa-2x text-blue-600 hover:text-blue-800"></i>
-          </a></li>
-          <li><a href="https://www.youtube.com/@bsbcs" class="hover:underline">
-            <i class="fab fa-youtube fa-2x text-red-600 hover:text-red-800"></i>
-          </a></li>
-        </ul>
-      </div>
-    </div>
-  </footer>
-
-
 
   <script>
     function toggleMenu() {
@@ -195,6 +180,5 @@
       }
     }
   </script>
-
 </body>
 </html>
