@@ -875,6 +875,20 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.db import IntegrityError
 
+def _starts_with_suggestions(values, limit=200):
+    seen = set()
+    suggestions = []
+    for value in values:
+        text = (value or '').strip()
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(text)
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
 def registration(request, event_id):
     event = get_object_or_404(Event, id=event_id)
     membership_nudge_available = (
@@ -993,6 +1007,15 @@ def registration(request, event_id):
         and request.method == 'GET'
         and request.GET.get('mode') != 'regular'
     )
+    organization_suggestions = _starts_with_suggestions(
+        Participant.objects.exclude(organization__isnull=True)
+        .exclude(organization__exact='')
+        .order_by('organization')
+        .values_list('organization', flat=True)
+    )
+    department_suggestions = _starts_with_suggestions(
+        Department.objects.order_by('name').values_list('name', flat=True)
+    )
 
     return render(request, 'registration.html', {
         'form': form,
@@ -1001,6 +1024,8 @@ def registration(request, event_id):
         'show_registration_choice': show_registration_choice,
         'regular_registration_fee': regular_registration_fee,
         'member_registration_fee': member_registration_fee,
+        'organization_suggestions': organization_suggestions,
+        'department_suggestions': department_suggestions,
     })
 
 

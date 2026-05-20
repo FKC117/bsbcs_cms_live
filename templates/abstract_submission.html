@@ -1,175 +1,392 @@
 {% extends "gene_base.html" %}
-{% load crispy_forms_tags %}
 
 {% block title %}Abstract Submission{% endblock %}
+{% block legacy_event_styles %}{% endblock %}
 
 {% block content %}
-<br/>
-<section class="min-h-screen bg-pink-100 py-10 mt-10">
-  <div class="container">
-    <!-- Header Section -->
-    <div class="text-center mb-5">
-      <h1 class="text-4xl font-bold text-pink-900">Submit Abstract for {{ event.name }} {{ event.year }}</h1>
-      <p class="text-lg text-gray-700 mt-2">Submit abstract and be part of our community supporting awareness, early detection, and research.</p>
+<section class="section bg-background">
+  <div class="abstract-shell">
+    <div class="abstract-header">
+      <p class="text-sm font-bold uppercase tracking-widest text-secondary">Abstract Submission</p>
+      <h1>Submit Abstract for {{ event.name }} {{ event.year }}</h1>
+      <p>Submit original research for scientific review and program consideration.</p>
     </div>
 
-    <!-- Two-Column Layout -->
-    <div class="row justify-content-center">
-      <!-- First Column (30%) -->
-      <div class="col-lg-4">
-        <div class="card mb-4">
-          <div class="card-body">
-            <h5 class="card-title text-center text-black font-bold">Guidelines</h5>
-            <ul>
-              <li>Submit only original research.</li>
-              <li>Do not submit abstracts that have been previously published.</li>
-              <li>Do not submit abstracts that are not related to breast cancer.</li>
-              <li>Total Word limits should not cross 600 words; title, authors, institution excluded.</li>
-            </ul>
-          </div>
+    <div class="abstract-layout">
+      <div class="abstract-main-panel">
+        <div class="abstract-panel-head">
+          <h2>Abstract Details</h2>
+          <p>Complete each section carefully. Title, authors, and institution are excluded from the 600-word body limit.</p>
         </div>
+
+        <form id="abstract-form" action="{% url 'registration:abstract_submission' event.id %}" method="post" enctype="multipart/form-data" class="abstract-form">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert-error mb-4">
+              {{ form.non_field_errors }}
+            </div>
+          {% endif %}
+
+          <div class="abstract-fields">
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.title.id_for_label }}" class="form-label">{{ form.title.label }}</label>
+              {{ form.title }}
+              {% for error in form.title.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field">
+              <label for="{{ form.authors.id_for_label }}" class="form-label">{{ form.authors.label }}</label>
+              {{ form.authors }}
+              {% for error in form.authors.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field">
+              <label for="{{ form.institution.id_for_label }}" class="form-label">{{ form.institution.label }}</label>
+              {{ form.institution }}
+              {% for error in form.institution.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.introduction.id_for_label }}" class="form-label">{{ form.introduction.label }}</label>
+              {{ form.introduction }}
+              {% for error in form.introduction.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.methods.id_for_label }}" class="form-label">{{ form.methods.label }}</label>
+              {{ form.methods }}
+              {% for error in form.methods.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.results.id_for_label }}" class="form-label">{{ form.results.label }}</label>
+              {{ form.results }}
+              {% for error in form.results.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.conclusion.id_for_label }}" class="form-label">{{ form.conclusion.label }}</label>
+              {{ form.conclusion }}
+              {% for error in form.conclusion.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div class="abstract-field abstract-field-wide">
+              <label for="{{ form.image.id_for_label }}" class="form-label">{{ form.image.label }}</label>
+              {{ form.image }}
+              {% if form.image.help_text %}<p class="form-helper">{{ form.image.help_text }}</p>{% endif %}
+              {% for error in form.image.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+
+          <div class="abstract-submit-row">
+            <button type="submit" class="btn-secondary w-full">
+              Submit Abstract
+            </button>
+          </div>
+        </form>
       </div>
 
-      <!-- Second Column (70%) -->
-      <div class="col-lg-8">
-        <div class="card shadow border-2 p-3">
-          <div class="card-body">
-            <h2 class="text-center text-black font-bold mb-4">Abstract Submission</h2>
-            <form id="abstract-form" action="{% url 'registration:abstract_submission' event.id %}" method="post" enctype="multipart/form-data">
-              {% csrf_token %}
-              
-              <!-- Crispy Form Rendering -->
-              {{ form|crispy }}
-              <div class="card shadow border-2 p-1">
-                <div class="card-body">
-                  <div class="word-count-container">
-                    <div id='introduction-word-count' class="word-count">Introduction word count: 0</div>
-                    <div class="separator">|</div>
-                    <div id="methods-word-count" class="word-count">Methods word count: 0</div>
-                    <div class="separator">|</div>
-                    <div id="results-word-count" class="word-count">Results word count: 0</div>
-                    <div class="separator">|</div>
-                    <div id="conclusion-word-count" class="word-count">Conclusion word count: 0</div>
-                    <div class="separator">|</div>
-                    <div id="total-word-count" class="word-count">Total word count: 0</div>
-                  </div>
-                </div>
-              </div>
+      <aside class="abstract-support">
+        <section class="abstract-support-card">
+          <h2>Guidelines</h2>
+          <ul>
+            <li>Submit only original research.</li>
+            <li>Do not submit abstracts that have been previously published.</li>
+            <li>Abstracts should be related to breast cancer care, research, education, or service delivery.</li>
+            <li>Total body word count is limited to 600 words.</li>
+            <li>Title, authors, and institution are excluded from the word limit.</li>
+          </ul>
+        </section>
 
-              <!-- Submit Button -->
-              <div class="d-grid mt-3">
-                <button type="submit" class="btn btn-pink text-white font-bold py-2 rounded">
-                  Submit
-                </button>
-              </div>
-            </form>
+        <section class="abstract-support-card" aria-live="polite">
+          <h2>Word Count</h2>
+          <div class="abstract-count-list">
+            <span id="introduction-word-count">Introduction: 0</span>
+            <span id="methods-word-count">Methods: 0</span>
+            <span id="results-word-count">Results: 0</span>
+            <span id="conclusion-word-count">Conclusion: 0</span>
           </div>
-        </div>
-      </div>
+          <strong id="total-word-count" class="abstract-total-count">Total: 0 / 600</strong>
+          <div class="abstract-progress-track">
+            <div id="abstract-word-progress" class="abstract-progress-bar" style="width: 0%;"></div>
+          </div>
+          <p id="abstract-word-message" class="abstract-word-message">Title, authors, and institution are not included in this count.</p>
+        </section>
+
+        <section class="abstract-support-note">
+          <p class="text-sm font-bold text-text-primary">Review status</p>
+          <p class="mt-2 text-sm text-text-secondary">Your abstract will be reviewed by the scientific committee after submission.</p>
+        </section>
+      </aside>
     </div>
   </div>
 </section>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+
 <style>
-  body {
-    font-family: 'Arial', sans-serif;
-    background-color: #fce4ec;
-  }
-  .btn-pink {
-    background-color: #ec407a;
-    border-color: #ec407a;
-  }
-  .btn-pink:hover {
-    background-color: #d81b60;
-    border-color: #d81b60;
-  }
-  .word-count-container {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 1rem;
-    font-size: 0.875rem;
-    text-align: center;
-  }
-  .word-count {
-    color: #555;
-  }
-  .word-count-error {
-    color: red;
-  }
-  .separator {
-    margin: 0 0.25rem;
+  .abstract-shell {
+    width: min(1180px, calc(100% - 2rem));
+    margin: 0 auto;
   }
 
-  /* Mobile-Friendly Layout */
-  @media (max-width: 767px) {
-    .word-count-container {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.5rem;
+  .abstract-header {
+    max-width: 900px;
+    margin: 0 auto 2rem;
+    text-align: center;
+  }
+
+  .abstract-header h1 {
+    margin-top: 0.85rem;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.12;
+  }
+
+  .abstract-header p:last-child {
+    margin-top: 0.85rem;
+    color: var(--color-text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .abstract-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .abstract-main-panel,
+  .abstract-support-card,
+  .abstract-support-note {
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .abstract-main-panel {
+    padding: 1.5rem;
+  }
+
+  .abstract-panel-head {
+    border-bottom: 1px solid var(--color-border-light);
+    padding-bottom: 1.25rem;
+  }
+
+  .abstract-panel-head h2,
+  .abstract-support-card h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+
+  .abstract-panel-head p {
+    max-width: 720px;
+    margin-top: 0.5rem;
+    color: var(--color-text-secondary);
+  }
+
+  .abstract-form {
+    margin-top: 1.5rem;
+  }
+
+  .abstract-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.15rem;
+  }
+
+  .abstract-field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .abstract-field textarea {
+    min-height: 11rem;
+    resize: vertical;
+  }
+
+  .abstract-submit-row {
+    margin-top: 1.5rem;
+  }
+
+  .abstract-support {
+    position: sticky;
+    top: 6rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .abstract-support-card,
+  .abstract-support-note {
+    padding: 1.25rem;
+  }
+
+  .abstract-support-card ul {
+    margin-top: 1rem;
+    padding-left: 1.1rem;
+    color: var(--color-text-secondary);
+  }
+
+  .abstract-support-card li + li {
+    margin-top: 0.8rem;
+  }
+
+  .abstract-count-list {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.925rem;
+  }
+
+  .abstract-total-count {
+    display: block;
+    margin-top: 1rem;
+    color: var(--color-text-primary);
+  }
+
+  .abstract-progress-track {
+    height: 0.55rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-border-light);
+    margin-top: 0.75rem;
+  }
+
+  .abstract-progress-bar {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-success);
+    transition: width 180ms ease-out, background 180ms ease-out;
+  }
+
+  .abstract-word-message {
+    margin-top: 0.75rem;
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .abstract-word-limit-error {
+    color: var(--color-error);
+  }
+
+  .abstract-submit-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 1024px) {
+    .abstract-layout {
+      grid-template-columns: 1fr;
     }
-    .separator {
-      display: none;
+
+    .abstract-support {
+      position: static;
+      order: -1;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .abstract-shell {
+      width: min(100% - 1rem, 1180px);
+    }
+
+    .abstract-main-panel,
+    .abstract-support-card,
+    .abstract-support-note {
+      border-radius: 0.5rem;
+    }
+
+    .abstract-main-panel {
+      padding: 1rem;
+    }
+
+    .abstract-fields {
+      grid-template-columns: 1fr;
     }
   }
 </style>
 
-
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const introductionField = document.getElementById('id_introduction');
-        const methodsField = document.getElementById('id_methods');
-        const resultsField = document.getElementById('id_results');
-        const conclusionField = document.getElementById('id_conclusion');
-        const introductionWordCount = document.getElementById('introduction-word-count');
-        const methodsWordCount = document.getElementById('methods-word-count');
-        const resultsWordCount = document.getElementById('results-word-count');
-        const conclusionWordCount = document.getElementById('conclusion-word-count');
-        const totalWordCount = document.getElementById('total-word-count');
-        const form = document.getElementById('abstract-form');
+  document.addEventListener('DOMContentLoaded', function () {
+    const limit = 600;
+    const fields = {
+      introduction: document.getElementById('id_introduction'),
+      methods: document.getElementById('id_methods'),
+      results: document.getElementById('id_results'),
+      conclusion: document.getElementById('id_conclusion')
+    };
+    const counters = {
+      introduction: document.getElementById('introduction-word-count'),
+      methods: document.getElementById('methods-word-count'),
+      results: document.getElementById('results-word-count'),
+      conclusion: document.getElementById('conclusion-word-count')
+    };
+    const totalWordCount = document.getElementById('total-word-count');
+    const progress = document.getElementById('abstract-word-progress');
+    const message = document.getElementById('abstract-word-message');
+    const form = document.getElementById('abstract-form');
+    const submitButton = form ? form.querySelector('button[type="submit"]') : null;
 
-        const updateWordCount = () => {
-            const introductionWords = introductionField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const methodsWords = methodsField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const resultsWords = resultsField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const conclusionWords = conclusionField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const totalWords = introductionWords + methodsWords + resultsWords + conclusionWords;
+    function countWords(value) {
+      const words = (value || '').trim().match(/\S+/g);
+      return words ? words.length : 0;
+    }
 
-            introductionWordCount.textContent = `Introduction word count: ${introductionWords}`;
-            methodsWordCount.textContent = `Methods word count: ${methodsWords}`;
-            resultsWordCount.textContent = `Results word count: ${resultsWords}`;
-            conclusionWordCount.textContent = `Conclusion word count: ${conclusionWords}`;
-            totalWordCount.textContent = `Total word count: ${totalWords}`;
+    function updateWordCount() {
+      const counts = {
+        introduction: countWords(fields.introduction && fields.introduction.value),
+        methods: countWords(fields.methods && fields.methods.value),
+        results: countWords(fields.results && fields.results.value),
+        conclusion: countWords(fields.conclusion && fields.conclusion.value)
+      };
+      const total = counts.introduction + counts.methods + counts.results + counts.conclusion;
+      const percent = Math.min((total / limit) * 100, 100);
+      const overLimit = total > limit;
 
-            if (totalWords > 600) {
-                totalWordCount.classList.add('word-count-error');
-                totalWordCount.textContent += ' (exceeds limit)';
-                form.querySelector('button[type="submit"]').disabled = true;
-            } else {
-                totalWordCount.classList.remove('word-count-error');
-                form.querySelector('button[type="submit"]').disabled = false;
-            }
-        };
+      counters.introduction.textContent = `Introduction: ${counts.introduction}`;
+      counters.methods.textContent = `Methods: ${counts.methods}`;
+      counters.results.textContent = `Results: ${counts.results}`;
+      counters.conclusion.textContent = `Conclusion: ${counts.conclusion}`;
+      totalWordCount.textContent = `Total: ${total} / ${limit}`;
+      progress.style.width = `${percent}%`;
 
-        introductionField.addEventListener('input', updateWordCount);
-        methodsField.addEventListener('input', updateWordCount);
-        resultsField.addEventListener('input', updateWordCount);
-        conclusionField.addEventListener('input', updateWordCount);
+      totalWordCount.classList.toggle('abstract-word-limit-error', overLimit);
+      message.classList.toggle('abstract-word-limit-error', overLimit);
+      if (overLimit) {
+        progress.style.background = 'var(--color-error)';
+      } else if (total >= 540) {
+        progress.style.background = 'var(--color-warning)';
+      } else {
+        progress.style.background = 'linear-gradient(90deg, var(--color-success), var(--color-accent))';
+      }
+      message.textContent = overLimit
+        ? `Please reduce the abstract body by ${total - limit} word${total - limit === 1 ? '' : 's'} before submitting.`
+        : `You have ${limit - total} word${limit - total === 1 ? '' : 's'} remaining. Title, authors, and institution are excluded.`;
 
-        form.addEventListener('submit', function (e) {
-            const introductionWords = introductionField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const methodsWords = methodsField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const resultsWords = resultsField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const conclusionWords = conclusionField.value.split(/\s+/).filter(word => word.length > 0).length;
-            const totalWords = introductionWords + methodsWords + resultsWords + conclusionWords;
+      if (submitButton) {
+        submitButton.disabled = overLimit;
+        submitButton.classList.toggle('abstract-submit-disabled', overLimit);
+      }
+    }
 
-            if (totalWords > 600) {
-                e.preventDefault();
-                alert('The total word count for Introduction, Methods, Results, and Conclusion should not exceed 600 words.');
-            }
-        });
-
-        updateWordCount();  // Initial call to set word counts on page load
+    Object.keys(fields).forEach(function (key) {
+      if (fields[key]) {
+        fields[key].addEventListener('input', updateWordCount);
+      }
     });
+
+    if (form) {
+      form.addEventListener('submit', function (event) {
+        const total = Object.keys(fields).reduce(function (sum, key) {
+          return sum + countWords(fields[key] && fields[key].value);
+        }, 0);
+        if (total > limit) {
+          event.preventDefault();
+          updateWordCount();
+        }
+      });
+    }
+
+    updateWordCount();
+  });
 </script>
 {% endblock %}

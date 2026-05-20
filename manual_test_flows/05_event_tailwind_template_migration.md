@@ -27,6 +27,8 @@ Goal: bring the event website onto the same compiled Tailwind/design-system path
 
 - [ ] `registration_login_prompt.html`: confirm it uses compiled CSS only.
 - [x] `registration.html`: remove Bootstrap-style `container`, custom CSS, and mixed form layout.
+- [x] `registration.html`: redesign regular registration form as a symmetrical design-system card.
+- [x] `registration.html`: add starts-with suggestions for organization and department fields.
 - [ ] `registration_submitted.html`: normalize success/pending state.
 - [ ] `registration_message.html`: normalize message state.
 - [ ] `registration_error.html`: normalize error state.

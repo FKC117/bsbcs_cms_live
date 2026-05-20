@@ -84,10 +84,39 @@
         {% endif %}
 
         <div class="card-elevated">
-          <h2 class="text-center text-2xl font-bold text-text-primary">Register here</h2>
+          <div class="text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-secondary">Regular Registration</p>
+            <h2 class="mt-4 text-2xl font-bold text-text-primary">Participant Details</h2>
+            <p class="mx-auto mt-4 max-w-2xl text-text-secondary">Complete the form below. Organization and department suggestions are based on previous event registrations.</p>
+          </div>
           <form method="POST" action="{% url 'registration:registration' event.id %}" class="mt-6">
             {% csrf_token %}
-            {{ form|crispy }}
+
+            {% if form.non_field_errors %}
+              <div class="alert-error mb-4">
+                {{ form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div class="grid gap-5 md:grid-cols-2">
+              {% for field in form %}
+                <div class="{% if field.name == 'organization' or field.name == 'department_name' %}registration-autocomplete{% endif %}">
+                  <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                  {{ field }}
+                  {% if field.name == 'organization' %}
+                    <div class="registration-suggestions" data-suggestion-list-for="{{ field.id_for_label }}"></div>
+                  {% elif field.name == 'department_name' %}
+                    <div class="registration-suggestions" data-suggestion-list-for="{{ field.id_for_label }}"></div>
+                  {% endif %}
+                  {% if field.help_text %}
+                    <p class="form-helper">{{ field.help_text }}</p>
+                  {% endif %}
+                  {% for error in field.errors %}
+                    <p class="form-error">{{ error }}</p>
+                  {% endfor %}
+                </div>
+              {% endfor %}
+            </div>
 
             <div class="mt-6">
               <button type="submit" class="btn-secondary w-full">
@@ -104,4 +133,125 @@
     </div>
   </div>
 </section>
+
+{{ organization_suggestions|json_script:"registration-organization-suggestions" }}
+{{ department_suggestions|json_script:"registration-department-suggestions" }}
+
+<style>
+  .registration-autocomplete {
+    position: relative;
+  }
+
+  .registration-suggestions {
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.25rem);
+    display: none;
+    max-height: 14rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  }
+
+  .registration-suggestions.is-open {
+    display: block;
+  }
+
+  .registration-suggestion {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: #fff;
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .registration-suggestion:hover,
+  .registration-suggestion:focus {
+    background: var(--color-primary-50);
+    outline: none;
+  }
+</style>
+
+<script>
+  (function () {
+    function readJson(id) {
+      const el = document.getElementById(id);
+      if (!el) return [];
+      try {
+        return JSON.parse(el.textContent) || [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    const sources = {
+      id_organization: readJson('registration-organization-suggestions'),
+      id_department_name: readJson('registration-department-suggestions')
+    };
+
+    function attachAutocomplete(inputId, values) {
+      const input = document.getElementById(inputId);
+      const list = document.querySelector('[data-suggestion-list-for="' + inputId + '"]');
+      if (!input || !list || !values.length) return;
+
+      function closeList() {
+        list.classList.remove('is-open');
+        list.innerHTML = '';
+      }
+
+      function render() {
+        const query = input.value.trim().toLowerCase();
+        if (!query) {
+          closeList();
+          return;
+        }
+
+        const matches = values
+          .filter(function (value) { return value.toLowerCase().startsWith(query); })
+          .slice(0, 8);
+
+        if (!matches.length) {
+          closeList();
+          return;
+        }
+
+        list.innerHTML = matches.map(function (value) {
+          return '<button type="button" class="registration-suggestion">' + value.replace(/[&<>"']/g, function (char) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+          }) + '</button>';
+        }).join('');
+        list.classList.add('is-open');
+      }
+
+      input.setAttribute('autocomplete', 'off');
+      input.addEventListener('input', render);
+      input.addEventListener('focus', render);
+      list.addEventListener('click', function (event) {
+        const button = event.target.closest('.registration-suggestion');
+        if (!button) return;
+        input.value = button.textContent;
+        closeList();
+        input.focus();
+      });
+      document.addEventListener('click', function (event) {
+        if (event.target === input || list.contains(event.target)) return;
+        closeList();
+      });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeList();
+      });
+    }
+
+    Object.keys(sources).forEach(function (inputId) {
+      attachAutocomplete(inputId, sources[inputId]);
+    });
+  })();
+</script>
 {% endblock %}

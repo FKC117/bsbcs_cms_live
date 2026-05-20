@@ -70,14 +70,23 @@ from django import forms
 from .models import Participant
 
 class RegistrationForm(forms.ModelForm):
+    department_name = forms.CharField(label='Department', max_length=50)
+
     class Meta:
         model = Participant
         fields = ('name', 'degree', 'email', 'phone', 'year_of_graduation', 
-                  'department', 'organization', 'country', 'BMDC_registration_number')
+                  'department_name', 'organization', 'country', 'BMDC_registration_number')
+        widgets = {
+            'organization': forms.TextInput(attrs={'autocomplete': 'off'}),
+        }
 
     def __init__(self, *args, **kwargs):
         self.event = kwargs.pop('event', None)  # Pass event instance
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.department_id:
+            self.fields['department_name'].initial = self.instance.department.name
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-input')
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
@@ -91,6 +100,27 @@ class RegistrationForm(forms.ModelForm):
             raise forms.ValidationError("A participant with this phone number already exists for this event.")
         return phone
 
+    def clean_department_name(self):
+        department_name = (self.cleaned_data.get('department_name') or '').strip()
+        if not department_name:
+            raise forms.ValidationError("Department is required.")
+        return department_name[:50]
+
+    def save(self, commit=True):
+        participant = super().save(commit=False)
+        department_name = self.cleaned_data.get('department_name')
+        if not self.event:
+            raise forms.ValidationError("Event context is missing.")
+        department, _ = Department.objects.get_or_create(
+            event=self.event,
+            name=department_name,
+        )
+        participant.department = department
+        if commit:
+            participant.save()
+            self.save_m2m()
+        return participant
+
 # Participant Reregistration form END------------------------------------------------------------------------------------#
 
 
@@ -99,14 +129,29 @@ class AbstractSubmissionForm(forms.ModelForm):
     class Meta:
         model = AbstractSubmission
         fields = ('title', 'authors', 'institution', 'introduction', 'methods', 'results', 'conclusion', 'image')
+
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-input'}),
+            'authors': forms.TextInput(attrs={'class': 'form-input'}),
+            'institution': forms.TextInput(attrs={'class': 'form-input'}),
+            'introduction': forms.Textarea(attrs={'class': 'form-input abstract-word-field', 'rows': 5}),
+            'methods': forms.Textarea(attrs={'class': 'form-input abstract-word-field', 'rows': 5}),
+            'results': forms.Textarea(attrs={'class': 'form-input abstract-word-field', 'rows': 5}),
+            'conclusion': forms.Textarea(attrs={'class': 'form-input abstract-word-field', 'rows': 5}),
+            'image': forms.ClearableFileInput(attrs={'class': 'form-input'}),
+        }
+
     def clean(self):
         cleaned_data = super().clean()
+        introduction = cleaned_data.get("introduction", "")
         methods = cleaned_data.get("methods", "")
         results = cleaned_data.get("results", "")
+        conclusion = cleaned_data.get("conclusion", "")
 
-        total_words = len((methods + " " + results).split())
-        if total_words > 400:
-            raise forms.ValidationError("The total word count for Methods and Results should not exceed 400 words.")
+        total_words = len((introduction + " " + methods + " " + results + " " + conclusion).split())
+        if total_words > 600:
+            raise forms.ValidationError("The total word count for Introduction, Methods, Results, and Conclusion should not exceed 600 words.")
+        return cleaned_data
 
 # Abstract Submission form END------------------------------------------------------------------------------------
 

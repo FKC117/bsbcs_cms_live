@@ -12,6 +12,8 @@ Use this file as the shared place for bugs, abrupt behavior, and verification no
 | 004 | 2026-05-20 12:11-12:18 | U5 Regular Event Registration | medium | Event homepage showed separate Register Now and Register as Member CTAs; logged-out registration prompt did not present the expected regular/member fee choice cards. Mobile homepage CTA also sat awkwardly inside the hero color band. | Event homepage contained direct member-registration links. `/event/7/registration/` rendered a generic attention screen instead of prominent registration option cards. Hero/mobile CTA placement was visually abrupt. | fixed | Retest logged-out event homepage on desktop and mobile, confirm one centered CTA section appears directly below the hero image, click `Register Now`, verify regular/member fee cards and login/profile/member actions. |
 | 005 | 2026-05-20 12:30-12:40 | Event Template Tailwind Migration | medium | Event website was still using Tailwind CDN and several legacy Bootstrap-style templates instead of the compiled BSBCS Tailwind system. | `gene_base.html` loaded Tailwind 2.2 CDN. Tailwind config did not scan Django templates. Several event templates still use Bootstrap-style classes and custom CSS. | in progress | Test `/event/7/home/` first as the migrated pure compiled-CSS event page; then migrate remaining event templates one by one. |
 | 006 | 2026-05-20 13:45-13:53 | Public Website Membership Modal | medium | Membership benefits modal overlapped the fixed navbar on desktop and mobile. | Modal container centered against full viewport with insufficient top clearance for the fixed site header; on mobile the bottom-sheet style panel could start underneath the mobile header. | fixed | Retest homepage Join Society modal on desktop and mobile; confirm the modal starts below the header and actions remain visible. |
+| 007 | 2026-05-20 14:20-14:35 | U5 Regular Event Registration | medium | Regular event registration form needed a cleaner design-system layout and suggestions for organization/department fields. | `/event/7/registration/?mode=regular` used generic crispy rendering and department was a model dropdown. Organization had no suggestion support despite existing historical data. | fixed | Retest authenticated regular registration form; type `a` in organization to see starts-with suggestions and type a department prefix to see department suggestions. |
+| 008 | 2026-05-20 21:00-21:05 | Abstract Submission | medium | Abstract submission page used Bootstrap-era layout and had inconsistent word-limit validation. | Template loaded Bootstrap CDN and used `row`, `col-lg-*`, `card`, `btn` classes. Client limited total abstract body to 600 words, but server validation only checked Methods + Results against 400 words. | fixed | Retest authenticated approved participant abstract submission, word counter, over-limit block, and successful under-limit submission. |
 
 ## Verification Notes
 
@@ -101,6 +103,27 @@ Use this file as the shared place for bugs, abrupt behavior, and verification no
 - Fix: Increased modal z-index, aligned the modal panel from the top with explicit top padding for desktop and mobile, reduced max-height calculations to account for the header, and kept the action buttons visible inside the panel.
 - Verification: `python manage.py check` passes. `/` returns 200 and includes the updated modal CSS. Desktop and mobile headless screenshots confirm the modal starts below the navbar instead of overlapping it.
 - Retest steps: Open homepage, trigger `Join Society`, verify desktop and mobile modal clearance, close button, `Apply for Membership`, and `Maybe Later`.
+
+### Regular Registration Form Redesign - 2026-05-20
+
+- Flow: U5 Regular Event Registration
+- Related records: `templates/registration.html`, `registration/forms.py`, `registration/views.py`, `static/css/site_main.css`
+- What happened: User asked for the regular registration form to match the newer form style and provide suggestions for organization and department.
+- Finding: Confirmed. The regular form relied on generic crispy output and had no autocomplete. Department was a model relation rendered as a standard form field.
+- Fix: Rebuilt the regular form template as a design-system card with explicit field rows and error display. Added starts-with autocomplete dropdowns for organization and department. Organization suggestions come from existing participant organizations. Department suggestions come from existing department names. Typed departments are saved back to the event as `Department` records only during successful form save.
+- Verification: `npm run build:css` passes. `python manage.py check` passes. Authenticated test-client request for `/event/7/registration/?mode=regular` returns 200 and includes `Participant Details`, organization suggestion JSON, department suggestion JSON, autocomplete markup, and starts-with filtering code.
+- Note: A self-induced test-client `DisallowedHost: testserver` log entry occurred during verification before rerunning the client with `HTTP_HOST='127.0.0.1:8000'`; it is not a user-facing route error.
+- Retest steps: Log in as a regular non-member user, open `/event/7/registration/?mode=regular`, type `a` in Organization, type a department prefix, select suggestions, and submit with valid data.
+
+### Abstract Submission Redesign - 2026-05-20
+
+- Flow: Abstract Submission
+- Related records: `templates/abstract_submission.html`, `registration/forms.py`, `static/css/site_main.css`
+- What happened: User flagged Bootstrap/design issues and possible word-count problems on `/event/7/abstract_submission/`.
+- Finding: Confirmed. The page loaded Bootstrap CDN and used Bootstrap grid/card/button classes. Client-side validation enforced 600 total words across Introduction, Methods, Results, and Conclusion, while server-side validation only checked Methods + Results over 400 words.
+- Fix: Rebuilt the page as a wider operational design-system layout. The writing form now gets the primary wide column, with guidelines, word counter, and review note in a right-side support column. Removed Bootstrap CDN/classes. Added a live 600-word total counter with section counts, progress bar, remaining words, and disabled submit when over limit. Updated server validation to enforce the same 600-word total rule.
+- Verification: `npm run build:css` passes. `python manage.py check` passes. Authenticated approved participant request to `/event/7/abstract_submission/` returns 200, uses `site_main.css`, has no Tailwind/Bootstrap CDN, and includes `Abstract Details`, `abstract-word-progress`, and `Total: 0 / 600`. Server form test rejects 601 words with the matching 600-word error.
+- Retest steps: Log in as an approved/paid participant, open `/event/7/abstract_submission/`, check desktop/mobile layout, confirm live counts update, confirm submit disables beyond 600 words, then submit a valid abstract under the limit.
 
 - Flow:
 - Tester/account:
