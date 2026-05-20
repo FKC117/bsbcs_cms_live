@@ -20,6 +20,7 @@ from registration.views import (
     dashboard_event_ledger,
     dashboard_participant_preview,
     dashboard_staff_activity,
+    dashboard_program_session_builder,
 )
 
 sitemaps = {
@@ -40,6 +41,7 @@ urlpatterns = [
     path('dashboard/event-ledger/', dashboard_event_ledger, name='dashboard_event_ledger'),
     path('dashboard/participant-preview/', dashboard_participant_preview, name='dashboard_participant_preview'),
     path('dashboard/staff-activity/', dashboard_staff_activity, name='dashboard_staff_activity'),
+    path('dashboard/program-session-builder/', dashboard_program_session_builder, name='dashboard_program_session_builder'),
     path('', include(('website.urls', 'website'), namespace='website')),
     path('index/', views.index, name='index'),
 

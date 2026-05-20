@@ -1,0 +1,510 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Program Session Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: '#102033',
+                        mist: '#EEF6FB',
+                        line: '#D9E4EF',
+                        bsbcs: {
+                            blue: '#1769C2',
+                            navy: '#0D2747',
+                            teal: '#087F8C',
+                            pink: '#D92878',
+                            green: '#16864D',
+                            amber: '#B77905',
+                        }
+                    },
+                    boxShadow: {
+                        quiet: '0 16px 42px rgba(15, 32, 51, 0.08)',
+                        lift: '0 24px 70px rgba(15, 32, 51, 0.14)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.65rem;
+            background: #fff;
+            padding: 0.55rem 0.7rem;
+            font-size: 0.84rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .workflow-select { min-height: 6.25rem; }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Program workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'admin:registration_programperson_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Program People</a>
+                <a href="{% url 'admin:registration_programsession_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Smart schedule builder</div>
+                <h1 class="mt-1 text-3xl font-black tracking-normal sm:text-4xl">Build one event session at a time.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 text-white/75">Choose an event first. Abstract choices, days, rooms, and session items stay inside that event only.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <label class="compact-label" for="event-context">Event context</label>
+                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <select id="event-context" name="event" class="workflow-input" onchange="this.form.submit()">
+                        <option value="">Choose event first</option>
+                        {% for event in events %}
+                            <option value="{{ event.id }}" {% if selected_event and selected_event.id == event.id %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Load</button>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 py-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            {% if messages %}
+                <div class="mb-4 space-y-2">
+                    {% for message in messages %}
+                        <div class="rounded-xl px-4 py-3 text-sm font-semibold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% if not selected_event %}
+                <div class="rounded-2xl border border-dashed border-blue-200 bg-blue-50/70 p-8 text-center">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-blue">Start here</div>
+                    <h2 class="mt-2 text-2xl font-black text-ink">Choose an event before building schedule.</h2>
+                    <p class="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">This keeps abstracts, rooms, and program days event-specific. It also prevents accidental attachment of an abstract from another event.</p>
+                </div>
+            {% else %}
+                <div class="mb-4 rounded-2xl border border-line bg-white p-3 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Setup checklist</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Prepare {{ selected_event.name }} before creating sessions.</h2>
+                            <p class="mt-1 text-sm leading-6 text-slate-600">Complete the event-specific structure first. The session form unlocks after day, hall, and time slot are ready.</p>
+                        </div>
+                        {% if setup_complete %}
+                            <div class="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Ready for sessions</div>
+                        {% else %}
+                            <div class="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">Setup required</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-3 grid gap-2 md:grid-cols-3">
+                        <div class="rounded-xl border {% if setup_status.has_program_days %}border-green-100 bg-green-50{% else %}border-amber-100 bg-amber-50{% endif %} p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-black uppercase tracking-[0.08em] text-slate-600">Program days</div>
+                                <div class="text-2xl font-black {% if setup_status.has_program_days %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">{{ program_days.count }}</div>
+                            </div>
+                            <p class="mt-1 text-xs font-semibold text-slate-600">Each day belongs to this event only.</p>
+                            <div class="mt-3 space-y-1">
+                                {% for day in program_days|slice:":4" %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
+                                        <span class="font-black text-ink">{{ day.name }}</span>{% if day.date %} · {{ day.date|date:"M d, Y" }}{% endif %}
+                                    </div>
+                                {% empty %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No program day added yet.</div>
+                                {% endfor %}
+                                {% if program_days.count > 4 %}
+                                    <div class="px-1 text-xs font-bold text-slate-500">+ {{ program_days.count|add:"-4" }} more</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="rounded-xl border {% if setup_status.has_hall_rooms %}border-green-100 bg-green-50{% else %}border-amber-100 bg-amber-50{% endif %} p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-black uppercase tracking-[0.08em] text-slate-600">Hall rooms</div>
+                                <div class="text-2xl font-black {% if setup_status.has_hall_rooms %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">{{ hall_rooms.count }}</div>
+                            </div>
+                            <p class="mt-1 text-xs font-semibold text-slate-600">Rooms are scoped to this event venue.</p>
+                            <div class="mt-3 space-y-1">
+                                {% for room in hall_rooms|slice:":4" %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
+                                        <span class="font-black text-ink">{{ room.name }}</span>{% if room.location %} · {{ room.location }}{% endif %}
+                                    </div>
+                                {% empty %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No hall room added yet.</div>
+                                {% endfor %}
+                                {% if hall_rooms.count > 4 %}
+                                    <div class="px-1 text-xs font-bold text-slate-500">+ {{ hall_rooms.count|add:"-4" }} more</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="rounded-xl border {% if setup_status.has_time_slots %}border-green-100 bg-green-50{% else %}border-amber-100 bg-amber-50{% endif %} p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-black uppercase tracking-[0.08em] text-slate-600">Time slots</div>
+                                <div class="text-2xl font-black {% if setup_status.has_time_slots %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">{{ time_slots.count }}</div>
+                            </div>
+                            <p class="mt-1 text-xs font-semibold text-slate-600">Sessions inherit day, room, start, and end from slots.</p>
+                            <div class="mt-3 max-h-40 space-y-1 overflow-y-auto pr-1">
+                                {% for slot in time_slots|slice:":8" %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
+                                        <span class="font-black text-ink">{{ slot.program_day.name }}</span> · {{ slot.hall_room.name }} · {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}
+                                    </div>
+                                {% empty %}
+                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No time slot added yet.</div>
+                                {% endfor %}
+                                {% if time_slots.count > 8 %}
+                                    <div class="px-1 text-xs font-bold text-slate-500">+ {{ time_slots.count|add:"-8" }} more</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 lg:grid-cols-3">
+                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="add_day">
+                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step A</div>
+                            <h3 class="mt-1 text-base font-black text-ink">Add program day</h3>
+                            {% if day_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ day_form.non_field_errors }}</div>{% endif %}
+                            <div class="mt-2 grid gap-2">
+                                <label>
+                                    <span class="compact-label">Day name</span>
+                                    {{ day_form.name }}
+                                    {{ day_form.name.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Date</span>
+                                    {{ day_form.date }}
+                                    {{ day_form.date.errors }}
+                                </label>
+                            </div>
+                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Day</button>
+                        </form>
+
+                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="add_room">
+                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step B</div>
+                            <h3 class="mt-1 text-base font-black text-ink">Add hall room</h3>
+                            {% if hall_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ hall_form.non_field_errors }}</div>{% endif %}
+                            <div class="mt-2 grid gap-2">
+                                <label>
+                                    <span class="compact-label">Room name</span>
+                                    {{ hall_form.name }}
+                                    {{ hall_form.name.errors }}
+                                </label>
+                                <div class="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-line">
+                                    Venue comes from event location: <span class="font-black text-ink">{{ selected_event.location|default:selected_event.name }}</span>
+                                </div>
+                            </div>
+                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Room</button>
+                        </form>
+
+                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="add_slot">
+                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step C</div>
+                            <h3 class="mt-1 text-base font-black text-ink">Add time slot</h3>
+                            {% if slot_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ slot_form.non_field_errors }}</div>{% endif %}
+                            <div class="mt-2 grid gap-2">
+                                <label>
+                                    <span class="compact-label">Program day</span>
+                                    {{ slot_form.program_day }}
+                                    {{ slot_form.program_day.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Hall room</span>
+                                    {{ slot_form.hall_room }}
+                                    {{ slot_form.hall_room.errors }}
+                                </label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <label>
+                                        <span class="compact-label">Start</span>
+                                        {{ slot_form.start_time }}
+                                        {{ slot_form.start_time.errors }}
+                                    </label>
+                                    <label>
+                                        <span class="compact-label">End</span>
+                                        {{ slot_form.end_time }}
+                                        {{ slot_form.end_time.errors }}
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Save Slot</button>
+                            {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}
+                                <p class="mt-2 text-xs font-semibold text-slate-500">Add at least one program day and hall room first.</p>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+
+                {% if session_form.non_field_errors or item_formset.non_form_errors %}
+                    <div class="mb-4 rounded-xl bg-pink-50 px-4 py-3 text-sm font-semibold text-bsbcs-pink">
+                        {{ session_form.non_field_errors }}
+                        {{ item_formset.non_form_errors }}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="space-y-4 {% if not setup_complete %}pointer-events-none opacity-45{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+
+                    <div class="rounded-xl border border-line bg-slate-50/70 p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 1</div>
+                                <h2 class="mt-1 text-xl font-black text-ink">Session details</h2>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">{{ selected_event.name }} {{ selected_event.year }}</p>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1 text-xs font-black {% if setup_complete %}text-bsbcs-blue{% else %}text-bsbcs-amber{% endif %} ring-1 ring-line">{% if setup_complete %}Event locked{% else %}Locked until setup is complete{% endif %}</div>
+                        </div>
+
+                        <div class="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+                            <label>
+                                <span class="compact-label">Session title</span>
+                                {{ session_form.title }}
+                                {{ session_form.title.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Time slot</span>
+                                {{ session_form.time_slot }}
+                                {{ session_form.time_slot.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Program day</span>
+                                {{ session_form.program_day }}
+                                {{ session_form.program_day.errors }}
+                            </label>
+                        </div>
+                        <div class="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1fr)_110px_110px_80px]">
+                            <label>
+                                <span class="compact-label">Hall room</span>
+                                {{ session_form.hall_room }}
+                                {{ session_form.hall_room.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Start</span>
+                                {{ session_form.start_time }}
+                            </label>
+                            <label>
+                                <span class="compact-label">End</span>
+                                {{ session_form.end_time }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Order</span>
+                                {{ session_form.order }}
+                            </label>
+                        </div>
+                        <div class="mt-2">
+                            <label>
+                                <span class="compact-label">Description</span>
+                                {{ session_form.description }}
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-line bg-white p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 2</div>
+                                <h2 class="mt-1 text-xl font-black text-ink">Session faculty</h2>
+                            </div>
+                            <div class="text-xs font-semibold text-slate-500">Search, then use Ctrl/Cmd to select multiple people.</div>
+                        </div>
+                        <div class="mt-3 grid gap-3 lg:grid-cols-3">
+                            <div>
+                                <label class="compact-label" for="chair-search">Chairpersons</label>
+                                <input id="chair-search" type="search" class="workflow-input mb-2" placeholder="Search chairpersons" data-filter-target="id_chairpersons">
+                                {{ session_form.chairpersons }}
+                            </div>
+                            <div>
+                                <label class="compact-label" for="moderator-search">Moderators</label>
+                                <input id="moderator-search" type="search" class="workflow-input mb-2" placeholder="Search moderators" data-filter-target="id_moderators">
+                                {{ session_form.moderators }}
+                            </div>
+                            <div>
+                                <label class="compact-label" for="panelist-search">Panelists</label>
+                                <input id="panelist-search" type="search" class="workflow-input mb-2" placeholder="Search panelists" data-filter-target="id_panelists">
+                                {{ session_form.panelists }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl border border-line bg-white p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 3</div>
+                                <h2 class="mt-1 text-xl font-black text-ink">Talks and activities</h2>
+                            </div>
+                            <div class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">Approved abstracts from {{ selected_event.name }} only</div>
+                        </div>
+
+                        {{ item_formset.management_form }}
+                        <div class="mt-3 overflow-x-auto rounded-xl border border-line">
+                            <div class="min-w-[1180px] divide-y divide-line">
+                                {% for form in item_formset %}
+                                    <div class="bg-slate-50/60 p-3">
+                                        {% if form.non_field_errors %}
+                                            <div class="mb-2 rounded-lg bg-pink-50 px-3 py-2 text-xs font-semibold text-bsbcs-pink">{{ form.non_field_errors }}</div>
+                                        {% endif %}
+                                        <div class="grid gap-2 lg:grid-cols-[65px_105px_105px_minmax(0,1.3fr)_minmax(0,1fr)]">
+                                            <label>
+                                                <span class="compact-label">Order</span>
+                                                {{ form.order }}
+                                            </label>
+                                            <label>
+                                                <span class="compact-label">Start</span>
+                                                {{ form.start_time }}
+                                            </label>
+                                            <label>
+                                                <span class="compact-label">End</span>
+                                                {{ form.end_time }}
+                                            </label>
+                                            <label>
+                                                <span class="compact-label">Manual title</span>
+                                                {{ form.title }}
+                                            </label>
+                                            <div>
+                                                <label class="compact-label" for="abstract-search-{{ forloop.counter0 }}">Abstract</label>
+                                                <input id="abstract-search-{{ forloop.counter0 }}" type="search" class="workflow-input mb-2" placeholder="Search abstracts" data-filter-target="id_items-{{ forloop.counter0 }}-abstract_submission">
+                                                {{ form.abstract_submission }}
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 grid gap-2 lg:grid-cols-2">
+                                            <div>
+                                                <label class="compact-label" for="speaker-search-{{ forloop.counter0 }}">Speakers</label>
+                                                <input id="speaker-search-{{ forloop.counter0 }}" type="search" class="workflow-input mb-2" placeholder="Search speakers" data-filter-target="id_items-{{ forloop.counter0 }}-speakers">
+                                                {{ form.speakers }}
+                                            </div>
+                                            <div>
+                                                <label class="compact-label" for="presenter-search-{{ forloop.counter0 }}">Presenters</label>
+                                                <input id="presenter-search-{{ forloop.counter0 }}" type="search" class="workflow-input mb-2" placeholder="Search presenters" data-filter-target="id_items-{{ forloop.counter0 }}-presenters">
+                                                {{ form.presenters }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="text-sm font-semibold text-slate-600">
+                            Program people available: <span class="font-black text-ink">{{ people_count }}</span>
+                        </div>
+                        <button type="submit" class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white shadow-quiet hover:bg-bsbcs-navy">
+                            Create Program Session
+                        </button>
+                    </div>
+                </form>
+            {% endif %}
+        </section>
+
+        <aside class="space-y-4">
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Rules</div>
+                <h2 class="mt-1 text-xl font-black text-ink">Event-safe scheduling</h2>
+                <div class="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                    <p>Abstract dropdowns are loaded only after selecting an event.</p>
+                    <p>Submitted abstracts from one event cannot be attached to another event session.</p>
+                    <p>Use manual title for invited talks, panel discussions, breaks, and non-abstract items.</p>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-3">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Recent</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Smart sessions</h2>
+                </div>
+                <div class="space-y-2">
+                    {% for session in recent_sessions %}
+                        <div class="rounded-xl border border-line bg-slate-50/70 p-3">
+                            <div class="text-sm font-black text-ink">{{ session.title }}</div>
+                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ session.event }}{% if session.program_day %} - {{ session.program_day }}{% endif %}</div>
+                            <div class="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                                <span>{{ session.items.count }} item(s)</span>
+                                {% if session.hall_room %}<span>{{ session.hall_room }}</span>{% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-3 text-sm font-semibold text-bsbcs-blue">No smart sessions yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+    </main>
+</div>
+
+<script>
+    (function () {
+        document.querySelectorAll('[data-filter-target]').forEach(function (input) {
+            const target = document.getElementById(input.dataset.filterTarget);
+            if (!target) return;
+            const originalOptions = Array.from(target.options).map(function (option) {
+                return {
+                    value: option.value,
+                    text: option.text,
+                    selected: option.selected,
+                };
+            });
+
+            input.addEventListener('input', function () {
+                const term = input.value.trim().toLowerCase();
+                const selectedValues = new Set(Array.from(target.selectedOptions).map(function (option) {
+                    return option.value;
+                }));
+                target.innerHTML = '';
+                originalOptions.forEach(function (optionData) {
+                    if (!term || optionData.text.toLowerCase().includes(term) || selectedValues.has(optionData.value)) {
+                        const option = new Option(optionData.text, optionData.value);
+                        option.selected = selectedValues.has(optionData.value) || optionData.selected;
+                        target.add(option);
+                    }
+                });
+            });
+        });
+    })();
+</script>
+</body>
+</html>

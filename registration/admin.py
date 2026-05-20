@@ -1060,17 +1060,17 @@ class ProgramSessionItemInline(admin.TabularInline):
 
 @admin.register(ProgramSession)
 class ProgramSessionAdmin(admin.ModelAdmin):
-    list_display = ('title', 'event', 'program_day', 'hall_room', 'start_time', 'end_time', 'order', 'get_chairpersons', 'get_moderators', 'get_panelists')
-    list_filter = ('event', 'program_day', 'hall_room')
+    list_display = ('title', 'event', 'time_slot', 'program_day', 'hall_room', 'start_time', 'end_time', 'order', 'get_chairpersons', 'get_moderators', 'get_panelists')
+    list_filter = ('event', 'program_day', 'hall_room', 'time_slot')
     search_fields = ('title', 'event__name', 'faculty_roles__person__name', 'items__title', 'items__abstract_submission__title')
-    autocomplete_fields = ('event', 'program_day', 'hall_room')
+    autocomplete_fields = ('event', 'time_slot', 'program_day', 'hall_room')
     inlines = [ProgramSessionFacultyInline, ProgramSessionItemInline]
     fieldsets = (
         ('Session', {
             'fields': ('event', 'title', 'description', 'order')
         }),
         ('Timing and room', {
-            'fields': ('program_day', 'hall_room', 'start_time', 'end_time')
+            'fields': ('time_slot', 'program_day', 'hall_room', 'start_time', 'end_time')
         }),
     )
 

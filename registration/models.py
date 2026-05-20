@@ -642,6 +642,7 @@ class ProgramPerson(models.Model):
 
 class ProgramSession(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_sessions')
+    time_slot = models.ForeignKey(TimeSlot, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')
     program_day = models.ForeignKey(ProgramDay, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')
     hall_room = models.ForeignKey(HallRoom, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')
     title = models.CharField(max_length=255)
@@ -657,6 +658,23 @@ class ProgramSession(models.Model):
 
     def __str__(self):
         return f"{self.event} - {self.title}"
+
+    def clean(self):
+        super().clean()
+        if self.time_slot and self.time_slot.event_id != self.event_id:
+            raise ValidationError(_('Selected time slot must belong to the same event as the session.'))
+        if self.program_day and self.program_day.event_id != self.event_id:
+            raise ValidationError(_('Selected program day must belong to the same event as the session.'))
+        if self.hall_room and self.hall_room.event_id != self.event_id:
+            raise ValidationError(_('Selected hall room must belong to the same event as the session.'))
+
+    def save(self, *args, **kwargs):
+        if self.time_slot:
+            self.program_day = self.time_slot.program_day
+            self.hall_room = self.time_slot.hall_room
+            self.start_time = self.time_slot.start_time
+            self.end_time = self.time_slot.end_time
+        super().save(*args, **kwargs)
 
 
 class ProgramSessionFaculty(models.Model):

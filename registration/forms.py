@@ -206,6 +206,183 @@ class ProgramScheduleForm(forms.ModelForm):
 # Program Schedule form END------------------------------------------------------------------------------------
 
 
+class ProgramSessionBuilderForm(forms.ModelForm):
+    chairpersons = forms.ModelMultipleChoiceField(
+        queryset=ProgramPerson.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'workflow-select', 'size': 5}),
+    )
+    moderators = forms.ModelMultipleChoiceField(
+        queryset=ProgramPerson.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'workflow-select', 'size': 5}),
+    )
+    panelists = forms.ModelMultipleChoiceField(
+        queryset=ProgramPerson.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'workflow-select', 'size': 5}),
+    )
+
+    class Meta:
+        model = ProgramSession
+        fields = ('event', 'time_slot', 'program_day', 'hall_room', 'title', 'start_time', 'end_time', 'description', 'order')
+        widgets = {
+            'event': forms.Select(attrs={'class': 'workflow-input'}),
+            'time_slot': forms.Select(attrs={'class': 'workflow-input'}),
+            'program_day': forms.Select(attrs={'class': 'workflow-input'}),
+            'hall_room': forms.Select(attrs={'class': 'workflow-input'}),
+            'title': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Session title'}),
+            'start_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
+            'end_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
+            'description': forms.Textarea(attrs={'class': 'workflow-input', 'rows': 3, 'placeholder': 'Optional session note'}),
+            'order': forms.NumberInput(attrs={'class': 'workflow-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        event = kwargs.pop('event', None)
+        super().__init__(*args, **kwargs)
+        self.fields['event'].queryset = Event.objects.order_by('-year', 'name')
+        self.fields['time_slot'].required = bool(event)
+        if event:
+            self.fields['time_slot'].queryset = TimeSlot.objects.filter(event=event).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
+            self.fields['program_day'].queryset = ProgramDay.objects.filter(event=event).order_by('date', 'name')
+            self.fields['hall_room'].queryset = HallRoom.objects.filter(event=event).order_by('name')
+        else:
+            self.fields['time_slot'].queryset = TimeSlot.objects.none()
+            self.fields['program_day'].queryset = ProgramDay.objects.none()
+            self.fields['hall_room'].queryset = HallRoom.objects.none()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        event = cleaned_data.get('event')
+        time_slot = cleaned_data.get('time_slot')
+        program_day = cleaned_data.get('program_day')
+        hall_room = cleaned_data.get('hall_room')
+        if event and time_slot and time_slot.event_id != event.id:  # type: ignore[attr-defined]
+            self.add_error('time_slot', 'Time slot must belong to the selected event.')
+        if event and program_day and program_day.event_id != event.id:  # type: ignore[attr-defined]
+            self.add_error('program_day', 'Program day must belong to the selected event.')
+        if event and hall_room and hall_room.event_id != event.id:  # type: ignore[attr-defined]
+            self.add_error('hall_room', 'Hall room must belong to the selected event.')
+        return cleaned_data
+
+
+class ProgramDayQuickCreateForm(forms.ModelForm):
+    class Meta:
+        model = ProgramDay
+        fields = ('name', 'date')
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Day 1'}),
+            'date': forms.DateInput(attrs={'class': 'workflow-input', 'type': 'date'}),
+        }
+
+
+class HallRoomQuickCreateForm(forms.ModelForm):
+    class Meta:
+        model = HallRoom
+        fields = ('name',)
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Main Auditorium'}),
+        }
+
+
+class TimeSlotQuickCreateForm(forms.ModelForm):
+    class Meta:
+        model = TimeSlot
+        fields = ('program_day', 'hall_room', 'start_time', 'end_time')
+        widgets = {
+            'program_day': forms.Select(attrs={'class': 'workflow-input'}),
+            'hall_room': forms.Select(attrs={'class': 'workflow-input'}),
+            'start_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
+            'end_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.event = kwargs.pop('event', None)
+        super().__init__(*args, **kwargs)
+        if self.event:
+            self.fields['program_day'].queryset = ProgramDay.objects.filter(event=self.event).order_by('date', 'name')
+            self.fields['hall_room'].queryset = HallRoom.objects.filter(event=self.event).order_by('name')
+        else:
+            self.fields['program_day'].queryset = ProgramDay.objects.none()
+            self.fields['hall_room'].queryset = HallRoom.objects.none()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        program_day = cleaned_data.get('program_day')
+        hall_room = cleaned_data.get('hall_room')
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        if self.event and program_day and program_day.event_id != self.event.id:  # type: ignore[attr-defined]
+            self.add_error('program_day', 'Program day must belong to the selected event.')
+        if self.event and hall_room and hall_room.event_id != self.event.id:  # type: ignore[attr-defined]
+            self.add_error('hall_room', 'Hall room must belong to the selected event.')
+        if start_time and end_time and start_time >= end_time:
+            self.add_error('end_time', 'End time must be after start time.')
+        return cleaned_data
+
+
+class ProgramSessionItemBuilderForm(forms.Form):
+    order = forms.IntegerField(required=False, min_value=0, widget=forms.NumberInput(attrs={'class': 'workflow-input'}))
+    start_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    end_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    title = forms.CharField(
+        required=False,
+        max_length=400,
+        widget=forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Text title if this is not an abstract'}),
+    )
+    abstract_submission = forms.ModelChoiceField(
+        queryset=AbstractSubmission.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    speakers = forms.ModelMultipleChoiceField(
+        queryset=ProgramPerson.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'workflow-select', 'size': 4}),
+    )
+    presenters = forms.ModelMultipleChoiceField(
+        queryset=ProgramPerson.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'workflow-select', 'size': 4}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        event = kwargs.pop('event', None)
+        super().__init__(*args, **kwargs)
+        abstracts = AbstractSubmission.objects.filter(
+            Q(approved_for_presentation=True) | Q(approved_for_poster=True)
+        ).order_by('title')
+        if event:
+            abstracts = abstracts.filter(event=event)
+        else:
+            abstracts = AbstractSubmission.objects.none()
+        self.fields['abstract_submission'].queryset = abstracts
+
+    def clean(self):
+        cleaned_data = super().clean()
+        has_any_value = any([
+            cleaned_data.get('order') is not None,
+            cleaned_data.get('start_time'),
+            cleaned_data.get('end_time'),
+            cleaned_data.get('title'),
+            cleaned_data.get('abstract_submission'),
+            cleaned_data.get('speakers'),
+            cleaned_data.get('presenters'),
+        ])
+        if has_any_value and not cleaned_data.get('title') and not cleaned_data.get('abstract_submission'):
+            raise forms.ValidationError('Each program item needs either an approved abstract or a text-based title.')
+        return cleaned_data
+
+
+ProgramSessionItemBuilderFormSet = forms.formset_factory(
+    ProgramSessionItemBuilderForm,
+    extra=8,
+    max_num=20,
+    validate_max=False,
+)
+
+
 # Bulk Email form START------------------------------------------------------------------------------------#
 import csv
 from django import forms

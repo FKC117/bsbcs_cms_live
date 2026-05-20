@@ -38,7 +38,7 @@
     </div>
     <div class="grid grid-cols-2 gap-2">
       <a href="{{ operations.admin_links.create_event }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Create event</a>
-      <a href="{{ operations.admin_links.program_schedules }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program</a>
+      <a href="{% url 'dashboard_program_session_builder' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program builder</a>
       <a href="{{ operations.admin_links.create_bulk_email }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
       <a href="{{ operations.admin_links.abstracts }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts</a>
       <a href="{{ operations.admin_links.membership_benefits }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Benefits</a>

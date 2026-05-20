@@ -5,9 +5,20 @@ from django.urls import reverse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
+from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from .forms import RegistrationForm, AbstractSubmissionForm, UserProfileForm, CorporateAccountRequestForm
+from .forms import (
+    RegistrationForm,
+    AbstractSubmissionForm,
+    UserProfileForm,
+    CorporateAccountRequestForm,
+    ProgramSessionBuilderForm,
+    ProgramSessionItemBuilderFormSet,
+    ProgramDayQuickCreateForm,
+    HallRoomQuickCreateForm,
+    TimeSlotQuickCreateForm,
+)
 from .models import *
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
@@ -2199,6 +2210,7 @@ def event_feedback_view(request, event_id):
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.admin.models import LogEntry
 from django.shortcuts import render
+from django.db import transaction
 from django.db.models import Sum, Q
 from django.urls import reverse
 from registration.models import (
@@ -2784,6 +2796,181 @@ def dashboard_staff_activity(request):
     return render(request, 'partials/dashboard_staff_activity.html', {
         'staff_activity_page_obj': build_staff_activity(activity_page_number),
         'activity_query_string': urlencode(query_params),
+    })
+
+
+@staff_member_required
+def dashboard_program_session_builder(request):
+    from website.models import SiteSettings
+
+    selected_event = None
+    event_id = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    if event_id:
+        selected_event = Event.objects.filter(pk=event_id).first()
+
+    program_days = ProgramDay.objects.none()
+    hall_rooms = HallRoom.objects.none()
+    time_slots = TimeSlot.objects.none()
+    if selected_event:
+        program_days = ProgramDay.objects.filter(event=selected_event).order_by('date', 'name')
+        hall_rooms = HallRoom.objects.filter(event=selected_event).order_by('name')
+        time_slots = TimeSlot.objects.filter(event=selected_event).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
+
+    setup_status = {
+        'has_event': bool(selected_event),
+        'has_program_days': program_days.exists(),
+        'has_hall_rooms': hall_rooms.exists(),
+        'has_time_slots': time_slots.exists(),
+    }
+    setup_complete = all(setup_status.values())
+
+    day_form = ProgramDayQuickCreateForm()
+    hall_form = HallRoomQuickCreateForm()
+    slot_form = TimeSlotQuickCreateForm(event=selected_event)
+
+    if request.method == 'POST':
+        setup_action = request.POST.get('setup_action')
+
+        if setup_action:
+            if not selected_event:
+                messages.error(request, 'Choose an event before adding setup details.')
+                return redirect('dashboard_program_session_builder')
+
+            if setup_action == 'add_day':
+                day_form = ProgramDayQuickCreateForm(request.POST)
+                if day_form.is_valid():
+                    program_day = day_form.save(commit=False)
+                    program_day.event = selected_event
+                    program_day.save()
+                    messages.success(request, f'Program day "{program_day.name}" added.')
+                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'add_room':
+                hall_form = HallRoomQuickCreateForm(request.POST)
+                if hall_form.is_valid():
+                    hall_room = hall_form.save(commit=False)
+                    hall_room.event = selected_event
+                    hall_room.location = (selected_event.location or selected_event.name)[:50]
+                    hall_room.save()
+                    messages.success(request, f'Hall room "{hall_room.name}" added.')
+                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'add_slot':
+                slot_form = TimeSlotQuickCreateForm(request.POST, event=selected_event)
+                if slot_form.is_valid():
+                    time_slot = slot_form.save(commit=False)
+                    time_slot.event = selected_event
+                    try:
+                        time_slot.full_clean()
+                    except ValidationError as exc:
+                        slot_form.add_error(None, exc)
+                    else:
+                        time_slot.save()
+                        messages.success(request, f'Time slot "{time_slot}" added.')
+                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+
+            initial = {'event': selected_event} if selected_event else None
+            session_form = ProgramSessionBuilderForm(initial=initial, event=selected_event)
+            item_formset = ProgramSessionItemBuilderFormSet(
+                prefix='items',
+                form_kwargs={'event': selected_event},
+            )
+        else:
+            session_form = ProgramSessionBuilderForm(request.POST, event=selected_event)
+            item_formset = ProgramSessionItemBuilderFormSet(
+                request.POST,
+                prefix='items',
+                form_kwargs={'event': selected_event},
+            )
+
+            if not selected_event:
+                session_form.add_error('event', 'Choose an event before creating a program session.')
+            if selected_event and not setup_complete:
+                session_form.add_error(None, 'Complete program day, hall room, and time slot setup before creating a session.')
+
+            if session_form.is_valid() and item_formset.is_valid():
+                with transaction.atomic():
+                    session = session_form.save()
+
+                    role_map = [
+                        (ProgramSessionFaculty.ROLE_CHAIRPERSON, session_form.cleaned_data.get('chairpersons')),
+                        (ProgramSessionFaculty.ROLE_MODERATOR, session_form.cleaned_data.get('moderators')),
+                        (ProgramSessionFaculty.ROLE_PANELIST, session_form.cleaned_data.get('panelists')),
+                    ]
+                    for role, people in role_map:
+                        for order, person in enumerate(people or [], start=1):
+                            ProgramSessionFaculty.objects.create(
+                                session=session,
+                                person=person,
+                                role=role,
+                                order=order,
+                            )
+
+                    item_count = 0
+                    for form in item_formset:
+                        if not form.has_changed():
+                            continue
+                        item = ProgramSessionItem.objects.create(
+                            session=session,
+                            abstract_submission=form.cleaned_data.get('abstract_submission'),
+                            title=form.cleaned_data.get('title'),
+                            start_time=form.cleaned_data.get('start_time'),
+                            end_time=form.cleaned_data.get('end_time'),
+                            order=form.cleaned_data.get('order') or item_count + 1,
+                        )
+                        for order, person in enumerate(form.cleaned_data.get('speakers') or [], start=1):
+                            ProgramItemFaculty.objects.create(
+                                item=item,
+                                person=person,
+                                role=ProgramItemFaculty.ROLE_SPEAKER,
+                                order=order,
+                            )
+                        for order, person in enumerate(form.cleaned_data.get('presenters') or [], start=1):
+                            ProgramItemFaculty.objects.create(
+                                item=item,
+                                person=person,
+                                role=ProgramItemFaculty.ROLE_PRESENTER,
+                                order=order,
+                            )
+                        item_count += 1
+
+                messages.success(request, f'Program session "{session.title}" created with {item_count} item(s).')
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={session.event_id}")
+    else:
+        initial = {'event': selected_event} if selected_event else None
+        session_form = ProgramSessionBuilderForm(initial=initial, event=selected_event)
+        item_formset = ProgramSessionItemBuilderFormSet(
+            prefix='items',
+            form_kwargs={'event': selected_event},
+        )
+
+    recent_sessions = ProgramSession.objects.select_related(
+        'event',
+        'program_day',
+        'hall_room',
+    ).prefetch_related(
+        'faculty_roles__person',
+        'items__faculty_roles__person',
+        'items__abstract_submission',
+    )
+    if selected_event:
+        recent_sessions = recent_sessions.filter(event=selected_event)
+    recent_sessions = recent_sessions.order_by('-id')[:8]
+
+    return render(request, 'dashboard_program_session_builder.html', {
+        'site_settings': SiteSettings.objects.first(),
+        'session_form': session_form,
+        'item_formset': item_formset,
+        'selected_event': selected_event,
+        'events': Event.objects.order_by('-year', 'name'),
+        'people_count': ProgramPerson.objects.count(),
+        'recent_sessions': recent_sessions,
+        'program_days': program_days,
+        'hall_rooms': hall_rooms,
+        'time_slots': time_slots,
+        'setup_status': setup_status,
+        'setup_complete': setup_complete,
+        'day_form': day_form,
+        'hall_form': hall_form,
+        'slot_form': slot_form,
     })
 
 
