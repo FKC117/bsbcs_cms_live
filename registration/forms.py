@@ -255,6 +255,20 @@ class ProgramSessionBuilderForm(forms.ModelForm):
             self.fields['program_day'].queryset = ProgramDay.objects.none()
             self.fields['hall_room'].queryset = HallRoom.objects.none()
 
+        if self.instance and self.instance.pk:
+            self.fields['chairpersons'].initial = ProgramPerson.objects.filter(
+                session_roles__session=self.instance,
+                session_roles__role=ProgramSessionFaculty.ROLE_CHAIRPERSON
+            )
+            self.fields['moderators'].initial = ProgramPerson.objects.filter(
+                session_roles__session=self.instance,
+                session_roles__role=ProgramSessionFaculty.ROLE_MODERATOR
+            )
+            self.fields['panelists'].initial = ProgramPerson.objects.filter(
+                session_roles__session=self.instance,
+                session_roles__role=ProgramSessionFaculty.ROLE_PANELIST
+            )
+
     def clean(self):
         cleaned_data = super().clean()
         event = cleaned_data.get('event')

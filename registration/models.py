@@ -715,6 +715,64 @@ class ProgramSession(models.Model):
             self.end_time = self.time_slot.end_time
         super().save(*args, **kwargs)
 
+    @property
+    def builder_payload(self):
+        role_ids = {
+            ProgramSessionFaculty.ROLE_CHAIRPERSON: [],
+            ProgramSessionFaculty.ROLE_MODERATOR: [],
+            ProgramSessionFaculty.ROLE_PANELIST: [],
+        }
+        for role in self.faculty_roles.all():
+            if role.role in role_ids:
+                role_ids[role.role].append(str(role.person_id))
+
+        items = []
+        for item in self.items.all():
+            item_role_ids = {
+                ProgramItemFaculty.ROLE_SPEAKER: [],
+                ProgramItemFaculty.ROLE_PRESENTER: [],
+            }
+            for role in item.faculty_roles.all():
+                if role.role in item_role_ids:
+                    item_role_ids[role.role].append(str(role.person_id))
+            items.append({
+                'id': str(item.id),
+                'order': str(item.order),
+                'start_time': item.start_time.strftime('%H:%M') if item.start_time else '',
+                'end_time': item.end_time.strftime('%H:%M') if item.end_time else '',
+                'title': item.title,
+                'abstract_submission': str(item.abstract_submission_id) if item.abstract_submission_id else '',
+                'speakers': item_role_ids[ProgramItemFaculty.ROLE_SPEAKER],
+                'presenters': item_role_ids[ProgramItemFaculty.ROLE_PRESENTER],
+            })
+
+        return {
+            'id': str(self.id),
+            'title': self.title,
+            'description': self.description or '',
+            'time_slot': str(self.time_slot_id) if self.time_slot_id else '',
+            'program_day': str(self.program_day_id) if self.program_day_id else '',
+            'hall_room': str(self.hall_room_id) if self.hall_room_id else '',
+            'start_time': self.start_time.strftime('%H:%M') if self.start_time else '',
+            'end_time': self.end_time.strftime('%H:%M') if self.end_time else '',
+            'day_label': self.program_day.name if self.program_day else 'Day',
+            'room_label': self.hall_room.name if self.hall_room else 'Room',
+            'time_label': (
+                f"{self.start_time.strftime('%I:%M %p').lstrip('0')} - {self.end_time.strftime('%I:%M %p').lstrip('0')}"
+                if self.start_time and self.end_time
+                else 'Time slot'
+            ),
+            'order': str(self.order),
+            'chairpersons': role_ids[ProgramSessionFaculty.ROLE_CHAIRPERSON],
+            'moderators': role_ids[ProgramSessionFaculty.ROLE_MODERATOR],
+            'panelists': role_ids[ProgramSessionFaculty.ROLE_PANELIST],
+            'items': items,
+        }
+
+    @property
+    def builder_payload_script_id(self):
+        return f'program-session-payload-{self.id}'
+
 
 class ProgramSessionFaculty(models.Model):
     ROLE_CHAIRPERSON = 'chairperson'

@@ -3026,6 +3026,12 @@ def dashboard_program_session_builder(request):
                     person = person_form.save()
                     messages.success(request, f'Program person "{person.name}" added.')
                     return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'delete_session':
+                session_id = request.POST.get('session_id')
+                if session_id:
+                    ProgramSession.objects.filter(pk=session_id, event=selected_event).delete()
+                    messages.success(request, 'Program session successfully deleted.')
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
 
             initial = {'event': selected_event} if selected_event else None
             session_form = ProgramSessionBuilderForm(initial=initial, event=selected_event)
@@ -3034,7 +3040,12 @@ def dashboard_program_session_builder(request):
                 form_kwargs={'event': selected_event},
             )
         else:
-            session_form = ProgramSessionBuilderForm(request.POST, event=selected_event)
+            session_id = request.POST.get('session_id')
+            session_instance = None
+            if session_id:
+                session_instance = ProgramSession.objects.filter(pk=session_id, event=selected_event).first()
+
+            session_form = ProgramSessionBuilderForm(request.POST, instance=session_instance, event=selected_event)
             item_formset = ProgramSessionItemBuilderFormSet(
                 request.POST,
                 prefix='items',
@@ -3049,6 +3060,10 @@ def dashboard_program_session_builder(request):
             if session_form.is_valid() and item_formset.is_valid():
                 with transaction.atomic():
                     session = session_form.save()
+
+                    if session_instance:
+                        ProgramSessionFaculty.objects.filter(session=session).delete()
+                        ProgramSessionItem.objects.filter(session=session).delete()
 
                     role_map = [
                         (ProgramSessionFaculty.ROLE_CHAIRPERSON, session_form.cleaned_data.get('chairpersons')),
@@ -3066,7 +3081,7 @@ def dashboard_program_session_builder(request):
 
                     item_count = 0
                     for form in item_formset:
-                        if not form.has_changed():
+                        if not form.cleaned_data.get('title') and not form.cleaned_data.get('abstract_submission'):
                             continue
                         item = ProgramSessionItem.objects.create(
                             session=session,
@@ -3092,7 +3107,8 @@ def dashboard_program_session_builder(request):
                             )
                         item_count += 1
 
-                messages.success(request, f'Program session "{session.title}" created with {item_count} item(s).')
+                action_label = 'updated' if session_instance else 'created'
+                messages.success(request, f'Program session "{session.title}" {action_label} with {item_count} item(s).')
                 return redirect(f"{reverse('dashboard_program_session_builder')}?event={session.event_id}")
     else:
         initial = {'event': selected_event} if selected_event else None
