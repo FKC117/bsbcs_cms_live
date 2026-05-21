@@ -722,9 +722,15 @@ class ProgramSession(models.Model):
             ProgramSessionFaculty.ROLE_MODERATOR: [],
             ProgramSessionFaculty.ROLE_PANELIST: [],
         }
+        role_labels = {
+            ProgramSessionFaculty.ROLE_CHAIRPERSON: [],
+            ProgramSessionFaculty.ROLE_MODERATOR: [],
+            ProgramSessionFaculty.ROLE_PANELIST: [],
+        }
         for role in self.faculty_roles.all():
             if role.role in role_ids:
                 role_ids[role.role].append(str(role.person_id))
+                role_labels[role.role].append(role.person.name)
 
         items = []
         for item in self.items.all():
@@ -732,22 +738,37 @@ class ProgramSession(models.Model):
                 ProgramItemFaculty.ROLE_SPEAKER: [],
                 ProgramItemFaculty.ROLE_PRESENTER: [],
             }
+            item_role_labels = {
+                ProgramItemFaculty.ROLE_SPEAKER: [],
+                ProgramItemFaculty.ROLE_PRESENTER: [],
+            }
             for role in item.faculty_roles.all():
                 if role.role in item_role_ids:
                     item_role_ids[role.role].append(str(role.person_id))
+                    item_role_labels[role.role].append(role.person.name)
             items.append({
                 'id': str(item.id),
                 'order': str(item.order),
                 'start_time': item.start_time.strftime('%H:%M') if item.start_time else '',
                 'end_time': item.end_time.strftime('%H:%M') if item.end_time else '',
+                'time_label': (
+                    f"{item.start_time.strftime('%I:%M %p').lstrip('0')} - {item.end_time.strftime('%I:%M %p').lstrip('0')}"
+                    if item.start_time and item.end_time
+                    else 'Time not set'
+                ),
                 'title': item.title,
+                'display_title': item.display_title,
                 'abstract_submission': str(item.abstract_submission_id) if item.abstract_submission_id else '',
+                'abstract_title': item.abstract_submission.title if item.abstract_submission else '',
                 'speakers': item_role_ids[ProgramItemFaculty.ROLE_SPEAKER],
                 'presenters': item_role_ids[ProgramItemFaculty.ROLE_PRESENTER],
+                'speaker_labels': item_role_labels[ProgramItemFaculty.ROLE_SPEAKER],
+                'presenter_labels': item_role_labels[ProgramItemFaculty.ROLE_PRESENTER],
             })
 
         return {
             'id': str(self.id),
+            'event_label': self.event.name,
             'title': self.title,
             'description': self.description or '',
             'time_slot': str(self.time_slot_id) if self.time_slot_id else '',
@@ -766,6 +787,10 @@ class ProgramSession(models.Model):
             'chairpersons': role_ids[ProgramSessionFaculty.ROLE_CHAIRPERSON],
             'moderators': role_ids[ProgramSessionFaculty.ROLE_MODERATOR],
             'panelists': role_ids[ProgramSessionFaculty.ROLE_PANELIST],
+            'chairperson_labels': role_labels[ProgramSessionFaculty.ROLE_CHAIRPERSON],
+            'moderator_labels': role_labels[ProgramSessionFaculty.ROLE_MODERATOR],
+            'panelist_labels': role_labels[ProgramSessionFaculty.ROLE_PANELIST],
+            'occupancy': self.timeline_occupancy,
             'items': items,
         }
 
