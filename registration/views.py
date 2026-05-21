@@ -2836,7 +2836,11 @@ def dashboard_program_session_builder(request):
     setup_complete = all(setup_status.values())
 
     day_form = ProgramDayQuickCreateForm()
+    day_edit_form = None
+    editing_day = None
     hall_form = HallRoomQuickCreateForm()
+    hall_edit_form = None
+    editing_room = None
     slot_form = TimeSlotQuickCreateForm(event=selected_event)
     slot_edit_form = None
     editing_slot = None
@@ -2886,6 +2890,45 @@ def dashboard_program_session_builder(request):
                 })
         return warnings
 
+    generated_preview_session_key = 'program_session_builder_generated_slot_preview'
+
+    if request.method == 'GET' and selected_event:
+        preview_state = request.session.pop(generated_preview_session_key, None)
+        if preview_state and preview_state.get('event_id') == selected_event.id:
+            preview_program_day = ProgramDay.objects.filter(
+                pk=preview_state.get('program_day_id'),
+                event=selected_event,
+            ).first()
+            preview_hall_room = HallRoom.objects.filter(
+                pk=preview_state.get('hall_room_id'),
+                event=selected_event,
+            ).first()
+            if preview_program_day and preview_hall_room:
+                generated_initial = []
+                for slot in preview_state.get('slots') or []:
+                    try:
+                        generated_initial.append({
+                            'start_time': datetime.strptime(slot['start_time'], '%H:%M:%S').time(),
+                            'end_time': datetime.strptime(slot['end_time'], '%H:%M:%S').time(),
+                            'slot_type': slot['slot_type'],
+                        })
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                generated_slot_formset = GeneratedTimeSlotPreviewFormSet(
+                    initial=generated_initial,
+                    prefix='generated',
+                )
+                generated_slot_scope = {
+                    'program_day': preview_program_day,
+                    'hall_room': preview_hall_room,
+                }
+                generated_slot_warnings = collect_generated_slot_warnings(
+                    preview_program_day,
+                    preview_hall_room,
+                    generated_initial,
+                )
+                generated_preview_open = True
+
     if request.method == 'POST':
         setup_action = request.POST.get('setup_action')
 
@@ -2897,20 +2940,104 @@ def dashboard_program_session_builder(request):
             if setup_action == 'add_day':
                 day_form = ProgramDayQuickCreateForm(request.POST)
                 if day_form.is_valid():
-                    program_day = day_form.save(commit=False)
-                    program_day.event = selected_event
-                    program_day.save()
-                    messages.success(request, f'Program day "{program_day.name}" added.')
-                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+                    duplicate_day = ProgramDay.objects.filter(
+                        event=selected_event,
+                        name__iexact=day_form.cleaned_data['name'],
+                        date=day_form.cleaned_data['date'],
+                    ).exists()
+                    if duplicate_day:
+                        day_form.add_error(None, 'This program day name and date already exist for the selected event.')
+                    else:
+                        program_day = day_form.save(commit=False)
+                        program_day.event = selected_event
+                        program_day.save()
+                        messages.success(request, f'Program day "{program_day.name}" added.')
+                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'edit_day':
+                editing_day = ProgramDay.objects.filter(
+                    pk=request.POST.get('program_day_id'),
+                    event=selected_event,
+                ).first()
+                if not editing_day:
+                    messages.error(request, 'Choose a valid program day to edit.')
+                else:
+                    day_edit_form = ProgramDayQuickCreateForm(request.POST, instance=editing_day)
+                    if day_edit_form.is_valid():
+                        duplicate_day = ProgramDay.objects.filter(
+                            event=selected_event,
+                            name__iexact=day_edit_form.cleaned_data['name'],
+                            date=day_edit_form.cleaned_data['date'],
+                        ).exclude(pk=editing_day.pk).exists()
+                        if duplicate_day:
+                            day_edit_form.add_error(None, 'Another program day already uses this name and date.')
+                        else:
+                            program_day = day_edit_form.save()
+                            messages.success(request, f'Program day "{program_day.name}" updated.')
+                            return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'delete_day':
+                deleting_day = ProgramDay.objects.filter(
+                    pk=request.POST.get('program_day_id'),
+                    event=selected_event,
+                ).first()
+                if not deleting_day:
+                    messages.error(request, 'Choose a valid program day to remove.')
+                elif TimeSlot.objects.filter(program_day=deleting_day).exists() or ProgramSession.objects.filter(program_day=deleting_day).exists():
+                    messages.error(request, 'This program day already has slots or sessions. Edit it instead, or clear those schedule records first.')
+                else:
+                    day_name = deleting_day.name
+                    deleting_day.delete()
+                    messages.success(request, f'Program day "{day_name}" removed.')
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'add_room':
                 hall_form = HallRoomQuickCreateForm(request.POST)
                 if hall_form.is_valid():
-                    hall_room = hall_form.save(commit=False)
-                    hall_room.event = selected_event
-                    hall_room.location = (selected_event.location or selected_event.name)[:50]
-                    hall_room.save()
-                    messages.success(request, f'Hall room "{hall_room.name}" added.')
-                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+                    duplicate_room = HallRoom.objects.filter(
+                        event=selected_event,
+                        name__iexact=hall_form.cleaned_data['name'],
+                    ).exists()
+                    if duplicate_room:
+                        hall_form.add_error(None, 'This hall room name already exists for the selected event.')
+                    else:
+                        hall_room = hall_form.save(commit=False)
+                        hall_room.event = selected_event
+                        hall_room.location = (selected_event.location or selected_event.name)[:50]
+                        hall_room.save()
+                        messages.success(request, f'Hall room "{hall_room.name}" added.')
+                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'edit_room':
+                editing_room = HallRoom.objects.filter(
+                    pk=request.POST.get('hall_room_id'),
+                    event=selected_event,
+                ).first()
+                if not editing_room:
+                    messages.error(request, 'Choose a valid hall room to edit.')
+                else:
+                    hall_edit_form = HallRoomQuickCreateForm(request.POST, instance=editing_room)
+                    if hall_edit_form.is_valid():
+                        duplicate_room = HallRoom.objects.filter(
+                            event=selected_event,
+                            name__iexact=hall_edit_form.cleaned_data['name'],
+                        ).exclude(pk=editing_room.pk).exists()
+                        if duplicate_room:
+                            hall_edit_form.add_error(None, 'Another hall room already uses this name.')
+                        else:
+                            hall_room = hall_edit_form.save()
+                            messages.success(request, f'Hall room "{hall_room.name}" updated.')
+                            return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'delete_room':
+                deleting_room = HallRoom.objects.filter(
+                    pk=request.POST.get('hall_room_id'),
+                    event=selected_event,
+                ).first()
+                if not deleting_room:
+                    messages.error(request, 'Choose a valid hall room to remove.')
+                elif TimeSlot.objects.filter(hall_room=deleting_room).exists() or ProgramSession.objects.filter(hall_room=deleting_room).exists():
+                    messages.error(request, 'This hall room already has slots or sessions. Edit it instead, or clear those schedule records first.')
+                else:
+                    room_name = deleting_room.name
+                    deleting_room.delete()
+                    messages.success(request, f'Hall room "{room_name}" removed.')
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'add_slot':
                 slot_form = TimeSlotQuickCreateForm(request.POST, event=selected_event)
                 if slot_form.is_valid():
@@ -2973,7 +3100,20 @@ def dashboard_program_session_builder(request):
                         generated_slot_scope['hall_room'],
                         generated_initial,
                     )
-                    generated_preview_open = True
+                    request.session[generated_preview_session_key] = {
+                        'event_id': selected_event.id,
+                        'program_day_id': generated_slot_scope['program_day'].id,
+                        'hall_room_id': generated_slot_scope['hall_room'].id,
+                        'slots': [
+                            {
+                                'start_time': slot['start_time'].isoformat(),
+                                'end_time': slot['end_time'].isoformat(),
+                                'slot_type': slot['slot_type'],
+                            }
+                            for slot in generated_initial
+                        ],
+                    }
+                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'save_generated_slots':
                 program_day = ProgramDay.objects.filter(
                     pk=request.POST.get('generated_program_day'),
@@ -3153,7 +3293,11 @@ def dashboard_program_session_builder(request):
         'setup_status': setup_status,
         'setup_complete': setup_complete,
         'day_form': day_form,
+        'day_edit_form': day_edit_form,
+        'editing_day': editing_day,
         'hall_form': hall_form,
+        'hall_edit_form': hall_edit_form,
+        'editing_room': editing_room,
         'slot_form': slot_form,
         'slot_edit_form': slot_edit_form,
         'editing_slot': editing_slot,

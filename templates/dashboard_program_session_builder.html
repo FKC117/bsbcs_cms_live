@@ -138,8 +138,9 @@
                             <p class="mt-1 text-xs font-semibold text-slate-600">Each day belongs to this event only.</p>
                             <div class="mt-3 space-y-1">
                                 {% for day in program_days|slice:":4" %}
-                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
+                                    <div class="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
                                         <span class="font-black text-ink">{{ day.name }}</span>{% if day.date %} · {{ day.date|date:"M d, Y" }}{% endif %}
+                                        <button type="button" class="shrink-0 rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-black text-bsbcs-blue hover:bg-blue-50" data-edit-program-day data-program-day-id="{{ day.id }}" data-program-day-name="{{ day.name }}" data-program-day-date="{{ day.date|date:'Y-m-d' }}">Edit</button>
                                     </div>
                                 {% empty %}
                                     <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No program day added yet.</div>
@@ -157,8 +158,9 @@
                             <p class="mt-1 text-xs font-semibold text-slate-600">Rooms are scoped to this event venue.</p>
                             <div class="mt-3 space-y-1">
                                 {% for room in hall_rooms|slice:":4" %}
-                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
+                                    <div class="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
                                         <span class="font-black text-ink">{{ room.name }}</span>{% if room.location %} · {{ room.location }}{% endif %}
+                                        <button type="button" class="shrink-0 rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-black text-bsbcs-blue hover:bg-blue-50" data-edit-hall-room data-hall-room-id="{{ room.id }}" data-hall-room-name="{{ room.name }}">Edit</button>
                                     </div>
                                 {% empty %}
                                     <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No hall room added yet.</div>
@@ -255,6 +257,42 @@
                     </div>
                 </div>
 
+                <div id="day-edit-modal" class="setup-modal" hidden {% if day_edit_form and day_edit_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Correct program day</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Edit or remove this day</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="program_day_id" value="{% if editing_day %}{{ editing_day.id }}{% endif %}" data-program-day-edit-id>
+                            {% if day_edit_form and day_edit_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ day_edit_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Day name</span>
+                                <input type="text" name="name" class="workflow-input" value="{% if day_edit_form %}{{ day_edit_form.name.value|default:'' }}{% endif %}" placeholder="Day 1" data-program-day-edit-name required>
+                                {% if day_edit_form %}{{ day_edit_form.name.errors }}{% endif %}
+                            </label>
+                            <label>
+                                <span class="compact-label">Date</span>
+                                <input type="date" name="date" class="workflow-input" value="{% if day_edit_form %}{{ day_edit_form.date.value|default:'' }}{% endif %}" data-program-day-edit-date required>
+                                {% if day_edit_form %}{{ day_edit_form.date.errors }}{% endif %}
+                            </label>
+                            <p class="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-line">A day with time slots or sessions can be corrected here, but it cannot be removed until those schedule records are cleared.</p>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <button type="submit" name="setup_action" value="delete_day" class="rounded-xl border border-pink-100 bg-pink-50 px-4 py-2 text-sm font-black text-bsbcs-pink hover:bg-pink-100" onclick="return confirm('Remove this program day if it has no slots or sessions?');">Remove Day</button>
+                                <div class="flex justify-end gap-2">
+                                    <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                    <button type="submit" name="setup_action" value="edit_day" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Day</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <div id="room-modal" class="setup-modal" hidden {% if hall_form.errors %}data-open-on-load="true"{% endif %}>
                     <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
                         <div class="flex items-start justify-between gap-3">
@@ -280,6 +318,38 @@
                             <div class="flex justify-end gap-2">
                                 <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
                                 <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Room</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="room-edit-modal" class="setup-modal" hidden {% if hall_edit_form and hall_edit_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Correct hall room</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Edit or remove this room</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="hall_room_id" value="{% if editing_room %}{{ editing_room.id }}{% endif %}" data-hall-room-edit-id>
+                            {% if hall_edit_form and hall_edit_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ hall_edit_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Room name</span>
+                                <input type="text" name="name" class="workflow-input" value="{% if hall_edit_form %}{{ hall_edit_form.name.value|default:'' }}{% endif %}" placeholder="Main Auditorium" data-hall-room-edit-name required>
+                                {% if hall_edit_form %}{{ hall_edit_form.name.errors }}{% endif %}
+                            </label>
+                            <div class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-line">Venue stays from event location: <span class="font-black text-ink">{{ selected_event.location|default:selected_event.name }}</span></div>
+                            <p class="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600 ring-1 ring-line">A room with time slots or sessions can be renamed here, but it cannot be removed until those schedule records are cleared.</p>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <button type="submit" name="setup_action" value="delete_room" class="rounded-xl border border-pink-100 bg-pink-50 px-4 py-2 text-sm font-black text-bsbcs-pink hover:bg-pink-100" onclick="return confirm('Remove this hall room if it has no slots or sessions?');">Remove Room</button>
+                                <div class="flex justify-end gap-2">
+                                    <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                    <button type="submit" name="setup_action" value="edit_room" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Room</button>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -317,8 +387,8 @@
                                     {% endfor %}
                                 </select>
                             </label>
-                            <button type="button" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" data-open-modal="slot-generator-modal" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Generate Slots</button>
-                            <button type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50 {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" data-open-modal="slot-modal" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Add Single Slot</button>
+                            <button type="button" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy disabled:cursor-not-allowed disabled:opacity-50" data-open-modal="slot-generator-modal" data-slot-library-action disabled>Generate Slots</button>
+                            <button type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50" data-open-modal="slot-modal" data-slot-library-action disabled>Add Single Slot</button>
                         </div>
 
                         {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}
@@ -415,9 +485,12 @@
                                     {{ slot_form.label.errors }}
                                 </label>
                             </div>
-                            <div class="flex justify-end gap-2">
-                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
-                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Slot</button>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <button type="button" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-bsbcs-blue hover:bg-blue-100" data-open-modal="time-slot-library-modal">&larr; Back to Slots</button>
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Slot</button>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -536,9 +609,12 @@
                                     {{ slot_generator_form.slot_minutes.errors }}
                                 </label>
                             </div>
-                            <div class="flex justify-end gap-2">
-                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
-                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Preview Slots</button>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <button type="button" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-bsbcs-blue hover:bg-blue-100" data-open-modal="time-slot-library-modal">&larr; Back to Slots</button>
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Preview Slots</button>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -1114,12 +1190,15 @@
 
             <!-- Section 3: Talks Formset -->
             <div class="space-y-4">
-                <div class="border-b border-line pb-2 flex items-center justify-between">
+                <div class="border-b border-line pb-2 flex flex-wrap items-center justify-between gap-2">
                     <h3 class="text-sm font-black text-bsbcs-navy uppercase tracking-wider flex items-center gap-2">
                         <span class="grid h-5 w-5 place-items-center rounded bg-pink-50 text-xxs font-black text-bsbcs-pink">3</span>
                         Session Items / Scheduled Talks
                     </h3>
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xxs font-bold text-slate-500">Up to 20</span>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xxs font-black text-bsbcs-blue">Session window: <span data-talk-session-window>Choose slot</span></span>
+                        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xxs font-bold text-slate-500">Up to 20</span>
+                    </div>
                 </div>
 
                 {{ item_formset.management_form }}
@@ -1128,12 +1207,13 @@
                         <div class="talk-form-row bg-slate-50/50 rounded-2xl border border-line p-4 relative" data-form-index="{{ forloop.counter0 }}">
                             
                             <!-- Row Header & Order/Remove -->
-                            <div class="flex items-center justify-between gap-3 mb-3 border-b border-line/40 pb-2">
+                            <div class="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-line/40 pb-2">
                                 <span class="text-xs font-black text-slate-700 flex items-center gap-1.5">
                                     <span class="grid h-5 w-5 place-items-center rounded bg-white border border-line text-xxs font-black text-slate-500" data-row-number>{{ forloop.counter }}</span>
                                     Talk Item
                                 </span>
-                                <div class="flex items-center gap-2">
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <span class="rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-xxs font-black text-bsbcs-blue">Session: <span data-talk-session-window>Choose slot</span></span>
                                     <label class="flex items-center gap-1 text-xxs font-bold text-slate-500">
                                         <span>Sort Order:</span>
                                         <input type="number" name="{{ form.order.html_name }}" id="{{ form.order.auto_id }}" value="{{ form.order.value|default:forloop.counter }}" class="w-12 text-center rounded border border-line py-0.5 text-xxs font-bold focus:border-bsbcs-blue" data-talk-order>
@@ -1345,6 +1425,9 @@
 
             document.querySelectorAll('[data-open-modal]').forEach(function (button) {
                 button.addEventListener('click', function () {
+                    if (button.matches('[data-slot-library-action]') && !syncSlotLibrarySelection(button.dataset.openModal)) {
+                        return;
+                    }
                     const currentModal = button.closest('.setup-modal');
                     if (currentModal) {
                         closeModal(currentModal);
@@ -1377,11 +1460,66 @@
                 }
             });
 
+            const dayEditModal = document.getElementById('day-edit-modal');
+            const dayEditFields = {
+                id: document.querySelector('[data-program-day-edit-id]'),
+                name: document.querySelector('[data-program-day-edit-name]'),
+                date: document.querySelector('[data-program-day-edit-date]'),
+            };
+            document.querySelectorAll('[data-edit-program-day]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    if (dayEditFields.id) dayEditFields.id.value = button.dataset.programDayId || '';
+                    if (dayEditFields.name) dayEditFields.name.value = button.dataset.programDayName || '';
+                    if (dayEditFields.date) dayEditFields.date.value = button.dataset.programDayDate || '';
+                    openModal(dayEditModal);
+                });
+            });
+
+            const hallRoomEditModal = document.getElementById('room-edit-modal');
+            const hallRoomEditFields = {
+                id: document.querySelector('[data-hall-room-edit-id]'),
+                name: document.querySelector('[data-hall-room-edit-name]'),
+            };
+            document.querySelectorAll('[data-edit-hall-room]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    if (hallRoomEditFields.id) hallRoomEditFields.id.value = button.dataset.hallRoomId || '';
+                    if (hallRoomEditFields.name) hallRoomEditFields.name.value = button.dataset.hallRoomName || '';
+                    openModal(hallRoomEditModal);
+                });
+            });
+
             // Stored slots day and room filter
             const slotDayFilter = document.querySelector('[data-slot-day-filter]');
             const slotRoomFilter = document.querySelector('[data-slot-room-filter]');
             const slotRows = Array.from(document.querySelectorAll('[data-slot-row]'));
             const slotEmpty = document.querySelector('[data-slot-empty]');
+            const slotLibraryActions = Array.from(document.querySelectorAll('[data-slot-library-action]'));
+
+            function setModalSelectValue(modalId, fieldName, value) {
+                const modal = document.getElementById(modalId);
+                const field = modal ? modal.querySelector(`select[name="${fieldName}"]`) : null;
+                if (field) field.value = value || '';
+            }
+
+            function hasSlotLibraryScope() {
+                return Boolean(slotDayFilter && slotRoomFilter && slotDayFilter.value && slotRoomFilter.value);
+            }
+
+            function syncSlotLibrarySelection(modalId) {
+                if (!hasSlotLibraryScope()) return false;
+                setModalSelectValue(modalId, 'program_day', slotDayFilter.value);
+                setModalSelectValue(modalId, 'hall_room', slotRoomFilter.value);
+                return true;
+            }
+
+            function updateSlotLibraryActions() {
+                const scopeReady = hasSlotLibraryScope();
+                slotLibraryActions.forEach(function (button) {
+                    button.disabled = !scopeReady;
+                    button.setAttribute('aria-disabled', scopeReady ? 'false' : 'true');
+                    button.title = scopeReady ? '' : 'Choose a program day and hall room first.';
+                });
+            }
 
             function filterSlotRows() {
                 if (!slotDayFilter) return;
@@ -1406,6 +1544,7 @@
                         slotEmpty.hidden = true;
                     }
                 }
+                updateSlotLibraryActions();
             }
 
             if (slotDayFilter) {
@@ -1536,6 +1675,24 @@
                 const displayHour = (hours24 % 12) || 12;
                 const displayMinutes = String(minutes % 60).padStart(2, '0');
                 return `${displayHour}:${displayMinutes} ${hours24 >= 12 ? 'PM' : 'AM'}`;
+            }
+
+            function currentSessionWindowLabel() {
+                const badgeTime = document.getElementById('badge-time').textContent.trim();
+                if (badgeTime) return badgeTime;
+                const startTime = document.getElementById('id_start_time').value;
+                const endTime = document.getElementById('id_end_time').value;
+                if (startTime && endTime) {
+                    return `${formatTimeValue(startTime)} - ${formatTimeValue(endTime)}`;
+                }
+                return 'Choose slot';
+            }
+
+            function syncTalkSessionWindows() {
+                const sessionWindow = currentSessionWindowLabel();
+                document.querySelectorAll('[data-talk-session-window]').forEach(function (label) {
+                    label.textContent = sessionWindow;
+                });
             }
 
             function findTalksOutsideSessionWindow() {
@@ -2040,6 +2197,7 @@
                 if (totalForms) {
                     totalForms.value = talkRows.length; // keep it at maximum size so Django reads all forms
                 }
+                syncTalkSessionWindows();
             }
 
             addTalkBtn.addEventListener('click', function () {
@@ -2205,6 +2363,7 @@
                     document.getElementById('badge-day').textContent = dayName;
                     document.getElementById('badge-room').textContent = roomName;
                     document.getElementById('badge-time').textContent = timeRange;
+                    syncTalkSessionWindows();
 
                     document.getElementById('sidebar-title').textContent = "Schedule Program Session";
                     
@@ -2242,6 +2401,7 @@
                     document.getElementById('badge-day').textContent = data.day_label || 'Day';
                     document.getElementById('badge-room').textContent = data.room_label || 'Room';
                     document.getElementById('badge-time').textContent = data.time_label || 'Time slot';
+                    syncTalkSessionWindows();
 
                     document.getElementById('sidebar-title').textContent = "Edit Program Session";
 
@@ -2344,6 +2504,7 @@
                 if (startTime && endTime) {
                     document.getElementById('badge-time').textContent = `${startTime} - ${endTime}`;
                 }
+                syncTalkSessionWindows();
 
                 // Check how many forms have errors or are non-empty to set visible formset count
                 let countNonEmpty = 0;

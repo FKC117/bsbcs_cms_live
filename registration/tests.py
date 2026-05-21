@@ -166,6 +166,76 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(ProgramPerson.objects.filter(name='Dr. Robert Brown').exists())
 
+    def test_generate_slots_redirects_to_one_time_preview(self):
+        self.client.force_login(self.staff_user)
+        url = reverse('dashboard_program_session_builder')
+        response = self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'generate_slots',
+            'program_day': self.day.id,
+            'hall_room': self.room.id,
+            'start_time': '10:00',
+            'end_time': '11:00',
+            'slot_minutes': 30,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f"{url}?event={self.event.id}")
+
+        preview_response = self.client.get(response.url)
+        self.assertContains(preview_response, 'data-open-on-load="true"')
+        self.assertContains(preview_response, 'Adjust before saving time slots')
+
+        refreshed_response = self.client.get(response.url)
+        self.assertNotContains(refreshed_response, 'id="generated-slot-preview-modal" class="setup-modal" hidden data-open-on-load="true"')
+
+    def test_setup_day_and_room_can_be_corrected_from_builder(self):
+        self.client.force_login(self.staff_user)
+        url = reverse('dashboard_program_session_builder')
+
+        response = self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'edit_day',
+            'program_day_id': self.day.id,
+            'name': 'Opening Day',
+            'date': '2026-05-21',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.day.refresh_from_db()
+        self.assertEqual(self.day.name, 'Opening Day')
+
+        response = self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'edit_room',
+            'hall_room_id': self.room.id,
+            'name': 'Ball Room',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.room.refresh_from_db()
+        self.assertEqual(self.room.name, 'Ball Room')
+
+        unused_day = ProgramDay.objects.create(event=self.event, name='Unused Day', date=date(2026, 5, 23))
+        unused_room = HallRoom.objects.create(event=self.event, name='Unused Room', location='Dhaka')
+        self.assertEqual(self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'delete_day',
+            'program_day_id': unused_day.id,
+        }).status_code, 302)
+        self.assertFalse(ProgramDay.objects.filter(pk=unused_day.id).exists())
+        self.assertEqual(self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'delete_room',
+            'hall_room_id': unused_room.id,
+        }).status_code, 302)
+        self.assertFalse(HallRoom.objects.filter(pk=unused_room.id).exists())
+
+        self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'delete_day',
+            'program_day_id': self.day.id,
+        })
+        self.assertTrue(ProgramDay.objects.filter(pk=self.day.id).exists())
+
     def test_create_program_session_success(self):
         self.client.force_login(self.staff_user)
         url = reverse('dashboard_program_session_builder')
