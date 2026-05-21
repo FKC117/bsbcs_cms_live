@@ -5,32 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BSBCS Admin Action Center</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        ink: '#102033',
-                        mist: '#EEF6FB',
-                        line: '#D9E4EF',
-                        bsbcs: {
-                            blue: '#1769C2',
-                            navy: '#0D2747',
-                            teal: '#087F8C',
-                            pink: '#D92878',
-                            green: '#16864D',
-                            amber: '#B77905',
-                        }
-                    },
-                    boxShadow: {
-                        quiet: '0 16px 42px rgba(15, 32, 51, 0.08)',
-                        lift: '0 24px 70px rgba(15, 32, 51, 0.14)',
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
     <script src="https://unpkg.com/htmx.org"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>

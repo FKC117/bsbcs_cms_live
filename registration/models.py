@@ -773,6 +773,125 @@ class ProgramSession(models.Model):
     def builder_payload_script_id(self):
         return f'program-session-payload-{self.id}'
 
+    @property
+    def timeline_occupancy(self):
+        if not self.start_time or not self.end_time:
+            return {
+                'available': False,
+                'summary': 'Add a session time window to measure talk occupancy.',
+                'segments': [],
+            }
+
+        session_start = (self.start_time.hour * 60) + self.start_time.minute
+        session_end = (self.end_time.hour * 60) + self.end_time.minute
+        duration = session_end - session_start
+        if duration <= 0:
+            return {
+                'available': False,
+                'summary': 'Session end time must be after its start time.',
+                'segments': [],
+            }
+
+        measured_items = []
+        untimed_count = 0
+        overflow_count = 0
+        overlap_count = 0
+
+        for item in self.items.all():
+            if not item.start_time or not item.end_time:
+                untimed_count += 1
+                continue
+
+            item_start = (item.start_time.hour * 60) + item.start_time.minute
+            item_end = (item.end_time.hour * 60) + item.end_time.minute
+            if item_end <= item_start:
+                untimed_count += 1
+                continue
+
+            if item_start < session_start or item_end > session_end:
+                overflow_count += 1
+
+            clipped_start = max(item_start, session_start)
+            clipped_end = min(item_end, session_end)
+            if clipped_end > clipped_start:
+                measured_items.append((clipped_start, clipped_end))
+
+        measured_items.sort()
+        latest_item_end = None
+        for item_start, item_end in measured_items:
+            if latest_item_end is not None and item_start < latest_item_end:
+                overlap_count += 1
+            latest_item_end = max(latest_item_end or item_end, item_end)
+
+        merged_intervals = []
+        for item_start, item_end in measured_items:
+            if not merged_intervals or item_start > merged_intervals[-1][1]:
+                merged_intervals.append([item_start, item_end])
+            else:
+                merged_intervals[-1][1] = max(merged_intervals[-1][1], item_end)
+
+        segments = []
+        cursor = session_start
+        occupied_minutes = 0
+        for item_start, item_end in merged_intervals:
+            if item_start > cursor:
+                segments.append({
+                    'kind': 'free',
+                    'width': ((item_start - cursor) / duration) * 100,
+                    'minutes': item_start - cursor,
+                })
+            segments.append({
+                'kind': 'occupied',
+                'width': ((item_end - item_start) / duration) * 100,
+                'minutes': item_end - item_start,
+            })
+            occupied_minutes += item_end - item_start
+            cursor = max(cursor, item_end)
+
+        if cursor < session_end:
+            segments.append({
+                'kind': 'free',
+                'width': ((session_end - cursor) / duration) * 100,
+                'minutes': session_end - cursor,
+            })
+        if not segments:
+            segments.append({
+                'kind': 'free',
+                'width': 100,
+                'minutes': duration,
+            })
+
+        available_minutes = max(duration - occupied_minutes, 0)
+        if overflow_count:
+            status = 'overflow'
+            summary = f'{overflow_count} talk item{"s" if overflow_count != 1 else ""} exceed this session window.'
+        elif overlap_count:
+            status = 'overlap'
+            summary = f'{overlap_count} talk timing overlap{"s" if overlap_count != 1 else ""} need review.'
+        elif occupied_minutes == 0:
+            status = 'empty'
+            summary = f'{duration} min available for talks.'
+        elif available_minutes:
+            status = 'available'
+            summary = f'{available_minutes} min still available for talks.'
+        else:
+            status = 'full'
+            summary = 'Talk timing fills this session window.'
+
+        return {
+            'available': True,
+            'duration_minutes': duration,
+            'occupied_minutes': occupied_minutes,
+            'available_minutes': available_minutes,
+            'measured_count': len(measured_items),
+            'untimed_count': untimed_count,
+            'overflow_count': overflow_count,
+            'overlap_count': overlap_count,
+            'status': status,
+            'summary': summary,
+            'segments': segments,
+        }
+
 
 class ProgramSessionFaculty(models.Model):
     ROLE_CHAIRPERSON = 'chairperson'

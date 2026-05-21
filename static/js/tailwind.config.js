@@ -85,6 +85,17 @@ module.exports = {
           light: "#F5F5F5", // gray-100
           dark: "#BDBDBD", // gray-400
         },
+        ink: "#102033",
+        mist: "#EEF6FB",
+        line: "#D9E4EF",
+        bsbcs: {
+          blue: "#1769C2",
+          navy: "#0D2747",
+          teal: "#087F8C",
+          pink: "#D92878",
+          green: "#16864D",
+          amber: "#B77905",
+        },
       },
       fontFamily: {
         headline: ['Inter', 'sans-serif'], // Modern medical professionalism
@@ -113,6 +124,8 @@ module.exports = {
         'lg': '0 4px 16px rgba(0, 0, 0, 0.12)',
         'xl': '0 8px 24px rgba(0, 0, 0, 0.15)',
         'none': 'none',
+        'quiet': '0 16px 42px rgba(15, 32, 51, 0.08)',
+        'lift': '0 24px 70px rgba(15, 32, 51, 0.14)',
       },
       borderRadius: {
         'sm': '0.25rem', // 4px

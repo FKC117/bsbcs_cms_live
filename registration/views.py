@@ -2818,7 +2818,14 @@ def dashboard_program_session_builder(request):
     if selected_event:
         program_days = ProgramDay.objects.filter(event=selected_event).order_by('date', 'name')
         hall_rooms = HallRoom.objects.filter(event=selected_event).order_by('name')
-        time_slots = TimeSlot.objects.filter(event=selected_event).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
+        time_slots = TimeSlot.objects.filter(event=selected_event).select_related(
+            'program_day',
+            'hall_room',
+        ).prefetch_related(
+            'program_sessions__faculty_roles__person',
+            'program_sessions__items__faculty_roles__person',
+            'program_sessions__items__abstract_submission',
+        ).order_by('program_day__date', 'start_time')
 
     setup_status = {
         'has_event': bool(selected_event),

@@ -5,32 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Program Session Builder</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        ink: '#102033',
-                        mist: '#EEF6FB',
-                        line: '#D9E4EF',
-                        bsbcs: {
-                            blue: '#1769C2',
-                            navy: '#0D2747',
-                            teal: '#087F8C',
-                            pink: '#D92878',
-                            green: '#16864D',
-                            amber: '#B77905',
-                        }
-                    },
-                    boxShadow: {
-                        quiet: '0 16px 42px rgba(15, 32, 51, 0.08)',
-                        lift: '0 24px 70px rgba(15, 32, 51, 0.14)',
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
     <style>
         body { margin: 0; background: #EEF6FB; }
         .workflow-input,
@@ -65,6 +40,7 @@
             border-color: #1769C2;
         }
         .setup-modal[hidden] { display: none; }
+        .talk-timing-warning-modal[hidden] { display: none; }
         .setup-modal {
             position: fixed;
             inset: 0;
@@ -839,6 +815,56 @@
                                                                                 {% endfor %}
                                                                             </div>
                                                                         {% endif %}
+
+                                                                        <!-- Talk occupancy block -->
+                                                                        {% with occupancy=session.timeline_occupancy %}
+                                                                            <div class="mt-3 border-t border-line/60 pt-2.5">
+                                                                                <div class="flex items-start justify-between gap-2">
+                                                                                    <div>
+                                                                                        <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Session occupancy</div>
+                                                                                        <div class="mt-0.5 text-[10px] font-bold leading-4
+                                                                                            {% if occupancy.status == 'overflow' %}text-bsbcs-pink
+                                                                                            {% elif occupancy.status == 'overlap' %}text-bsbcs-amber
+                                                                                            {% elif occupancy.status == 'full' %}text-bsbcs-green
+                                                                                            {% else %}text-bsbcs-blue{% endif %}">
+                                                                                            {{ occupancy.summary }}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    {% if occupancy.available %}
+                                                                                        <span class="shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black
+                                                                                            {% if occupancy.status == 'overflow' %}border-pink-100 bg-pink-50 text-bsbcs-pink
+                                                                                            {% elif occupancy.status == 'overlap' %}border-amber-100 bg-amber-50 text-bsbcs-amber
+                                                                                            {% elif occupancy.status == 'full' %}border-emerald-100 bg-emerald-50 text-bsbcs-green
+                                                                                            {% else %}border-blue-100 bg-blue-50 text-bsbcs-blue{% endif %}">
+                                                                                            {{ occupancy.occupied_minutes }} / {{ occupancy.duration_minutes }} min
+                                                                                        </span>
+                                                                                    {% endif %}
+                                                                                </div>
+                                                                                {% if occupancy.available %}
+                                                                                    <div class="mt-2 flex h-2.5 overflow-hidden rounded-full bg-white ring-1 ring-line" title="{{ occupancy.summary }}">
+                                                                                        {% for segment in occupancy.segments %}
+                                                                                            <span class="h-full
+                                                                                                {% if segment.kind == 'occupied' %}
+                                                                                                    {% if occupancy.status == 'overflow' %}bg-bsbcs-pink
+                                                                                                    {% elif occupancy.status == 'overlap' %}bg-bsbcs-amber
+                                                                                                    {% else %}bg-gradient-to-r from-bsbcs-blue to-bsbcs-teal{% endif %}
+                                                                                                {% else %}bg-white{% endif %}"
+                                                                                                style="width: {{ segment.width|floatformat:3 }}%;"
+                                                                                                title="{% if segment.kind == 'occupied' %}Talk time{% else %}Available{% endif %}: {{ segment.minutes }} min"></span>
+                                                                                        {% endfor %}
+                                                                                    </div>
+                                                                                    <div class="mt-1.5 flex flex-wrap gap-1.5 text-[9px] font-black uppercase tracking-wider">
+                                                                                        <span class="rounded-full bg-white px-2 py-0.5 text-slate-500 ring-1 ring-line">{{ occupancy.measured_count }} timed</span>
+                                                                                        {% if occupancy.available_minutes %}
+                                                                                            <span class="rounded-full bg-white px-2 py-0.5 text-bsbcs-blue ring-1 ring-blue-100">{{ occupancy.available_minutes }} min free</span>
+                                                                                        {% endif %}
+                                                                                        {% if occupancy.untimed_count %}
+                                                                                            <span class="rounded-full bg-white px-2 py-0.5 text-slate-500 ring-1 ring-line">{{ occupancy.untimed_count }} untimed</span>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                {% endif %}
+                                                                            </div>
+                                                                        {% endwith %}
                                                                         
                                                                         <!-- Talks block -->
                                                                         {% if session.items.exists %}
@@ -1204,6 +1230,39 @@
         <input type="hidden" name="session_id" id="delete-session-id" value="">
     </form>
 
+    <div id="talk-timing-warning-modal" class="talk-timing-warning-modal fixed inset-0 z-[70] grid place-items-center bg-ink/55 p-4 backdrop-blur-[2px]" hidden>
+        <div class="w-full max-w-xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-lift">
+            <div class="flex items-start justify-between gap-4 border-b border-line bg-amber-50 px-5 py-4">
+                <div class="flex items-start gap-3">
+                    <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-bsbcs-amber ring-1 ring-amber-200">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Timing warning</div>
+                        <h3 class="mt-1 text-xl font-black leading-tight text-ink">Some talks exceed this session.</h3>
+                    </div>
+                </div>
+                <button type="button" id="close-talk-timing-warning" class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-white text-xl leading-none text-slate-500 hover:bg-slate-50" aria-label="Return to session editing">&times;</button>
+            </div>
+            <div class="space-y-4 px-5 py-4">
+                <p class="text-sm leading-6 text-slate-600">
+                    Session window: <strong class="font-black text-ink" data-talk-warning-session-window></strong>.
+                    Review the talk times below before saving.
+                </p>
+                <div class="max-h-[38vh] space-y-2 overflow-auto rounded-xl border border-line bg-slate-50 p-3" data-talk-warning-list></div>
+                <p class="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold leading-5 text-bsbcs-navy">
+                    Saving anyway keeps these times as entered. Return to edit if the session slot or talk timing needs correction.
+                </p>
+            </div>
+            <div class="flex flex-wrap justify-end gap-2 border-t border-line bg-white px-5 py-4">
+                <button type="button" id="return-talk-timing-edit" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50">Return to edit</button>
+                <button type="button" id="save-talk-timing-anyway" class="rounded-xl bg-bsbcs-amber px-4 py-2.5 text-sm font-black text-white shadow-quiet hover:bg-amber-700">Save anyway</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function () {
             // Modals handler (retained for quick-setup program day, hall room, slots)
@@ -1359,6 +1418,12 @@
             const cancelSidebarBtn = document.getElementById('cancel-sidebar-btn');
             const saveSidebarBtn = document.getElementById('save-sidebar-btn');
             const sessionForm = document.getElementById('session-real-form');
+            const talkTimingWarningModal = document.getElementById('talk-timing-warning-modal');
+            const talkTimingWarningWindow = talkTimingWarningModal.querySelector('[data-talk-warning-session-window]');
+            const talkTimingWarningList = talkTimingWarningModal.querySelector('[data-talk-warning-list]');
+            const closeTalkTimingWarningBtn = document.getElementById('close-talk-timing-warning');
+            const returnTalkTimingEditBtn = document.getElementById('return-talk-timing-edit');
+            const saveTalkTimingAnywayBtn = document.getElementById('save-talk-timing-anyway');
 
             function openSidebar() {
                 sidebar.classList.remove('hidden');
@@ -1387,10 +1452,101 @@
             cancelSidebarBtn.addEventListener('click', closeSidebar);
             backdrop.addEventListener('click', closeSidebar);
 
+            function timeValueToMinutes(value) {
+                if (!value || !value.includes(':')) return null;
+                const parts = value.split(':');
+                const hours = Number(parts[0]);
+                const minutes = Number(parts[1]);
+                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+                return (hours * 60) + minutes;
+            }
+
+            function formatTimeValue(value) {
+                const minutes = timeValueToMinutes(value);
+                if (minutes === null) return value || '';
+                const hours24 = Math.floor(minutes / 60);
+                const displayHour = (hours24 % 12) || 12;
+                const displayMinutes = String(minutes % 60).padStart(2, '0');
+                return `${displayHour}:${displayMinutes} ${hours24 >= 12 ? 'PM' : 'AM'}`;
+            }
+
+            function findTalksOutsideSessionWindow() {
+                const sessionStartValue = document.getElementById('id_start_time').value;
+                const sessionEndValue = document.getElementById('id_end_time').value;
+                const sessionStart = timeValueToMinutes(sessionStartValue);
+                const sessionEnd = timeValueToMinutes(sessionEndValue);
+                if (sessionStart === null || sessionEnd === null) return null;
+
+                const outsideTalks = [];
+                document.querySelectorAll('.talk-form-row:not(.hidden)').forEach(function (row, index) {
+                    const talkStartValue = row.querySelector('[data-talk-start]').value;
+                    const talkEndValue = row.querySelector('[data-talk-end]').value;
+                    const talkStart = timeValueToMinutes(talkStartValue);
+                    const talkEnd = timeValueToMinutes(talkEndValue);
+                    if (talkStart === null || talkEnd === null) return;
+                    if (talkStart < sessionStart || talkEnd > sessionEnd) {
+                        const title = row.querySelector('[data-talk-title]').value.trim() || `Talk ${index + 1}`;
+                        outsideTalks.push({
+                            number: index + 1,
+                            title: title,
+                            start: formatTimeValue(talkStartValue),
+                            end: formatTimeValue(talkEndValue),
+                        });
+                    }
+                });
+
+                if (!outsideTalks.length) return null;
+
+                return {
+                    sessionWindow: `${formatTimeValue(sessionStartValue)} - ${formatTimeValue(sessionEndValue)}`,
+                    talks: outsideTalks,
+                };
+            }
+
+            function closeTalkTimingWarning() {
+                talkTimingWarningModal.hidden = true;
+            }
+
+            function showTalkTimingWarning(warning) {
+                talkTimingWarningWindow.textContent = warning.sessionWindow;
+                talkTimingWarningList.innerHTML = '';
+                warning.talks.forEach(function (talk) {
+                    const item = document.createElement('div');
+                    item.className = 'grid gap-1 rounded-xl border border-line bg-white px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center';
+
+                    const title = document.createElement('div');
+                    title.className = 'min-w-0 text-sm font-black text-ink';
+                    title.textContent = `${talk.number}. ${talk.title}`;
+
+                    const time = document.createElement('div');
+                    time.className = 'w-fit rounded-full bg-pink-50 px-2.5 py-1 text-xs font-black text-bsbcs-pink ring-1 ring-pink-100';
+                    time.textContent = `${talk.start} - ${talk.end}`;
+
+                    item.appendChild(title);
+                    item.appendChild(time);
+                    talkTimingWarningList.appendChild(item);
+                });
+                talkTimingWarningModal.hidden = false;
+                returnTalkTimingEditBtn.focus();
+            }
+
             saveSidebarBtn.addEventListener('click', function() {
-                if (sessionForm.reportValidity()) {
-                    sessionForm.submit();
+                if (!sessionForm.reportValidity()) return;
+                const warning = findTalksOutsideSessionWindow();
+                if (warning) {
+                    showTalkTimingWarning(warning);
+                    return;
                 }
+                sessionForm.submit();
+            });
+
+            closeTalkTimingWarningBtn.addEventListener('click', closeTalkTimingWarning);
+            returnTalkTimingEditBtn.addEventListener('click', closeTalkTimingWarning);
+            talkTimingWarningModal.addEventListener('click', function (event) {
+                if (event.target === talkTimingWarningModal) closeTalkTimingWarning();
+            });
+            saveTalkTimingAnywayBtn.addEventListener('click', function () {
+                sessionForm.submit();
             });
 
 
