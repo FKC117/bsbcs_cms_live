@@ -5659,11 +5659,6 @@ button{
   --tw-ring-color: rgb(219 234 254 / var(--tw-ring-opacity, 1));
 }
 
-.ring-blue-200{
-  --tw-ring-opacity: 1;
-  --tw-ring-color: rgb(191 219 254 / var(--tw-ring-opacity, 1));
-}
-
 .ring-emerald-100{
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(209 250 229 / var(--tw-ring-opacity, 1));
