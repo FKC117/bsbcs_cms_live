@@ -463,11 +463,28 @@ class ProgramDay(models.Model):
 
 ### Timeslot Model START---------------------------------------------------------------------------------#
 class TimeSlot(models.Model):
+    SLOT_SESSION = 'session'
+    SLOT_TEA_BREAK = 'tea_break'
+    SLOT_LUNCH = 'lunch'
+    SLOT_DINNER = 'dinner'
+    SLOT_CEREMONY = 'ceremony'
+    SLOT_CUSTOM = 'custom'
+    SLOT_TYPE_CHOICES = [
+        (SLOT_SESSION, 'Session slot'),
+        (SLOT_TEA_BREAK, 'Tea break'),
+        (SLOT_LUNCH, 'Lunch'),
+        (SLOT_DINNER, 'Dinner'),
+        (SLOT_CEREMONY, 'Ceremony'),
+        (SLOT_CUSTOM, 'Custom block'),
+    ]
+
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     program_day = models.ForeignKey(ProgramDay, on_delete=models.CASCADE, related_name='ProgramDay')
     start_time = models.TimeField()
     end_time = models.TimeField()
     hall_room = models.ForeignKey(HallRoom, on_delete=models.CASCADE, related_name='timeslots')
+    slot_type = models.CharField(max_length=24, choices=SLOT_TYPE_CHOICES, default=SLOT_SESSION)
+    label = models.CharField(max_length=120, blank=True, null=True)
 
     class Meta:
         verbose_name_plural = 'Time Slot'
@@ -475,10 +492,30 @@ class TimeSlot(models.Model):
     def __str__(self):
         start_time_formatted = self.start_time.strftime('%I:%M %p')
         end_time_formatted = self.end_time.strftime('%I:%M %p')
-        return f"{self.hall_room} - {start_time_formatted} - {end_time_formatted}"
+        label = self.label or self.get_slot_type_display()
+        return f"{label} - {self.hall_room} - {start_time_formatted} - {end_time_formatted}"
     
     def clean(self):
         super().clean()
+        if self.event_id and self.program_day and self.program_day.event_id != self.event_id:
+            raise ValidationError(_("Program day must belong to the same event as the time slot."))
+        if self.event_id and self.hall_room and self.hall_room.event_id != self.event_id:
+            raise ValidationError(_("Hall room must belong to the same event as the time slot."))
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError(_("Time slot end time must be after start time."))
+        if not all((self.program_day_id, self.hall_room_id, self.start_time, self.end_time)):
+            return
+
+        duplicate_time_slots = TimeSlot.objects.filter(
+            program_day=self.program_day,
+            hall_room=self.hall_room,
+            start_time=self.start_time,
+            end_time=self.end_time,
+        ).exclude(id=self.id)  # type: ignore[attr-defined]
+
+        if duplicate_time_slots.exists():
+            raise ValidationError(_("This exact time slot already exists for the same program day and hall room."))
+
         overlapping_time_slots = TimeSlot.objects.filter(
             program_day=self.program_day,
             hall_room=self.hall_room,
@@ -663,6 +700,8 @@ class ProgramSession(models.Model):
         super().clean()
         if self.time_slot and self.time_slot.event_id != self.event_id:
             raise ValidationError(_('Selected time slot must belong to the same event as the session.'))
+        if self.time_slot and self.time_slot.slot_type != TimeSlot.SLOT_SESSION:
+            raise ValidationError(_('Break, meal, and custom time blocks cannot be assigned to sessions.'))
         if self.program_day and self.program_day.event_id != self.event_id:
             raise ValidationError(_('Selected program day must belong to the same event as the session.'))
         if self.hall_room and self.hall_room.event_id != self.event_id:

@@ -18,6 +18,9 @@ from .forms import (
     ProgramDayQuickCreateForm,
     HallRoomQuickCreateForm,
     TimeSlotQuickCreateForm,
+    TimeSlotGeneratorForm,
+    GeneratedTimeSlotPreviewFormSet,
+    ProgramPersonQuickCreateForm,
 )
 from .models import *
 from django.contrib.auth import login, logout
@@ -27,6 +30,7 @@ import json
 import logging
 import csv
 import io
+from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db import transaction
@@ -2820,13 +2824,60 @@ def dashboard_program_session_builder(request):
         'has_event': bool(selected_event),
         'has_program_days': program_days.exists(),
         'has_hall_rooms': hall_rooms.exists(),
-        'has_time_slots': time_slots.exists(),
+        'has_time_slots': time_slots.filter(slot_type=TimeSlot.SLOT_SESSION).exists(),
     }
     setup_complete = all(setup_status.values())
 
     day_form = ProgramDayQuickCreateForm()
     hall_form = HallRoomQuickCreateForm()
     slot_form = TimeSlotQuickCreateForm(event=selected_event)
+    slot_edit_form = None
+    editing_slot = None
+    slot_generator_form = TimeSlotGeneratorForm(event=selected_event)
+    generated_slot_formset = GeneratedTimeSlotPreviewFormSet(prefix='generated')
+    generated_slot_scope = {}
+    generated_slot_warnings = []
+    generated_preview_open = False
+    person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
+
+    def collect_generated_slot_warnings(program_day, hall_room, slots):
+        if not program_day or not hall_room:
+            return []
+
+        warnings = []
+        stored_slots = TimeSlot.objects.filter(
+            event=selected_event,
+            program_day=program_day,
+            hall_room=hall_room,
+        ).order_by('start_time', 'end_time')
+        for slot in slots:
+            start_time = slot.get('start_time')
+            end_time = slot.get('end_time')
+            if not start_time or not end_time:
+                continue
+            exact_match = stored_slots.filter(
+                start_time=start_time,
+                end_time=end_time,
+            ).first()
+            overlapping_slot = stored_slots.filter(
+                start_time__lt=end_time,
+                end_time__gt=start_time,
+            ).exclude(pk=exact_match.pk if exact_match else None).first()
+            if exact_match:
+                warnings.append({
+                    'kind': 'duplicate',
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'stored_slot': exact_match,
+                })
+            elif overlapping_slot:
+                warnings.append({
+                    'kind': 'overlap',
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'stored_slot': overlapping_slot,
+                })
+        return warnings
 
     if request.method == 'POST':
         setup_action = request.POST.get('setup_action')
@@ -2866,6 +2917,115 @@ def dashboard_program_session_builder(request):
                         time_slot.save()
                         messages.success(request, f'Time slot "{time_slot}" added.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'edit_slot':
+                editing_slot = TimeSlot.objects.filter(
+                    pk=request.POST.get('slot_id'),
+                    event=selected_event,
+                ).first()
+                if not editing_slot:
+                    messages.error(request, 'Choose a valid event time slot to edit.')
+                else:
+                    slot_edit_form = TimeSlotQuickCreateForm(
+                        request.POST,
+                        instance=editing_slot,
+                        event=selected_event,
+                    )
+                    if slot_edit_form.is_valid():
+                        time_slot = slot_edit_form.save(commit=False)
+                        time_slot.event = selected_event
+                        try:
+                            time_slot.full_clean()
+                        except ValidationError as exc:
+                            slot_edit_form.add_error(None, exc)
+                        else:
+                            time_slot.save()
+                            messages.success(request, f'Time slot "{time_slot}" updated.')
+                            return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'generate_slots':
+                slot_generator_form = TimeSlotGeneratorForm(request.POST, event=selected_event)
+                if slot_generator_form.is_valid():
+                    start_at = datetime.combine(slot_generator_form.cleaned_data['program_day'].date, slot_generator_form.cleaned_data['start_time'])
+                    end_at = datetime.combine(slot_generator_form.cleaned_data['program_day'].date, slot_generator_form.cleaned_data['end_time'])
+                    duration = timedelta(minutes=slot_generator_form.cleaned_data['slot_minutes'])
+                    generated_initial = []
+                    while start_at < end_at and len(generated_initial) < 240:
+                        next_end = min(start_at + duration, end_at)
+                        generated_initial.append({
+                            'start_time': start_at.time(),
+                            'end_time': next_end.time(),
+                            'slot_type': TimeSlot.SLOT_SESSION,
+                        })
+                        start_at = next_end
+                    generated_slot_formset = GeneratedTimeSlotPreviewFormSet(initial=generated_initial, prefix='generated')
+                    generated_slot_scope = {
+                        'program_day': slot_generator_form.cleaned_data['program_day'],
+                        'hall_room': slot_generator_form.cleaned_data['hall_room'],
+                    }
+                    generated_slot_warnings = collect_generated_slot_warnings(
+                        generated_slot_scope['program_day'],
+                        generated_slot_scope['hall_room'],
+                        generated_initial,
+                    )
+                    generated_preview_open = True
+            elif setup_action == 'save_generated_slots':
+                program_day = ProgramDay.objects.filter(
+                    pk=request.POST.get('generated_program_day'),
+                    event=selected_event,
+                ).first()
+                hall_room = HallRoom.objects.filter(
+                    pk=request.POST.get('generated_hall_room'),
+                    event=selected_event,
+                ).first()
+                generated_slot_formset = GeneratedTimeSlotPreviewFormSet(request.POST, prefix='generated')
+                generated_slot_scope = {'program_day': program_day, 'hall_room': hall_room}
+                generated_preview_open = True
+
+                if not program_day or not hall_room:
+                    messages.error(request, 'Choose a valid program day and hall room before saving generated slots.')
+                elif generated_slot_formset.is_valid():
+                    generated_slot_warnings = collect_generated_slot_warnings(
+                        program_day,
+                        hall_room,
+                        [
+                            form.cleaned_data
+                            for form in generated_slot_formset
+                            if not form.cleaned_data.get('DELETE')
+                        ],
+                    )
+                    pending_slots = []
+                    for form in generated_slot_formset:
+                        if form.cleaned_data.get('DELETE'):
+                            continue
+                        time_slot = TimeSlot(
+                            event=selected_event,
+                            program_day=program_day,
+                            hall_room=hall_room,
+                            start_time=form.cleaned_data['start_time'],
+                            end_time=form.cleaned_data['end_time'],
+                            slot_type=form.cleaned_data['slot_type'],
+                            label=form.cleaned_data.get('label'),
+                        )
+                        try:
+                            time_slot.full_clean()
+                        except ValidationError as exc:
+                            form.add_error(None, exc)
+                        else:
+                            pending_slots.append(time_slot)
+
+                    if pending_slots and not any(form.errors for form in generated_slot_formset):
+                        with transaction.atomic():
+                            for time_slot in pending_slots:
+                                time_slot.save()
+                        messages.success(request, f'{len(pending_slots)} generated time slot(s) saved.')
+                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+                    if not pending_slots and not any(form.errors for form in generated_slot_formset):
+                        messages.info(request, 'No generated time slots were selected to save.')
+            elif setup_action == 'add_person':
+                person_form = ProgramPersonQuickCreateForm(request.POST)
+                if person_form.is_valid():
+                    person = person_form.save()
+                    messages.success(request, f'Program person "{person.name}" added.')
+                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
 
             initial = {'event': selected_event} if selected_event else None
             session_form = ProgramSessionBuilderForm(initial=initial, event=selected_event)
@@ -2966,11 +3126,20 @@ def dashboard_program_session_builder(request):
         'program_days': program_days,
         'hall_rooms': hall_rooms,
         'time_slots': time_slots,
+        'time_slot_type_choices': TimeSlot.SLOT_TYPE_CHOICES,
         'setup_status': setup_status,
         'setup_complete': setup_complete,
         'day_form': day_form,
         'hall_form': hall_form,
         'slot_form': slot_form,
+        'slot_edit_form': slot_edit_form,
+        'editing_slot': editing_slot,
+        'slot_generator_form': slot_generator_form,
+        'generated_slot_formset': generated_slot_formset,
+        'generated_slot_scope': generated_slot_scope,
+        'generated_slot_warnings': generated_slot_warnings,
+        'generated_preview_open': generated_preview_open,
+        'person_form': person_form,
     })
 
 

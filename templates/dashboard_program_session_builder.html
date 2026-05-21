@@ -58,6 +58,21 @@
             text-transform: uppercase;
             color: #64748b;
         }
+        .wizard-panel[hidden] { display: none; }
+        .wizard-tab[aria-current="step"] {
+            background: #1769C2;
+            color: #fff;
+            border-color: #1769C2;
+        }
+        .setup-modal[hidden] { display: none; }
+        .setup-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(15, 32, 51, 0.58);
+            padding: 1rem;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body class="min-h-screen font-sans text-ink antialiased">
@@ -182,99 +197,435 @@
                                 <div class="text-2xl font-black {% if setup_status.has_time_slots %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">{{ time_slots.count }}</div>
                             </div>
                             <p class="mt-1 text-xs font-semibold text-slate-600">Sessions inherit day, room, start, and end from slots.</p>
-                            <div class="mt-3 max-h-40 space-y-1 overflow-y-auto pr-1">
-                                {% for slot in time_slots|slice:":8" %}
-                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-black/5">
-                                        <span class="font-black text-ink">{{ slot.program_day.name }}</span> · {{ slot.hall_room.name }} · {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}
-                                    </div>
-                                {% empty %}
-                                    <div class="rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-black/5">No time slot added yet.</div>
-                                {% endfor %}
-                                {% if time_slots.count > 8 %}
-                                    <div class="px-1 text-xs font-bold text-slate-500">+ {{ time_slots.count|add:"-8" }} more</div>
-                                {% endif %}
+                            <div class="mt-3 rounded-lg bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-black/5">
+                                Open the slot library to view blocks by program day, generate a range, or add one manual block.
                             </div>
+                            <button type="button" class="mt-3 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue ring-1 ring-blue-200 hover:bg-blue-50" data-open-modal="time-slot-library-modal">View Time Slots</button>
                         </div>
                     </div>
 
-                    <div class="mt-3 grid gap-3 lg:grid-cols-3">
-                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:bg-blue-50" data-open-modal="day-modal">Add Program Day</button>
+                        <button type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:bg-blue-50" data-open-modal="room-modal">Add Hall Room</button>
+                    </div>
+                    {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}
+                        <p class="mt-2 text-xs font-semibold text-slate-500">Add at least one program day and hall room before adding time slots.</p>
+                    {% endif %}
+                </div>
+
+                <div id="day-modal" class="setup-modal" hidden {% if day_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Program day</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Add program day</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
                             {% csrf_token %}
                             <input type="hidden" name="event" value="{{ selected_event.id }}">
                             <input type="hidden" name="setup_action" value="add_day">
-                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step A</div>
-                            <h3 class="mt-1 text-base font-black text-ink">Add program day</h3>
-                            {% if day_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ day_form.non_field_errors }}</div>{% endif %}
-                            <div class="mt-2 grid gap-2">
-                                <label>
-                                    <span class="compact-label">Day name</span>
-                                    {{ day_form.name }}
-                                    {{ day_form.name.errors }}
-                                </label>
-                                <label>
-                                    <span class="compact-label">Date</span>
-                                    {{ day_form.date }}
-                                    {{ day_form.date.errors }}
-                                </label>
+                            {% if day_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ day_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Day name</span>
+                                {{ day_form.name }}
+                                {{ day_form.name.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Date</span>
+                                {{ day_form.date }}
+                                {{ day_form.date.errors }}
+                            </label>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Day</button>
                             </div>
-                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Day</button>
                         </form>
+                    </div>
+                </div>
 
-                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                <div id="room-modal" class="setup-modal" hidden {% if hall_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Hall room</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Add hall room</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
                             {% csrf_token %}
                             <input type="hidden" name="event" value="{{ selected_event.id }}">
                             <input type="hidden" name="setup_action" value="add_room">
-                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step B</div>
-                            <h3 class="mt-1 text-base font-black text-ink">Add hall room</h3>
-                            {% if hall_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ hall_form.non_field_errors }}</div>{% endif %}
-                            <div class="mt-2 grid gap-2">
-                                <label>
-                                    <span class="compact-label">Room name</span>
-                                    {{ hall_form.name }}
-                                    {{ hall_form.name.errors }}
-                                </label>
-                                <div class="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-line">
-                                    Venue comes from event location: <span class="font-black text-ink">{{ selected_event.location|default:selected_event.name }}</span>
-                                </div>
+                            {% if hall_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ hall_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Room name</span>
+                                {{ hall_form.name }}
+                                {{ hall_form.name.errors }}
+                            </label>
+                            <div class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-line">
+                                Venue comes from event location: <span class="font-black text-ink">{{ selected_event.location|default:selected_event.name }}</span>
                             </div>
-                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Room</button>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Room</button>
+                            </div>
                         </form>
+                    </div>
+                </div>
 
-                        <form method="post" class="rounded-xl border border-line bg-slate-50/70 p-3">
+                <div id="time-slot-library-modal" class="setup-modal" hidden>
+                    <div class="mx-auto my-8 max-w-5xl rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Time slot library</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">View slots by program day</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Review session and break blocks here before selecting a slot for a session.</p>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+
+                        <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end">
+                            <label>
+                                <span class="compact-label">Program day</span>
+                                <select class="workflow-input" data-slot-day-filter>
+                                    <option value="">Choose program day</option>
+                                    {% for day in program_days %}
+                                        <option value="{{ day.id }}">{{ day.name }}{% if day.date %} - {{ day.date|date:"M d, Y" }}{% endif %}</option>
+                                    {% empty %}
+                                        <option value="">Add a program day first</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label>
+                                <span class="compact-label">Hall room</span>
+                                <select class="workflow-input" data-slot-room-filter>
+                                    <option value="">Choose hall room</option>
+                                    {% for room in hall_rooms %}
+                                        <option value="{{ room.id }}">{{ room.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <button type="button" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" data-open-modal="slot-generator-modal" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Generate Slots</button>
+                            <button type="button" class="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50 {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" data-open-modal="slot-modal" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Add Single Slot</button>
+                        </div>
+
+                        {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}
+                            <div class="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-bsbcs-amber ring-1 ring-amber-100">Add at least one program day and hall room before creating slots.</div>
+                        {% endif %}
+
+                        <div class="mt-4 max-h-[64vh] overflow-auto rounded-xl border border-line">
+                            <div class="min-w-[680px] divide-y divide-line">
+                                <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_minmax(0,1fr)_94px] gap-3 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-500">
+                                    <div>Time</div>
+                                    <div>Hall room</div>
+                                    <div>Block type</div>
+                                    <div>Label</div>
+                                    <div>Action</div>
+                                </div>
+                                {% for slot in time_slots %}
+                                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_minmax(0,1fr)_94px] gap-3 px-3 py-3 text-sm font-semibold text-slate-700" data-slot-row data-program-day="{{ slot.program_day_id }}" data-hall-room="{{ slot.hall_room_id }}" style="display: none;">
+                                        <div>
+                                            <div class="font-black text-ink">{{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}</div>
+                                            <div class="text-xs text-slate-500">{{ slot.program_day.name }}{% if slot.program_day.date %} - {{ slot.program_day.date|date:"M d, Y" }}{% endif %}</div>
+                                        </div>
+                                        <div>{{ slot.hall_room.name }}</div>
+                                        <div><span class="rounded-full bg-blue-50 px-2 py-1 text-xs font-black uppercase tracking-[0.06em] text-bsbcs-teal ring-1 ring-blue-100">{{ slot.get_slot_type_display }}</span></div>
+                                        <div>{{ slot.label|default:"-" }}</div>
+                                        <div>
+                                            <button
+                                                type="button"
+                                                class="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-black text-bsbcs-blue hover:bg-blue-50"
+                                                data-edit-slot
+                                                data-slot-id="{{ slot.id }}"
+                                                data-program-day="{{ slot.program_day_id }}"
+                                                data-hall-room="{{ slot.hall_room_id }}"
+                                                data-start-time="{{ slot.start_time|time:'H:i' }}"
+                                                data-end-time="{{ slot.end_time|time:'H:i' }}"
+                                                data-slot-type="{{ slot.slot_type }}"
+                                                data-label="{{ slot.label|default_if_none:'' }}"
+                                            >Edit</button>
+                                        </div>
+                                    </div>
+                                {% empty %}
+                                    <div class="p-4 text-sm font-semibold text-slate-500">No time slots added yet.</div>
+                                {% endfor %}
+                                <div class="p-4 text-sm font-semibold text-slate-500" data-slot-empty>Choose a program day and hall room to view stored slots.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="slot-modal" class="setup-modal" hidden {% if slot_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Time slot</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Add time slot</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
                             {% csrf_token %}
                             <input type="hidden" name="event" value="{{ selected_event.id }}">
                             <input type="hidden" name="setup_action" value="add_slot">
-                            <div class="text-xs font-black uppercase tracking-[0.08em] text-bsbcs-teal">Step C</div>
-                            <h3 class="mt-1 text-base font-black text-ink">Add time slot</h3>
-                            {% if slot_form.non_field_errors %}<div class="mt-2 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ slot_form.non_field_errors }}</div>{% endif %}
-                            <div class="mt-2 grid gap-2">
+                            {% if slot_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ slot_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Program day</span>
+                                {{ slot_form.program_day }}
+                                {{ slot_form.program_day.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Hall room</span>
+                                {{ slot_form.hall_room }}
+                                {{ slot_form.hall_room.errors }}
+                            </label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label>
+                                    <span class="compact-label">Start</span>
+                                    {{ slot_form.start_time }}
+                                    {{ slot_form.start_time.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">End</span>
+                                    {{ slot_form.end_time }}
+                                    {{ slot_form.end_time.errors }}
+                                </label>
+                            </div>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <label>
+                                    <span class="compact-label">Block type</span>
+                                    {{ slot_form.slot_type }}
+                                    {{ slot_form.slot_type.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Label</span>
+                                    {{ slot_form.label }}
+                                    {{ slot_form.label.errors }}
+                                </label>
+                            </div>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Slot</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="slot-edit-modal" class="setup-modal" hidden {% if slot_edit_form and slot_edit_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-lg rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Edit block</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Update time slot</h3>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3" data-slot-edit-form>
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="edit_slot">
+                            <input type="hidden" name="slot_id" value="{% if editing_slot %}{{ editing_slot.id }}{% endif %}" data-slot-edit-id>
+                            {% if slot_edit_form and slot_edit_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ slot_edit_form.non_field_errors }}</div>{% endif %}
+                            <label>
+                                <span class="compact-label">Program day</span>
+                                <select name="program_day" class="workflow-input" data-slot-edit-program-day required>
+                                    {% for day in program_days %}
+                                        <option value="{{ day.id }}" {% if slot_edit_form and slot_edit_form.program_day.value|stringformat:"s" == day.id|stringformat:"s" %}selected{% endif %}>{{ day.name }}{% if day.date %} - {{ day.date|date:"M d, Y" }}{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if slot_edit_form %}{{ slot_edit_form.program_day.errors }}{% endif %}
+                            </label>
+                            <label>
+                                <span class="compact-label">Hall room</span>
+                                <select name="hall_room" class="workflow-input" data-slot-edit-hall-room required>
+                                    {% for room in hall_rooms %}
+                                        <option value="{{ room.id }}" {% if slot_edit_form and slot_edit_form.hall_room.value|stringformat:"s" == room.id|stringformat:"s" %}selected{% endif %}>{{ room.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if slot_edit_form %}{{ slot_edit_form.hall_room.errors }}{% endif %}
+                            </label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label>
+                                    <span class="compact-label">Start</span>
+                                    <input type="time" name="start_time" class="workflow-input" value="{% if slot_edit_form %}{{ slot_edit_form.start_time.value|default:'' }}{% endif %}" data-slot-edit-start required>
+                                    {% if slot_edit_form %}{{ slot_edit_form.start_time.errors }}{% endif %}
+                                </label>
+                                <label>
+                                    <span class="compact-label">End</span>
+                                    <input type="time" name="end_time" class="workflow-input" value="{% if slot_edit_form %}{{ slot_edit_form.end_time.value|default:'' }}{% endif %}" data-slot-edit-end required>
+                                    {% if slot_edit_form %}{{ slot_edit_form.end_time.errors }}{% endif %}
+                                </label>
+                            </div>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <label>
+                                    <span class="compact-label">Block type</span>
+                                    <select name="slot_type" class="workflow-input" data-slot-edit-type required>
+                                        {% for value, label in time_slot_type_choices %}
+                                            <option value="{{ value }}" {% if slot_edit_form and slot_edit_form.slot_type.value == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if slot_edit_form %}{{ slot_edit_form.slot_type.errors }}{% endif %}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Label</span>
+                                    <input type="text" name="label" class="workflow-input" value="{% if slot_edit_form %}{{ slot_edit_form.label.value|default:'' }}{% endif %}" data-slot-edit-label placeholder="Optional block label">
+                                    {% if slot_edit_form %}{{ slot_edit_form.label.errors }}{% endif %}
+                                </label>
+                            </div>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="slot-generator-modal" class="setup-modal" hidden {% if slot_generator_form.errors %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto mt-16 max-w-2xl rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Slot generator</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Build slot preview from a time range</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Generate equal blocks first. You can adjust times and mark tea/lunch/dinner blocks in the preview before saving.</p>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="generate_slots">
+                            {% if slot_generator_form.non_field_errors %}<div class="rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ slot_generator_form.non_field_errors }}</div>{% endif %}
+                            <div class="grid gap-2 sm:grid-cols-2">
                                 <label>
                                     <span class="compact-label">Program day</span>
-                                    {{ slot_form.program_day }}
-                                    {{ slot_form.program_day.errors }}
+                                    {{ slot_generator_form.program_day }}
+                                    {{ slot_generator_form.program_day.errors }}
                                 </label>
                                 <label>
                                     <span class="compact-label">Hall room</span>
-                                    {{ slot_form.hall_room }}
-                                    {{ slot_form.hall_room.errors }}
+                                    {{ slot_generator_form.hall_room }}
+                                    {{ slot_generator_form.hall_room.errors }}
                                 </label>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <label>
-                                        <span class="compact-label">Start</span>
-                                        {{ slot_form.start_time }}
-                                        {{ slot_form.start_time.errors }}
-                                    </label>
-                                    <label>
-                                        <span class="compact-label">End</span>
-                                        {{ slot_form.end_time }}
-                                        {{ slot_form.end_time.errors }}
-                                    </label>
+                            </div>
+                            <div class="grid gap-2 sm:grid-cols-3">
+                                <label>
+                                    <span class="compact-label">Range start</span>
+                                    {{ slot_generator_form.start_time }}
+                                    {{ slot_generator_form.start_time.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Range end</span>
+                                    {{ slot_generator_form.end_time }}
+                                    {{ slot_generator_form.end_time.errors }}
+                                </label>
+                                <label>
+                                    <span class="compact-label">Minutes per slot</span>
+                                    {{ slot_generator_form.slot_minutes }}
+                                    {{ slot_generator_form.slot_minutes.errors }}
+                                </label>
+                            </div>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Cancel</button>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Preview Slots</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="generated-slot-preview-modal" class="setup-modal" hidden {% if generated_preview_open %}data-open-on-load="true"{% endif %}>
+                    <div class="mx-auto my-8 max-w-5xl rounded-2xl bg-white p-4 shadow-lift">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Review generated blocks</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Adjust before saving time slots</h3>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">
+                                    {% if generated_slot_scope.program_day and generated_slot_scope.hall_room %}
+                                        {{ generated_slot_scope.program_day }} - {{ generated_slot_scope.hall_room }}
+                                    {% else %}
+                                        Generated slot preview
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
+                        </div>
+                        <form method="post" class="mt-4 space-y-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="save_generated_slots">
+                            {% if generated_slot_scope.program_day %}<input type="hidden" name="generated_program_day" value="{{ generated_slot_scope.program_day.id }}">{% endif %}
+                            {% if generated_slot_scope.hall_room %}<input type="hidden" name="generated_hall_room" value="{{ generated_slot_scope.hall_room.id }}">{% endif %}
+                            {{ generated_slot_formset.management_form }}
+                            {% if generated_slot_formset.non_form_errors %}
+                                <div class="rounded-lg bg-pink-50 p-3 text-sm font-semibold text-bsbcs-pink">{{ generated_slot_formset.non_form_errors }}</div>
+                            {% endif %}
+                            {% if generated_slot_warnings %}
+                                <div class="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-bsbcs-amber ring-1 ring-amber-100">
+                                    <div class="font-black">Stored slot warning</div>
+                                    <p class="mt-1">These generated blocks already collide with this program day and hall room. Adjust or remove them before saving.</p>
+                                    <div class="mt-2 space-y-1 text-xs">
+                                        {% for warning in generated_slot_warnings %}
+                                            <div>
+                                                {{ warning.start_time|time:"g:i A" }} - {{ warning.end_time|time:"g:i A" }}:
+                                                {% if warning.kind == "duplicate" %}
+                                                    this day, hall room, and exact time are already stored.
+                                                {% else %}
+                                                    overlaps stored block {{ warning.stored_slot.start_time|time:"g:i A" }} - {{ warning.stored_slot.end_time|time:"g:i A" }}.
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <div class="max-h-[62vh] overflow-auto rounded-xl border border-line">
+                                <div class="min-w-[760px] divide-y divide-line">
+                                    <div class="grid grid-cols-[120px_120px_190px_minmax(0,1fr)_80px] gap-2 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-500">
+                                        <div>Start</div>
+                                        <div>End</div>
+                                        <div>Block type</div>
+                                        <div>Label</div>
+                                        <div>Drop</div>
+                                    </div>
+                                    {% for form in generated_slot_formset %}
+                                        <div class="grid grid-cols-[120px_120px_190px_minmax(0,1fr)_80px] gap-2 px-3 py-2">
+                                            <label>
+                                                <span class="sr-only">Start</span>
+                                                {{ form.start_time }}
+                                                {{ form.start_time.errors }}
+                                            </label>
+                                            <label>
+                                                <span class="sr-only">End</span>
+                                                {{ form.end_time }}
+                                                {{ form.end_time.errors }}
+                                            </label>
+                                            <label>
+                                                <span class="sr-only">Block type</span>
+                                                {{ form.slot_type }}
+                                                {{ form.slot_type.errors }}
+                                            </label>
+                                            <label>
+                                                <span class="sr-only">Label</span>
+                                                {{ form.label }}
+                                                {{ form.label.errors }}
+                                                {{ form.non_field_errors }}
+                                            </label>
+                                            <label class="flex items-center justify-center text-xs font-black text-slate-600">
+                                                {{ form.DELETE }} Remove
+                                            </label>
+                                        </div>
+                                    {% empty %}
+                                        <div class="p-4 text-sm font-semibold text-slate-500">Generate slots to see a preview here.</div>
+                                    {% endfor %}
                                 </div>
                             </div>
-                            <button type="submit" class="mt-3 w-full rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}opacity-60{% endif %}" {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}disabled{% endif %}>Save Slot</button>
-                            {% if not setup_status.has_program_days or not setup_status.has_hall_rooms %}
-                                <p class="mt-2 text-xs font-semibold text-slate-500">Add at least one program day and hall room first.</p>
-                            {% endif %}
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-xs font-semibold text-slate-500">Mark break and meal blocks here; session creation will only use session slots.</p>
+                                <div class="flex gap-2">
+                                    <button type="button" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-50" data-close-modal>Close</button>
+                                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Save Generated Slots</button>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -286,11 +637,71 @@
                     </div>
                 {% endif %}
 
-                <form method="post" class="space-y-4 {% if not setup_complete %}pointer-events-none opacity-45{% endif %}">
+                {% if setup_complete %}
+                    <details class="mb-4 rounded-xl border border-dashed border-blue-200 bg-blue-50/60 p-3">
+                        <summary class="cursor-pointer text-sm font-black text-bsbcs-blue">Add a new program person</summary>
+                        <form method="post" class="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="setup_action" value="add_person">
+                            {% if person_form.non_field_errors %}
+                                <div class="lg:col-span-4 rounded-lg bg-pink-50 p-2 text-xs font-semibold text-bsbcs-pink">{{ person_form.non_field_errors }}</div>
+                            {% endif %}
+                            <label>
+                                <span class="compact-label">Name</span>
+                                {{ person_form.name }}
+                                {{ person_form.name.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Degree</span>
+                                {{ person_form.degree }}
+                                {{ person_form.degree.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Designation</span>
+                                {{ person_form.designation }}
+                                {{ person_form.designation.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Institution</span>
+                                {{ person_form.institution }}
+                                {{ person_form.institution.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Email</span>
+                                {{ person_form.email }}
+                                {{ person_form.email.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Phone</span>
+                                {{ person_form.phone }}
+                                {{ person_form.phone.errors }}
+                            </label>
+                            <label>
+                                <span class="compact-label">Country</span>
+                                {{ person_form.country }}
+                                {{ person_form.country.errors }}
+                            </label>
+                            <div class="flex items-end">
+                                <button type="submit" class="w-full rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Add Person</button>
+                            </div>
+                        </form>
+                    </details>
+                {% endif %}
+
+                <form method="post" id="program-session-form" class="space-y-4 {% if not setup_complete %}pointer-events-none opacity-45{% endif %}">
                     {% csrf_token %}
                     <input type="hidden" name="event" value="{{ selected_event.id }}">
 
-                    <div class="rounded-xl border border-line bg-slate-50/70 p-3">
+                    <div class="rounded-xl border border-line bg-white p-2">
+                        <div class="grid gap-2 sm:grid-cols-3">
+                            <button type="button" class="wizard-tab rounded-lg border border-line px-3 py-2 text-left text-sm font-black text-slate-700" data-wizard-step="1" aria-current="step">1. Session details</button>
+                            <button type="button" class="wizard-tab rounded-lg border border-line px-3 py-2 text-left text-sm font-black text-slate-700" data-wizard-step="2">2. Faculty</button>
+                            <button type="button" class="wizard-tab rounded-lg border border-line px-3 py-2 text-left text-sm font-black text-slate-700" data-wizard-step="3">3. Talks</button>
+                        </div>
+                    </div>
+
+                    <div class="wizard-panel rounded-xl border border-line bg-slate-50/70 p-3" data-wizard-panel="1">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 1</div>
@@ -342,15 +753,21 @@
                                 {{ session_form.description }}
                             </label>
                         </div>
+                        <div class="mt-4 flex justify-end">
+                            <button type="button" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy" data-wizard-next="2">Continue to Faculty</button>
+                        </div>
                     </div>
 
-                    <div class="rounded-xl border border-line bg-white p-3">
+                    <div class="wizard-panel rounded-xl border border-line bg-white p-3" data-wizard-panel="2" hidden>
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 2</div>
                                 <h2 class="mt-1 text-xl font-black text-ink">Session faculty</h2>
                             </div>
                             <div class="text-xs font-semibold text-slate-500">Search, then use Ctrl/Cmd to select multiple people.</div>
+                        </div>
+                        <div class="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-bsbcs-blue ring-1 ring-blue-100">
+                            Need another person? Use the collapsible "Add a new program person" panel above, then come back to this step.
                         </div>
                         <div class="mt-3 grid gap-3 lg:grid-cols-3">
                             <div>
@@ -369,9 +786,13 @@
                                 {{ session_form.panelists }}
                             </div>
                         </div>
+                        <div class="mt-4 flex flex-wrap justify-between gap-2">
+                            <button type="button" class="rounded-xl border border-line px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50" data-wizard-next="1">Back</button>
+                            <button type="button" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy" data-wizard-next="3">Continue to Talks</button>
+                        </div>
                     </div>
 
-                    <div class="rounded-xl border border-line bg-white p-3">
+                    <div class="wizard-panel rounded-xl border border-line bg-white p-3" data-wizard-panel="3" hidden>
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 3</div>
@@ -427,15 +848,17 @@
                                 {% endfor %}
                             </div>
                         </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                        <div class="text-sm font-semibold text-slate-600">
-                            Program people available: <span class="font-black text-ink">{{ people_count }}</span>
+                        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <button type="button" class="rounded-xl border border-line px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50" data-wizard-next="2">Back</button>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <div class="text-sm font-semibold text-slate-600">
+                                    Program people available: <span class="font-black text-ink">{{ people_count }}</span>
+                                </div>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white shadow-quiet hover:bg-bsbcs-navy">
+                                    Create Program Session
+                                </button>
+                            </div>
                         </div>
-                        <button type="submit" class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white shadow-quiet hover:bg-bsbcs-navy">
-                            Create Program Session
-                        </button>
                     </div>
                 </form>
             {% endif %}
@@ -478,6 +901,159 @@
 
 <script>
     (function () {
+        const modals = Array.from(document.querySelectorAll('.setup-modal'));
+
+        function openModal(modal) {
+            if (!modal) return;
+            modal.hidden = false;
+            document.body.classList.add('overflow-hidden');
+            const focusTarget = modal.querySelector('input, select, textarea, button');
+            if (focusTarget) focusTarget.focus();
+        }
+
+        function closeModal(modal) {
+            if (!modal) return;
+            modal.hidden = true;
+            if (!modals.some(function (item) { return !item.hidden; })) {
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        document.querySelectorAll('[data-open-modal]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const currentModal = button.closest('.setup-modal');
+                if (currentModal) {
+                    closeModal(currentModal);
+                }
+                openModal(document.getElementById(button.dataset.openModal));
+            });
+        });
+
+        document.querySelectorAll('[data-close-modal]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                closeModal(button.closest('.setup-modal'));
+            });
+        });
+
+        modals.forEach(function (modal) {
+            modal.addEventListener('click', function (event) {
+                if (event.target === modal) {
+                    closeModal(modal);
+                }
+            });
+            if (modal.dataset.openOnLoad === 'true') {
+                openModal(modal);
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                const activeModal = modals.find(function (modal) { return !modal.hidden; });
+                closeModal(activeModal);
+            }
+        });
+
+        const slotDayFilter = document.querySelector('[data-slot-day-filter]');
+        const slotRoomFilter = document.querySelector('[data-slot-room-filter]');
+        const slotRows = Array.from(document.querySelectorAll('[data-slot-row]'));
+        const slotEmpty = document.querySelector('[data-slot-empty]');
+
+        function filterSlotRows() {
+            if (!slotDayFilter) return;
+            const selectedDay = slotDayFilter.value;
+            const selectedRoom = slotRoomFilter ? slotRoomFilter.value : '';
+            let visibleRows = 0;
+            slotRows.forEach(function (row) {
+                const dayMatches = Boolean(selectedDay) && row.dataset.programDay === selectedDay;
+                const roomMatches = Boolean(selectedRoom) && row.dataset.hallRoom === selectedRoom;
+                const shouldShow = dayMatches && roomMatches;
+                row.style.display = shouldShow ? 'grid' : 'none';
+                if (shouldShow) visibleRows += 1;
+            });
+            if (slotEmpty) {
+                if (!selectedDay || !selectedRoom) {
+                    slotEmpty.textContent = 'Choose a program day and hall room to view stored slots.';
+                    slotEmpty.hidden = false;
+                } else if (!visibleRows) {
+                    slotEmpty.textContent = 'No slots are stored for this program day and hall room.';
+                    slotEmpty.hidden = false;
+                } else {
+                    slotEmpty.hidden = true;
+                }
+            }
+        }
+
+        if (slotDayFilter) {
+            slotDayFilter.addEventListener('change', filterSlotRows);
+            if (slotRoomFilter) {
+                slotRoomFilter.addEventListener('change', filterSlotRows);
+            }
+            filterSlotRows();
+        }
+
+        const editSlotModal = document.getElementById('slot-edit-modal');
+        const editSlotFields = {
+            id: document.querySelector('[data-slot-edit-id]'),
+            programDay: document.querySelector('[data-slot-edit-program-day]'),
+            hallRoom: document.querySelector('[data-slot-edit-hall-room]'),
+            start: document.querySelector('[data-slot-edit-start]'),
+            end: document.querySelector('[data-slot-edit-end]'),
+            type: document.querySelector('[data-slot-edit-type]'),
+            label: document.querySelector('[data-slot-edit-label]'),
+        };
+
+        document.querySelectorAll('[data-edit-slot]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                if (editSlotFields.id) editSlotFields.id.value = button.dataset.slotId || '';
+                if (editSlotFields.programDay) editSlotFields.programDay.value = button.dataset.programDay || '';
+                if (editSlotFields.hallRoom) editSlotFields.hallRoom.value = button.dataset.hallRoom || '';
+                if (editSlotFields.start) editSlotFields.start.value = button.dataset.startTime || '';
+                if (editSlotFields.end) editSlotFields.end.value = button.dataset.endTime || '';
+                if (editSlotFields.type) editSlotFields.type.value = button.dataset.slotType || 'session';
+                if (editSlotFields.label) editSlotFields.label.value = button.dataset.label || '';
+                closeModal(button.closest('.setup-modal'));
+                openModal(editSlotModal);
+            });
+        });
+
+        const panels = Array.from(document.querySelectorAll('[data-wizard-panel]'));
+        const tabs = Array.from(document.querySelectorAll('[data-wizard-step]'));
+
+        function showStep(step) {
+            panels.forEach(function (panel) {
+                panel.hidden = panel.dataset.wizardPanel !== String(step);
+            });
+            tabs.forEach(function (tab) {
+                if (tab.dataset.wizardStep === String(step)) {
+                    tab.setAttribute('aria-current', 'step');
+                } else {
+                    tab.removeAttribute('aria-current');
+                }
+            });
+            const activePanel = panels.find(function (panel) {
+                return panel.dataset.wizardPanel === String(step);
+            });
+            if (activePanel) {
+                activePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                showStep(tab.dataset.wizardStep);
+            });
+        });
+
+        document.querySelectorAll('[data-wizard-next]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                showStep(button.dataset.wizardNext);
+            });
+        });
+
+        if (panels.length) {
+            showStep(1);
+        }
+
         document.querySelectorAll('[data-filter-target]').forEach(function (input) {
             const target = document.getElementById(input.dataset.filterTarget);
             if (!target) return;

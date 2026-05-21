@@ -244,7 +244,10 @@ class ProgramSessionBuilderForm(forms.ModelForm):
         self.fields['event'].queryset = Event.objects.order_by('-year', 'name')
         self.fields['time_slot'].required = bool(event)
         if event:
-            self.fields['time_slot'].queryset = TimeSlot.objects.filter(event=event).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
+            self.fields['time_slot'].queryset = TimeSlot.objects.filter(
+                event=event,
+                slot_type=TimeSlot.SLOT_SESSION,
+            ).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
             self.fields['program_day'].queryset = ProgramDay.objects.filter(event=event).order_by('date', 'name')
             self.fields['hall_room'].queryset = HallRoom.objects.filter(event=event).order_by('name')
         else:
@@ -260,6 +263,8 @@ class ProgramSessionBuilderForm(forms.ModelForm):
         hall_room = cleaned_data.get('hall_room')
         if event and time_slot and time_slot.event_id != event.id:  # type: ignore[attr-defined]
             self.add_error('time_slot', 'Time slot must belong to the selected event.')
+        if time_slot and time_slot.slot_type != TimeSlot.SLOT_SESSION:
+            self.add_error('time_slot', 'Choose a session slot. Break and meal blocks cannot hold sessions.')
         if event and program_day and program_day.event_id != event.id:  # type: ignore[attr-defined]
             self.add_error('program_day', 'Program day must belong to the selected event.')
         if event and hall_room and hall_room.event_id != event.id:  # type: ignore[attr-defined]
@@ -289,18 +294,24 @@ class HallRoomQuickCreateForm(forms.ModelForm):
 class TimeSlotQuickCreateForm(forms.ModelForm):
     class Meta:
         model = TimeSlot
-        fields = ('program_day', 'hall_room', 'start_time', 'end_time')
+        fields = ('program_day', 'hall_room', 'start_time', 'end_time', 'slot_type', 'label')
         widgets = {
             'program_day': forms.Select(attrs={'class': 'workflow-input'}),
             'hall_room': forms.Select(attrs={'class': 'workflow-input'}),
             'start_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
             'end_time': forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}),
+            'slot_type': forms.Select(attrs={'class': 'workflow-input'}),
+            'label': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional label, e.g. Tea Break'}),
         }
 
     def __init__(self, *args, **kwargs):
         self.event = kwargs.pop('event', None)
         super().__init__(*args, **kwargs)
         if self.event:
+            # ModelForm runs TimeSlot.clean() during is_valid(), before the view saves.
+            # Attach the scoped event now so day/room validation sees a complete slot.
+            if not self.instance.event_id:
+                self.instance.event = self.event
             self.fields['program_day'].queryset = ProgramDay.objects.filter(event=self.event).order_by('date', 'name')
             self.fields['hall_room'].queryset = HallRoom.objects.filter(event=self.event).order_by('name')
         else:
@@ -320,6 +331,115 @@ class TimeSlotQuickCreateForm(forms.ModelForm):
         if start_time and end_time and start_time >= end_time:
             self.add_error('end_time', 'End time must be after start time.')
         return cleaned_data
+
+
+class TimeSlotGeneratorForm(forms.Form):
+    program_day = forms.ModelChoiceField(
+        queryset=ProgramDay.objects.none(),
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    hall_room = forms.ModelChoiceField(
+        queryset=HallRoom.objects.none(),
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    start_time = forms.TimeField(widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    end_time = forms.TimeField(widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    slot_minutes = forms.IntegerField(
+        min_value=5,
+        max_value=240,
+        initial=30,
+        widget=forms.NumberInput(attrs={'class': 'workflow-input', 'min': 5, 'max': 240, 'step': 5}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.event = kwargs.pop('event', None)
+        super().__init__(*args, **kwargs)
+        if self.event:
+            self.fields['program_day'].queryset = ProgramDay.objects.filter(event=self.event).order_by('date', 'name')
+            self.fields['hall_room'].queryset = HallRoom.objects.filter(event=self.event).order_by('name')
+
+    def clean(self):
+        cleaned_data = super().clean()
+        program_day = cleaned_data.get('program_day')
+        hall_room = cleaned_data.get('hall_room')
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        if self.event and program_day and program_day.event_id != self.event.id:  # type: ignore[attr-defined]
+            self.add_error('program_day', 'Program day must belong to the selected event.')
+        if self.event and hall_room and hall_room.event_id != self.event.id:  # type: ignore[attr-defined]
+            self.add_error('hall_room', 'Hall room must belong to the selected event.')
+        if start_time and end_time and start_time >= end_time:
+            self.add_error('end_time', 'End time must be after start time.')
+        return cleaned_data
+
+
+class GeneratedTimeSlotPreviewForm(forms.Form):
+    start_time = forms.TimeField(widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    end_time = forms.TimeField(widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
+    slot_type = forms.ChoiceField(
+        choices=TimeSlot.SLOT_TYPE_CHOICES,
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    label = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional block label'}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get('start_time')
+        end_time = cleaned_data.get('end_time')
+        if start_time and end_time and start_time >= end_time:
+            self.add_error('end_time', 'End time must be after start time.')
+        return cleaned_data
+
+
+class BaseGeneratedTimeSlotPreviewFormSet(forms.BaseFormSet):
+    def clean(self):
+        super().clean()
+        active_slots = []
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data'):
+                continue
+            if self.can_delete and self._should_delete_form(form):
+                continue
+            start_time = form.cleaned_data.get('start_time')
+            end_time = form.cleaned_data.get('end_time')
+            if not start_time or not end_time:
+                continue
+            active_slots.append((start_time, end_time, form))
+
+        active_slots.sort(key=lambda row: row[0])
+        for (_, previous_end, previous_form), (current_start, _, current_form) in zip(active_slots, active_slots[1:]):
+            if current_start < previous_end:
+                previous_form.add_error('end_time', 'This preview overlaps the next generated block.')
+                current_form.add_error('start_time', 'This preview overlaps the previous generated block.')
+
+
+GeneratedTimeSlotPreviewFormSet = forms.formset_factory(
+    GeneratedTimeSlotPreviewForm,
+    formset=BaseGeneratedTimeSlotPreviewFormSet,
+    extra=0,
+    can_delete=True,
+    max_num=240,
+    validate_max=True,
+)
+
+
+class ProgramPersonQuickCreateForm(forms.ModelForm):
+    class Meta:
+        model = ProgramPerson
+        fields = ('name', 'degree', 'designation', 'institution', 'email', 'phone', 'country')
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Full name'}),
+            'degree': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Degree / qualification'}),
+            'designation': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Designation'}),
+            'institution': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Institution'}),
+            'email': forms.EmailInput(attrs={'class': 'workflow-input', 'placeholder': 'Email'}),
+            'phone': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Phone'}),
+            'country': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Country'}),
+        }
 
 
 class ProgramSessionItemBuilderForm(forms.Form):

@@ -871,9 +871,9 @@ class HallRoomAdmin(admin.ModelAdmin):
 admin.site.register(HallRoom, HallRoomAdmin)
 class TimeSlotAdmin(ImportExportModelAdmin):
     resource_class = TimeSlotResource
-    list_display = ('start_time', 'end_time', 'program_day', 'hall_room', 'event')
+    list_display = ('slot_type', 'label', 'start_time', 'end_time', 'program_day', 'hall_room', 'event')
     search_fields = ('hall_room', 'program_day')
-    list_filter = ('program_day', 'hall_room', 'event')
+    list_filter = ('slot_type', 'program_day', 'hall_room', 'event')
 admin.site.register(TimeSlot, TimeSlotAdmin)
 
 # Program Day admin view START------------------------------------------------------------------------------#
