@@ -34,6 +34,7 @@ from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db import transaction
+from .program_emails import build_program_assignment_summary, send_program_assignment_email
 
 
 # Payment logger (writes to payment.log via settings)
@@ -2852,6 +2853,29 @@ def dashboard_program_session_builder(request):
     generated_slot_warnings = []
     generated_preview_open = False
     person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
+    event_program_people = ProgramPerson.objects.none()
+    program_email_people = []
+    if selected_event:
+        event_program_people = ProgramPerson.objects.filter(
+            Q(session_roles__session__event=selected_event)
+            | Q(item_roles__item__session__event=selected_event)
+        ).distinct().order_by('name')
+        for person in event_program_people:
+            assignments = build_program_assignment_summary(person, event=selected_event)
+            program_email_people.append({
+                'person': person,
+                'assignments': assignments,
+                'session_count': len(assignments),
+                'is_sendable': bool(person.email and assignments),
+            })
+    program_email_sendable_count = sum(
+        candidate['is_sendable']
+        for candidate in program_email_people
+    )
+    program_email_missing_email_count = sum(
+        not candidate['person'].email
+        for candidate in program_email_people
+    )
     profile_search_query = (request.GET.get('profile_query') or '').strip()
     profile_search_results = UserProfile.objects.none()
     if len(profile_search_query) >= 2:
@@ -3220,6 +3244,63 @@ def dashboard_program_session_builder(request):
                         action = 'added from profile' if created else 'ready from profile'
                         messages.success(request, f'Program person "{person.name}" is {action}.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'remove_person':
+                removing_person = ProgramPerson.objects.filter(
+                    pk=request.POST.get('program_person_id'),
+                ).first()
+                if not removing_person:
+                    messages.error(request, 'Choose a valid program person to remove from this event.')
+                else:
+                    removed_roles = remove_program_person_from_event(removing_person, selected_event)
+                    if removed_roles:
+                        messages.success(
+                            request,
+                            f'{removing_person.name} removed from {selected_event.name} program roles. '
+                            'The reusable program person record is still available.',
+                        )
+                    else:
+                        messages.info(request, f'{removing_person.name} has no program role in {selected_event.name}.')
+                return redirect(
+                    f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}&program_person_modal=1"
+                )
+            elif setup_action == 'send_program_person_emails':
+                recipient_ids = request.POST.getlist('program_person_ids')
+                recipients = ProgramPerson.objects.filter(
+                    pk__in=recipient_ids,
+                ).filter(
+                    Q(session_roles__session__event=selected_event)
+                    | Q(item_roles__item__session__event=selected_event)
+                ).distinct()
+                sent_count = 0
+                missing_email_count = 0
+                missing_assignment_count = 0
+                failed_count = 0
+
+                if not recipient_ids:
+                    messages.warning(request, 'Choose at least one program person with event details before sending email.')
+                for person in recipients:
+                    try:
+                        sent, reason = send_program_assignment_email(person, event=selected_event)
+                    except Exception as exc:
+                        failed_count += 1
+                        messages.error(request, f'Program email failed for {person.name}: {exc}')
+                    else:
+                        if sent:
+                            sent_count += 1
+                        elif reason == 'missing_email':
+                            missing_email_count += 1
+                        else:
+                            missing_assignment_count += 1
+
+                if sent_count:
+                    messages.success(request, f'Program details email sent to {sent_count} person(s) for {selected_event.name}.')
+                if missing_email_count:
+                    messages.warning(request, f'{missing_email_count} selected program person(s) were skipped because email is missing.')
+                if missing_assignment_count:
+                    messages.warning(request, f'{missing_assignment_count} selected program person(s) were skipped because this event has no program participation detail for them.')
+                if failed_count:
+                    messages.error(request, f'{failed_count} program details email(s) failed.')
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'delete_session':
                 session_id = request.POST.get('session_id')
                 if session_id:
@@ -3382,6 +3463,7 @@ def dashboard_program_session_builder(request):
         'selected_event': selected_event,
         'events': Event.objects.order_by('-year', 'name'),
         'people_count': ProgramPerson.objects.count(),
+        'event_program_people': event_program_people,
         'recent_sessions': recent_sessions,
         'program_days': program_days,
         'hall_rooms': hall_rooms,
@@ -3404,9 +3486,33 @@ def dashboard_program_session_builder(request):
         'generated_slot_warnings': generated_slot_warnings,
         'generated_preview_open': generated_preview_open,
         'person_form': person_form,
+        'program_email_people': program_email_people,
+        'program_email_sendable_count': program_email_sendable_count,
+        'program_email_missing_email_count': program_email_missing_email_count,
         'profile_search_query': profile_search_query,
         'profile_search_results': profile_search_results,
     })
+
+
+def event_program_people_for(event):
+    if not event:
+        return ProgramPerson.objects.none()
+    return ProgramPerson.objects.filter(
+        Q(session_roles__session__event=event)
+        | Q(item_roles__item__session__event=event)
+    ).distinct().order_by('name')
+
+
+def remove_program_person_from_event(person, event):
+    session_role_count, _ = ProgramSessionFaculty.objects.filter(
+        person=person,
+        session__event=event,
+    ).delete()
+    item_role_count, _ = ProgramItemFaculty.objects.filter(
+        person=person,
+        item__session__event=event,
+    ).delete()
+    return session_role_count + item_role_count
 
 
 def add_profile_to_program_person(profile):
@@ -3489,6 +3595,37 @@ def dashboard_program_profile_add(request):
         'profile_search_results': profile_search_results,
         'profile_add_message': profile_add_message,
         'profile_add_error': profile_add_error,
+    })
+
+
+@staff_member_required
+def dashboard_program_person_remove(request):
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    selected_event = Event.objects.filter(pk=request.POST.get('event')).first()
+    person = ProgramPerson.objects.filter(pk=request.POST.get('program_person_id')).first()
+    remove_message = None
+    remove_error = None
+    if not selected_event:
+        remove_error = 'Choose a valid event before removing a program person.'
+    elif not person:
+        remove_error = 'Choose a person who is currently in this event program.'
+    else:
+        removed_roles = remove_program_person_from_event(person, selected_event)
+        if removed_roles:
+            remove_message = (
+                f'{person.name} was removed from {selected_event.name} program roles. '
+                'The person record stays available for other events.'
+            )
+        else:
+            remove_error = f'{person.name} is not attached to this event program.'
+
+    return render(request, 'partials/dashboard_program_person_remove_panel.html', {
+        'selected_event': selected_event,
+        'event_program_people': event_program_people_for(selected_event),
+        'program_person_remove_message': remove_message,
+        'program_person_remove_error': remove_error,
     })
 
 

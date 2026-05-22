@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#eef4fb;font-family:Arial,sans-serif;color:#102033;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px;">
+        <tr>
+            <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width:720px;background:#ffffff;border:1px solid #d7e4f2;border-radius:14px;overflow:hidden;">
+                    <tr>
+                        <td style="background:#103b67;color:#ffffff;padding:26px;">
+                            <p style="margin:0;color:#bfe6ef;font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;">Program Participation</p>
+                            <h1 style="margin:8px 0 0;font-size:26px;line-height:1.3;">Program details for your kind review</h1>
+                            <p style="margin:8px 0 0;color:#dbeafe;">{{ session_count }} session{{ session_count|pluralize }} included.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:26px;">
+                            <p style="margin-top:0;">Dear {{ person.name }},</p>
+                            <p>We are pleased to share the current program details prepared for your participation. We sincerely appreciate your contribution to the {{ site_name }} program.</p>
+                            <p>Please review the session information below. If any detail needs clarification, the {{ site_name }} team will be happy to assist.</p>
+
+                            {% for assignment in assignments %}
+                                <table width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0;border:1px solid #d7e4f2;border-radius:12px;overflow:hidden;">
+                                    <tr>
+                                        <td style="background:#f3f8fd;padding:18px;">
+                                            <p style="margin:0;color:#006d77;font-size:12px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">{{ assignment.session.event.name }} {{ assignment.session.event.year }}</p>
+                                            <h2 style="margin:7px 0 0;font-size:20px;line-height:1.35;color:#102033;">{{ assignment.session.title }}</h2>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding:18px;">
+                                            <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.6;">
+                                                <tr>
+                                                    <td style="padding:0 10px 8px 0;color:#5b6b82;width:128px;"><strong>Program day</strong></td>
+                                                    <td style="padding:0 0 8px;">
+                                                        {% if assignment.session.program_day %}
+                                                            {{ assignment.session.program_day.name }}{% if assignment.session.program_day.date %} - {{ assignment.session.program_day.date|date:"M j, Y" }}{% endif %}
+                                                        {% else %}
+                                                            To be confirmed
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding:0 10px 8px 0;color:#5b6b82;"><strong>Time</strong></td>
+                                                    <td style="padding:0 0 8px;">
+                                                        {% if assignment.session.start_time and assignment.session.end_time %}
+                                                            {{ assignment.session.start_time|time:"g:i A" }} - {{ assignment.session.end_time|time:"g:i A" }}
+                                                        {% else %}
+                                                            To be confirmed
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding:0 10px 8px 0;color:#5b6b82;"><strong>Hall room</strong></td>
+                                                    <td style="padding:0 0 8px;">{{ assignment.session.hall_room|default:"To be confirmed" }}</td>
+                                                </tr>
+                                                {% if assignment.session_roles %}
+                                                    <tr>
+                                                        <td style="padding:0 10px 8px 0;color:#5b6b82;"><strong>Session role</strong></td>
+                                                        <td style="padding:0 0 8px;">{{ assignment.session_roles|join:", " }}</td>
+                                                    </tr>
+                                                {% endif %}
+                                            </table>
+
+                                            {% if assignment.session.description %}
+                                                <p style="margin:10px 0 0;padding:12px;border-radius:9px;background:#f7fafc;color:#42526b;font-size:14px;line-height:1.6;">{{ assignment.session.description }}</p>
+                                            {% endif %}
+
+                                            {% if assignment.talks %}
+                                                <p style="margin:18px 0 9px;color:#102033;font-size:14px;font-weight:bold;">Talk or activity roles</p>
+                                                {% for talk in assignment.talks %}
+                                                    <div style="margin-top:9px;padding:12px;border:1px solid #e2eaf3;border-radius:9px;background:#ffffff;">
+                                                        <p style="margin:0;font-weight:bold;color:#102033;">{{ talk.item.display_title }}</p>
+                                                        <p style="margin:5px 0 0;color:#53657e;font-size:13px;line-height:1.5;">
+                                                            {{ talk.roles|join:", " }}
+                                                            {% if talk.item.start_time and talk.item.end_time %}
+                                                                | {{ talk.item.start_time|time:"g:i A" }} - {{ talk.item.end_time|time:"g:i A" }}
+                                                            {% endif %}
+                                                        </p>
+                                                    </div>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                </table>
+                            {% endfor %}
+
+                            <p style="margin-bottom:0;color:#5f6b7a;">Best regards,<br>{{ site_name }} Team</p>
+                            <p style="margin:14px 0 0;color:#708198;font-size:12px;">For questions about these program details, contact {{ support_email }}.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

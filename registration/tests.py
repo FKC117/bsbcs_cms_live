@@ -1,8 +1,9 @@
 from datetime import date, time
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core import mail
 from registration.models import (
     Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
@@ -194,6 +195,100 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(person.name, profile.name)
         self.assertEqual(person.email, profile.email)
         self.assertEqual(person.phone, profile.phone)
+
+    def test_builder_can_remove_program_person_from_selected_event_without_deleting_person(self):
+        self.client.force_login(self.staff_user)
+        session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=self.time_slot,
+            program_day=self.day,
+            hall_room=self.room,
+            title='Event Session',
+            start_time=self.time_slot.start_time,
+            end_time=self.time_slot.end_time,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_CHAIRPERSON,
+        )
+        item = ProgramSessionItem.objects.create(session=session, title='Talk in event')
+        ProgramItemFaculty.objects.create(
+            item=item,
+            person=self.person1,
+            role=ProgramItemFaculty.ROLE_SPEAKER,
+        )
+
+        page_response = self.client.get(
+            f"{reverse('dashboard_program_session_builder')}?event={self.event.id}"
+        )
+        self.assertContains(page_response, 'People already in BCS Conference 2026 program')
+        self.assertContains(page_response, 'Global library')
+        self.assertContains(page_response, self.person1.name)
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'setup_action': 'remove_person',
+            'program_person_id': self.person1.id,
+        })
+
+        self.assertRedirects(
+            response,
+            f"{reverse('dashboard_program_session_builder')}?event={self.event.id}&program_person_modal=1",
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(ProgramPerson.objects.filter(pk=self.person1.id).exists())
+        self.assertFalse(ProgramSessionFaculty.objects.filter(session=session, person=self.person1).exists())
+        self.assertFalse(ProgramItemFaculty.objects.filter(item=item, person=self.person1).exists())
+
+    def test_inline_remove_program_person_stays_event_scoped_and_returns_modal_panel(self):
+        self.client.force_login(self.staff_user)
+        session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=self.time_slot,
+            program_day=self.day,
+            hall_room=self.room,
+            title='Protected Session',
+            start_time=self.time_slot.start_time,
+            end_time=self.time_slot.end_time,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_CHAIRPERSON,
+        )
+        other_event = Event.objects.create(
+            name='Other BCS Program',
+            slogan='Other program',
+            year=2027,
+            start_date=date(2027, 6, 1),
+            end_date=date(2027, 6, 1),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        other_session = ProgramSession.objects.create(
+            event=other_event,
+            title='Other Event Session',
+        )
+        ProgramSessionFaculty.objects.create(
+            session=other_session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_MODERATOR,
+        )
+
+        response = self.client.post(reverse('dashboard_program_person_remove'), {
+                'event': self.event.id,
+                'program_person_id': self.person1.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'removed from BCS Conference 2026 program roles')
+        self.assertContains(response, 'People in this selected event')
+        self.assertContains(response, 'id="program-person-remove-panel"')
+        self.assertTrue(ProgramPerson.objects.filter(pk=self.person1.id).exists())
+        self.assertFalse(ProgramSessionFaculty.objects.filter(session=session, person=self.person1).exists())
+        self.assertTrue(ProgramSessionFaculty.objects.filter(session=other_session, person=self.person1).exists())
 
     def test_program_profile_live_search_matches_profile_name(self):
         self.client.force_login(self.staff_user)
@@ -742,3 +837,150 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertFalse(ProgramSession.objects.filter(id=session.id).exists())
         self.assertFalse(ProgramSessionFaculty.objects.filter(session=session).exists())
         self.assertFalse(ProgramSessionItem.objects.filter(session=session).exists())
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_program_person_admin_action_sends_one_assignment_summary_email(self):
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=self.time_slot,
+            title='Opening Scientific Session',
+            order=1,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_CHAIRPERSON,
+            order=1,
+        )
+        item = ProgramSessionItem.objects.create(
+            session=session,
+            title='Biomarker Update',
+            start_time=time(9, 10),
+            end_time=time(9, 30),
+            order=1,
+        )
+        ProgramItemFaculty.objects.create(
+            item=item,
+            person=self.person1,
+            role=ProgramItemFaculty.ROLE_SPEAKER,
+            order=1,
+        )
+
+        second_slot = TimeSlot.objects.create(
+            event=self.event,
+            program_day=self.day,
+            hall_room=self.room,
+            start_time=time(10, 0),
+            end_time=time(11, 0),
+            slot_type=TimeSlot.SLOT_SESSION,
+            label='Session Slot 2',
+        )
+        second_session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=second_slot,
+            title='Closing Scientific Session',
+            order=2,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=second_session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_MODERATOR,
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse('admin:registration_programperson_changelist'),
+            {
+                'action': 'send_program_assignment_emails',
+                '_selected_action': [self.person1.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.person1.email])
+        self.assertIn('Program Participation Details - BCS Conference 2026', mail.outbox[0].subject)
+        self.assertIn('2 sessions included', mail.outbox[0].body)
+        self.assertIn('Opening Scientific Session', mail.outbox[0].body)
+        self.assertIn('Closing Scientific Session', mail.outbox[0].body)
+        self.assertIn('Chairperson', mail.outbox[0].body)
+        self.assertIn('Speaker', mail.outbox[0].body)
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_program_builder_sends_selected_event_assignment_email(self):
+        self.client.force_login(self.staff_user)
+        session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=self.time_slot,
+            title='Event Scoped Session',
+            order=1,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_PANELIST,
+            order=1,
+        )
+
+        second_event = Event.objects.create(
+            name='Other Conference',
+            slogan='Other program',
+            year=2027,
+            start_date=date(2027, 1, 1),
+            end_date=date(2027, 1, 1),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        second_day = ProgramDay.objects.create(
+            event=second_event,
+            name='Day 1',
+            date=date(2027, 1, 1),
+        )
+        second_room = HallRoom.objects.create(
+            event=second_event,
+            name='Other Hall',
+            location='Dhaka',
+        )
+        second_slot = TimeSlot.objects.create(
+            event=second_event,
+            program_day=second_day,
+            hall_room=second_room,
+            start_time=time(12, 0),
+            end_time=time(13, 0),
+            slot_type=TimeSlot.SLOT_SESSION,
+        )
+        second_session = ProgramSession.objects.create(
+            event=second_event,
+            time_slot=second_slot,
+            title='Do Not Include Session',
+            order=1,
+        )
+        ProgramSessionFaculty.objects.create(
+            session=second_session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_CHAIRPERSON,
+            order=1,
+        )
+
+        builder_url = f"{reverse('dashboard_program_session_builder')}?event={self.event.id}"
+        page_response = self.client.get(builder_url)
+        self.assertContains(page_response, 'Email Program Details')
+        self.assertContains(page_response, 'Event Scoped Session')
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'setup_action': 'send_program_person_emails',
+            'program_person_ids': [self.person1.id],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, builder_url)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Event Scoped Session', mail.outbox[0].body)
+        self.assertIn('Panelist', mail.outbox[0].body)
+        self.assertNotIn('Do Not Include Session', mail.outbox[0].body)

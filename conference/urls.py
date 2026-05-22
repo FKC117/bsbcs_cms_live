@@ -23,6 +23,7 @@ from registration.views import (
     dashboard_program_session_builder,
     dashboard_program_profile_search,
     dashboard_program_profile_add,
+    dashboard_program_person_remove,
 )
 
 sitemaps = {
@@ -46,6 +47,7 @@ urlpatterns = [
     path('dashboard/program-session-builder/', dashboard_program_session_builder, name='dashboard_program_session_builder'),
     path('dashboard/program-session-builder/profile-search/', dashboard_program_profile_search, name='dashboard_program_profile_search'),
     path('dashboard/program-session-builder/profile-add/', dashboard_program_profile_add, name='dashboard_program_profile_add'),
+    path('dashboard/program-session-builder/person-remove/', dashboard_program_person_remove, name='dashboard_program_person_remove'),
     path('', include(('website.urls', 'website'), namespace='website')),
     path('index/', views.index, name='index'),
 

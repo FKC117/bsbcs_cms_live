@@ -1,0 +1,68 @@
+<div id="program-person-remove-panel" class="mt-4 rounded-2xl border border-pink-100 bg-pink-50/60 p-3">
+    <div class="text-[10px] font-black uppercase tracking-[0.12em] text-bsbcs-pink">Current event</div>
+    <h4 class="mt-1 text-sm font-black text-ink">Remove a person from this program</h4>
+    <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">This detaches the selected person from session and talk roles in {{ selected_event.name }} only. The reusable person record stays in the library.</p>
+
+    {% if program_person_remove_message %}
+        <div class="mt-3 rounded-xl border border-green-100 bg-green-50 px-3 py-2 text-xs font-bold leading-5 text-bsbcs-green">
+            {{ program_person_remove_message }}
+        </div>
+    {% endif %}
+    {% if program_person_remove_error %}
+        <div class="mt-3 rounded-xl border border-pink-100 bg-white px-3 py-2 text-xs font-bold leading-5 text-bsbcs-pink">
+            {{ program_person_remove_error }}
+        </div>
+    {% endif %}
+
+    <div class="mt-3 rounded-xl border border-line bg-white/85 p-2">
+        <div class="flex items-center justify-between gap-2 px-1">
+            <span class="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">People in this selected event</span>
+            <span class="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-bsbcs-blue">{{ event_program_people.count }}</span>
+        </div>
+        {% if event_program_people %}
+            <div class="mt-2 max-h-36 space-y-1 overflow-auto">
+                {% for person in event_program_people %}
+                    <div class="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-2 ring-1 ring-black/5">
+                        <span class="min-w-0">
+                            <span class="block truncate text-xs font-black text-ink">{{ person.name }}</span>
+                            <span class="block truncate text-[11px] font-semibold text-slate-500">{{ person.email|default:person.institution|default:"Program person" }}</span>
+                        </span>
+                        <span class="shrink-0 rounded-full bg-white px-2 py-1 text-[9px] font-black uppercase tracking-wider text-bsbcs-teal ring-1 ring-blue-100">In event</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="mt-2 rounded-lg bg-slate-50 px-2 py-2 text-xs font-semibold leading-5 text-slate-500 ring-1 ring-black/5">
+                This event has no session or talk person to remove yet.
+            </div>
+        {% endif %}
+    </div>
+
+    <form method="post"
+          class="mt-3 space-y-2"
+          hx-post="{% url 'dashboard_program_person_remove' %}"
+          hx-target="#program-person-remove-panel"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="event" value="{{ selected_event.id }}">
+        <input type="hidden" name="setup_action" value="remove_person">
+        <label>
+            <span class="compact-label">Search this event</span>
+            <input type="search" class="workflow-input" placeholder="Filter people already in this event program" data-program-person-remove-filter autocomplete="off">
+        </label>
+        <label>
+            <span class="compact-label">Program person</span>
+            <select name="program_person_id" class="workflow-input" data-program-person-remove-select required>
+                <option value="">Choose a person in this event</option>
+                {% for person in event_program_people %}
+                    <option value="{{ person.id }}" data-search="{{ person.name }} {{ person.email|default:'' }} {{ person.institution|default:'' }}">{{ person.name }}{% if person.email %} - {{ person.email }}{% elif person.institution %} - {{ person.institution }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if event_program_people %}
+            <button type="submit" class="w-full rounded-xl border border-pink-100 bg-white px-4 py-2.5 text-sm font-black text-bsbcs-pink hover:bg-pink-100">Remove From This Event</button>
+        {% else %}
+            <div class="rounded-xl border border-line bg-white/80 px-3 py-2 text-xs font-semibold leading-5 text-slate-500">No person is attached to this event program yet.</div>
+        {% endif %}
+    </form>
+</div>

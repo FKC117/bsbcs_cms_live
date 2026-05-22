@@ -3134,12 +3134,24 @@ button{
   max-height: 4rem;
 }
 
+.max-h-36{
+  max-height: 9rem;
+}
+
 .max-h-56{
   max-height: 14rem;
 }
 
+.max-h-64{
+  max-height: 16rem;
+}
+
 .max-h-\[38vh\]{
   max-height: 38vh;
+}
+
+.max-h-\[56vh\]{
+  max-height: 56vh;
 }
 
 .max-h-\[60vh\]{
@@ -3329,6 +3341,10 @@ button{
 
 .min-w-\[680px\]{
   min-width: 680px;
+}
+
+.min-w-\[700px\]{
+  min-width: 700px;
 }
 
 .min-w-\[760px\]{
@@ -3540,6 +3556,10 @@ button{
 
 .grid-cols-\[120px_120px_170px_140px_minmax\(0\2c 1fr\)_80px\]{
   grid-template-columns: 120px 120px 170px 140px minmax(0,1fr) 80px;
+}
+
+.grid-cols-\[52px_minmax\(0\2c 1\.2fr\)_minmax\(0\2c 1\.5fr\)_120px\]{
+  grid-template-columns: 52px minmax(0,1.2fr) minmax(0,1.5fr) 120px;
 }
 
 .grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_160px_minmax\(0\2c 1fr\)_94px\]{
@@ -4156,6 +4176,10 @@ button{
   background-color: rgb(239 246 255 / 0.5);
 }
 
+.bg-blue-50\/60{
+  background-color: rgb(239 246 255 / 0.6);
+}
+
 .bg-blue-50\/65{
   background-color: rgb(239 246 255 / 0.65);
 }
@@ -4297,6 +4321,10 @@ button{
 .bg-pink-50{
   --tw-bg-opacity: 1;
   background-color: rgb(253 242 248 / var(--tw-bg-opacity, 1));
+}
+
+.bg-pink-50\/60{
+  background-color: rgb(253 242 248 / 0.6);
 }
 
 .bg-pink-500{
@@ -4447,6 +4475,10 @@ button{
 
 .bg-white\/80{
   background-color: rgb(255 255 255 / 0.8);
+}
+
+.bg-white\/85{
+  background-color: rgb(255 255 255 / 0.85);
 }
 
 .bg-white\/90{
@@ -4923,6 +4955,10 @@ button{
 
 .pl-8{
   padding-left: 2rem;
+}
+
+.pr-1{
+  padding-right: 0.25rem;
 }
 
 .pr-2{
@@ -6206,6 +6242,11 @@ button{
 .focus\:ring-blue-500:focus{
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(59 130 246 / var(--tw-ring-opacity, 1));
+}
+
+.focus\:ring-bsbcs-blue:focus{
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(23 105 194 / var(--tw-ring-opacity, 1));
 }
 
 .focus\:ring-bsbcs-blue\/15:focus{

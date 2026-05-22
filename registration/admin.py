@@ -23,6 +23,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from .views import send_approval_email
+from .program_emails import send_program_assignment_email
 import time
 
 User = get_user_model()  # Getting the user model.
@@ -1024,6 +1025,7 @@ class ProgramPersonAdmin(admin.ModelAdmin):
     search_fields = ('name', 'degree', 'designation', 'institution', 'email', 'phone', 'profile__name', 'profile__email')
     autocomplete_fields = ('profile',)
     readonly_fields = ('image_preview',)
+    actions = ['send_program_assignment_emails']
     fieldsets = (
         ('Identity', {
             'fields': ('profile', 'name', 'degree', 'designation', 'institution')
@@ -1041,6 +1043,55 @@ class ProgramPersonAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="height: 90px; width: 90px; object-fit: cover; border-radius: 10px;" />', obj.image.url)
         return "No image uploaded"
     image_preview.short_description = 'Current image'  # type: ignore
+
+    @admin.action(description='Send selected program people their program details email')
+    def send_program_assignment_emails(self, request, queryset):
+        sent_count = 0
+        missing_email_count = 0
+        without_assignment_count = 0
+        failed_count = 0
+
+        for person in queryset:
+            try:
+                sent, reason = send_program_assignment_email(person)
+                if sent:
+                    sent_count += 1
+                elif reason == 'missing_email':
+                    missing_email_count += 1
+                else:
+                    without_assignment_count += 1
+            except Exception as exc:
+                failed_count += 1
+                self.message_user(
+                    request,
+                    f"Program details email failed for {person.name}: {exc}",
+                    messages.ERROR,
+                )
+
+        if sent_count:
+            self.message_user(
+                request,
+                f"Program details email sent to {sent_count} program person(s).",
+                messages.SUCCESS,
+            )
+        if missing_email_count:
+            self.message_user(
+                request,
+                f"{missing_email_count} selected program person(s) were skipped because email is missing.",
+                messages.WARNING,
+            )
+        if without_assignment_count:
+            self.message_user(
+                request,
+                f"{without_assignment_count} selected program person(s) were skipped because no program participation detail exists yet.",
+                messages.WARNING,
+            )
+        if failed_count:
+            self.message_user(
+                request,
+                f"{failed_count} program details email(s) failed.",
+                messages.ERROR,
+            )
 
 
 class ProgramSessionFacultyInline(admin.TabularInline):
