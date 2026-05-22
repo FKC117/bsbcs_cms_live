@@ -1,4 +1,4 @@
-<div id="program-person-remove-panel" class="mt-4 rounded-2xl border border-pink-100 bg-pink-50/60 p-3">
+<div id="program-person-remove-panel"{% if program_person_remove_oob %} hx-swap-oob="outerHTML"{% endif %} class="mt-4 rounded-2xl border border-pink-100 bg-pink-50/60 p-3">
     <div class="text-[10px] font-black uppercase tracking-[0.12em] text-bsbcs-pink">Current event</div>
     <h4 class="mt-1 text-sm font-black text-ink">Remove a person from this program</h4>
     <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">This detaches the selected person from session and talk roles in {{ selected_event.name }} only. The reusable person record stays in the library.</p>
@@ -66,3 +66,7 @@
         {% endif %}
     </form>
 </div>
+{% if program_people_oob %}
+    {% include "partials/dashboard_program_event_people_count.html" %}
+    {% include "partials/dashboard_program_event_people_panel.html" %}
+{% endif %}

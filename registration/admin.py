@@ -1021,14 +1021,15 @@ admin.site.register(ProgramSchedule, ProgramScheduleAdmin)
 @admin.register(ProgramPerson)
 class ProgramPersonAdmin(admin.ModelAdmin):
     list_display = ('name', 'profile', 'degree', 'designation', 'institution', 'email', 'country')
-    list_filter = ('country',)
+    list_filter = ('country', 'events')
     search_fields = ('name', 'degree', 'designation', 'institution', 'email', 'phone', 'profile__name', 'profile__email')
     autocomplete_fields = ('profile',)
+    filter_horizontal = ('events',)
     readonly_fields = ('image_preview',)
     actions = ['send_program_assignment_emails']
     fieldsets = (
         ('Identity', {
-            'fields': ('profile', 'name', 'degree', 'designation', 'institution')
+            'fields': ('profile', 'name', 'degree', 'designation', 'institution', 'events')
         }),
         ('Contact', {
             'fields': ('email', 'phone', 'country')

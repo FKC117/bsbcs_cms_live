@@ -2854,13 +2854,15 @@ def dashboard_program_session_builder(request):
     generated_preview_open = False
     person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
     event_program_people = ProgramPerson.objects.none()
+    assigned_event_program_people = ProgramPerson.objects.none()
     program_email_people = []
     if selected_event:
-        event_program_people = ProgramPerson.objects.filter(
+        event_program_people = event_program_people_for(selected_event)
+        assigned_event_program_people = ProgramPerson.objects.filter(
             Q(session_roles__session__event=selected_event)
             | Q(item_roles__item__session__event=selected_event)
         ).distinct().order_by('name')
-        for person in event_program_people:
+        for person in assigned_event_program_people:
             assignments = build_program_assignment_summary(person, event=selected_event)
             program_email_people.append({
                 'person': person,
@@ -3230,8 +3232,11 @@ def dashboard_program_session_builder(request):
                 person_form = ProgramPersonQuickCreateForm(request.POST)
                 if person_form.is_valid():
                     person = person_form.save()
-                    messages.success(request, f'Program person "{person.name}" added.')
-                    return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+                    person.events.add(selected_event)
+                    messages.success(request, f'Program person "{person.name}" added to {selected_event.name}.')
+                    return redirect(
+                        f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}&program_person_modal=1"
+                    )
             elif setup_action == 'add_profile_person':
                 profile = UserProfile.objects.filter(pk=request.POST.get('profile_id')).first()
                 if not profile:
@@ -3241,9 +3246,12 @@ def dashboard_program_session_builder(request):
                     if error:
                         messages.error(request, error)
                     elif person:
+                        person.events.add(selected_event)
                         action = 'added from profile' if created else 'ready from profile'
-                        messages.success(request, f'Program person "{person.name}" is {action}.')
-                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+                        messages.success(request, f'Program person "{person.name}" is {action} for {selected_event.name}.')
+                        return redirect(
+                            f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}&program_person_modal=1"
+                        )
             elif setup_action == 'remove_person':
                 removing_person = ProgramPerson.objects.filter(
                     pk=request.POST.get('program_person_id'),
@@ -3464,6 +3472,7 @@ def dashboard_program_session_builder(request):
         'events': Event.objects.order_by('-year', 'name'),
         'people_count': ProgramPerson.objects.count(),
         'event_program_people': event_program_people,
+        'assigned_event_program_people': assigned_event_program_people,
         'recent_sessions': recent_sessions,
         'program_days': program_days,
         'hall_rooms': hall_rooms,
@@ -3497,13 +3506,11 @@ def dashboard_program_session_builder(request):
 def event_program_people_for(event):
     if not event:
         return ProgramPerson.objects.none()
-    return ProgramPerson.objects.filter(
-        Q(session_roles__session__event=event)
-        | Q(item_roles__item__session__event=event)
-    ).distinct().order_by('name')
+    return ProgramPerson.objects.filter(events=event).distinct().order_by('name')
 
 
 def remove_program_person_from_event(person, event):
+    was_available_in_event = person.events.filter(pk=event.pk).exists()
     session_role_count, _ = ProgramSessionFaculty.objects.filter(
         person=person,
         session__event=event,
@@ -3512,7 +3519,8 @@ def remove_program_person_from_event(person, event):
         person=person,
         item__session__event=event,
     ).delete()
-    return session_role_count + item_role_count
+    person.events.remove(event)
+    return session_role_count + item_role_count + int(was_available_in_event)
 
 
 def add_profile_to_program_person(profile):
@@ -3572,6 +3580,8 @@ def dashboard_program_profile_add(request):
     profile = UserProfile.objects.filter(pk=request.POST.get('profile_id')).first()
     profile_add_message = None
     profile_add_error = None
+    person = None
+    error = None
     if not profile:
         profile_add_error = 'Choose a valid website profile to add as a program person.'
     else:
@@ -3579,8 +3589,11 @@ def dashboard_program_profile_add(request):
         if error:
             profile_add_error = error
         else:
+            if selected_event:
+                person.events.add(selected_event)
             action = 'added to' if created else 'already ready in'
-            profile_add_message = f'{person.name} is {action} the program person library.'
+            event_suffix = f' for {selected_event.name}' if selected_event else ''
+            profile_add_message = f'{person.name} is {action} the program person library{event_suffix}.'
 
     profile_search_results = UserProfile.objects.none()
     if len(profile_search_query) >= 2:
@@ -3589,13 +3602,24 @@ def dashboard_program_profile_add(request):
             | Q(email__icontains=profile_search_query)
             | Q(user__email__icontains=profile_search_query)
         ).order_by('name')[:8]
-    return render(request, 'partials/dashboard_program_profile_search_results.html', {
+    response = render(request, 'partials/dashboard_program_profile_search_results.html', {
         'selected_event': selected_event,
         'profile_search_query': profile_search_query,
         'profile_search_results': profile_search_results,
         'profile_add_message': profile_add_message,
         'profile_add_error': profile_add_error,
+        'event_program_people': event_program_people_for(selected_event),
+        'program_people_oob': bool(selected_event and person and not error),
+        'program_person_remove_oob': bool(selected_event and person and not error),
     })
+    if selected_event and person and not error:
+        response['HX-Trigger'] = json.dumps({
+            'programPersonAdded': {
+                'id': str(person.id),
+                'label': str(person),
+            }
+        })
+    return response
 
 
 @staff_member_required
@@ -3626,6 +3650,7 @@ def dashboard_program_person_remove(request):
         'event_program_people': event_program_people_for(selected_event),
         'program_person_remove_message': remove_message,
         'program_person_remove_error': remove_error,
+        'program_people_oob': bool(selected_event and removed_roles) if selected_event and person else False,
     })
 
 

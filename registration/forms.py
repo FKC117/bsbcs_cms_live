@@ -250,10 +250,21 @@ class ProgramSessionBuilderForm(forms.ModelForm):
             ).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time')
             self.fields['program_day'].queryset = ProgramDay.objects.filter(event=event).order_by('date', 'name')
             self.fields['hall_room'].queryset = HallRoom.objects.filter(event=event).order_by('name')
+            event_people = ProgramPerson.objects.filter(events=event)
+            if self.instance and self.instance.pk:
+                event_people = ProgramPerson.objects.filter(
+                    Q(events=event)
+                    | Q(session_roles__session=self.instance)
+                )
+            event_people = event_people.distinct().order_by('name')
+            for field_name in ('chairpersons', 'moderators', 'panelists'):
+                self.fields[field_name].queryset = event_people
         else:
             self.fields['time_slot'].queryset = TimeSlot.objects.none()
             self.fields['program_day'].queryset = ProgramDay.objects.none()
             self.fields['hall_room'].queryset = HallRoom.objects.none()
+            for field_name in ('chairpersons', 'moderators', 'panelists'):
+                self.fields[field_name].queryset = ProgramPerson.objects.none()
 
         if self.instance and self.instance.pk:
             self.fields['chairpersons'].initial = ProgramPerson.objects.filter(

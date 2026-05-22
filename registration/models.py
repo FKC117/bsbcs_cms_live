@@ -686,6 +686,12 @@ class ProgramPerson(models.Model):
         null=True,
         help_text='Optional website profile used to create or identify this program person.',
     )
+    events = models.ManyToManyField(
+        Event,
+        related_name='program_people',
+        blank=True,
+        help_text='Events where this person is available for program scheduling.',
+    )
     name = models.CharField(max_length=150)
     degree = models.CharField(max_length=120, blank=True, null=True)
     designation = models.CharField(max_length=180, blank=True, null=True)

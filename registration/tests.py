@@ -9,6 +9,7 @@ from registration.models import (
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission
 )
+from registration.forms import ProgramSessionBuilderForm
 
 class ProgramSessionBuilderTests(TestCase):
 
@@ -69,6 +70,8 @@ class ProgramSessionBuilderTests(TestCase):
             phone="654321",
             country="Bangladesh"
         )
+        self.person1.events.add(self.event)
+        self.person2.events.add(self.event)
 
         # Create abstract submission
         self.abstract = AbstractSubmission.objects.create(
@@ -165,7 +168,8 @@ class ProgramSessionBuilderTests(TestCase):
         }
         response = self.client.post(url, post_data)
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(ProgramPerson.objects.filter(name='Dr. Robert Brown').exists())
+        added_person = ProgramPerson.objects.get(name='Dr. Robert Brown')
+        self.assertTrue(added_person.events.filter(pk=self.event.id).exists())
 
     def test_builder_can_add_program_person_from_user_profile(self):
         self.client.force_login(self.staff_user)
@@ -195,6 +199,19 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(person.name, profile.name)
         self.assertEqual(person.email, profile.email)
         self.assertEqual(person.phone, profile.phone)
+        self.assertTrue(person.events.filter(pk=self.event.id).exists())
+
+    def test_session_role_selectors_use_people_added_to_selected_event(self):
+        outsider = ProgramPerson.objects.create(
+            name='Dr. Global Only',
+            email='global-only@test.com',
+        )
+
+        form = ProgramSessionBuilderForm(event=self.event)
+
+        for field_name in ('chairpersons', 'moderators', 'panelists'):
+            self.assertIn(self.person1, form.fields[field_name].queryset)
+            self.assertNotIn(outsider, form.fields[field_name].queryset)
 
     def test_builder_can_remove_program_person_from_selected_event_without_deleting_person(self):
         self.client.force_login(self.staff_user)
@@ -332,8 +349,11 @@ class ProgramSessionBuilderTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'is added to the program person library.')
+        self.assertContains(response, 'is added to the program person library for BCS Conference 2026.')
         self.assertContains(response, profile.name)
+        self.assertContains(response, 'id="program-event-people-count" hx-swap-oob="outerHTML"')
+        self.assertContains(response, 'id="program-event-people-panel" hx-swap-oob="outerHTML"')
+        self.assertContains(response, 'id="program-person-remove-panel" hx-swap-oob="outerHTML"')
         self.assertTrue(ProgramPerson.objects.filter(profile=profile).exists())
 
     def test_generate_slots_redirects_to_one_time_preview(self):
