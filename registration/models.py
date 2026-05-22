@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
@@ -494,6 +495,26 @@ class TimeSlot(models.Model):
         end_time_formatted = self.end_time.strftime('%I:%M %p')
         label = self.label or self.get_slot_type_display()
         return f"{label} - {self.hall_room} - {start_time_formatted} - {end_time_formatted}"
+
+    @property
+    def parallel_reserved_person_ids(self):
+        overlapping_sessions = ProgramSession.objects.filter(
+            event_id=self.event_id,
+            program_day_id=self.program_day_id,
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time,
+        ).exclude(hall_room_id=self.hall_room_id)
+        reserved_ids = set(
+            ProgramSessionFaculty.objects.filter(
+                session__in=overlapping_sessions,
+            ).values_list('person_id', flat=True)
+        )
+        reserved_ids.update(
+            ProgramItemFaculty.objects.filter(
+                item__session__in=overlapping_sessions,
+            ).values_list('person_id', flat=True)
+        )
+        return sorted(reserved_ids)
     
     def clean(self):
         super().clean()
@@ -657,6 +678,14 @@ class ProgramSchedule(models.Model):
 
 
 class ProgramPerson(models.Model):
+    profile = models.OneToOneField(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        related_name='program_person',
+        blank=True,
+        null=True,
+        help_text='Optional website profile used to create or identify this program person.',
+    )
     name = models.CharField(max_length=150)
     degree = models.CharField(max_length=120, blank=True, null=True)
     designation = models.CharField(max_length=180, blank=True, null=True)
@@ -706,6 +735,13 @@ class ProgramSession(models.Model):
             raise ValidationError(_('Selected program day must belong to the same event as the session.'))
         if self.hall_room and self.hall_room.event_id != self.event_id:
             raise ValidationError(_('Selected hall room must belong to the same event as the session.'))
+        if self.pk:
+            assigned_people = set(self.faculty_roles.values_list('person_id', flat=True))
+            assigned_people.update(
+                ProgramItemFaculty.objects.filter(item__session=self).values_list('person_id', flat=True)
+            )
+            if self.conflicting_parallel_people(assigned_people):
+                raise ValidationError(_('One or more assigned people already belong to an overlapping session in another hall.'))
 
     def save(self, *args, **kwargs):
         if self.time_slot:
@@ -714,6 +750,57 @@ class ProgramSession(models.Model):
             self.start_time = self.time_slot.start_time
             self.end_time = self.time_slot.end_time
         super().save(*args, **kwargs)
+
+    def overlapping_parallel_sessions(self):
+        time_slot = self.time_slot
+        program_day_id = time_slot.program_day_id if time_slot else self.program_day_id
+        hall_room_id = time_slot.hall_room_id if time_slot else self.hall_room_id
+        start_time = time_slot.start_time if time_slot else self.start_time
+        end_time = time_slot.end_time if time_slot else self.end_time
+        if not self.event_id or not program_day_id or not hall_room_id or not start_time or not end_time:
+            return ProgramSession.objects.none()
+
+        sessions = ProgramSession.objects.filter(
+            event_id=self.event_id,
+            program_day_id=program_day_id,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        ).exclude(hall_room_id=hall_room_id)
+        if self.pk:
+            sessions = sessions.exclude(pk=self.pk)
+        return sessions
+
+    @property
+    def is_parallel_session(self):
+        return self.overlapping_parallel_sessions().exists()
+
+    def conflicting_parallel_people(self, person_ids):
+        if not person_ids:
+            return {}
+
+        conflicts = {}
+        overlapping_sessions = self.overlapping_parallel_sessions().filter(
+            Q(faculty_roles__person_id__in=person_ids)
+            | Q(items__faculty_roles__person_id__in=person_ids)
+        ).select_related('hall_room').prefetch_related(
+            'faculty_roles__person',
+            'items__faculty_roles__person',
+        ).distinct()
+        for session in overlapping_sessions:
+            session_people = {
+                role.person_id
+                for role in session.faculty_roles.all()
+                if role.person_id in person_ids
+            }
+            for item in session.items.all():
+                session_people.update(
+                    role.person_id
+                    for role in item.faculty_roles.all()
+                    if role.person_id in person_ids
+                )
+            for person_id in session_people:
+                conflicts.setdefault(person_id, []).append(session)
+        return conflicts
 
     @property
     def builder_payload(self):
@@ -803,6 +890,7 @@ class ProgramSession(models.Model):
                 }
                 for talk_slot in self.time_slot.talk_slots.all()
             ] if self.time_slot else [],
+            'parallel_reserved_people': self.time_slot.parallel_reserved_person_ids if self.time_slot else [],
             'items': items,
         }
 
@@ -954,6 +1042,19 @@ class ProgramSessionFaculty(models.Model):
     def __str__(self):
         return f"{self.person} as {self.get_role_display()} in {self.session.title}"
 
+    def clean(self):
+        super().clean()
+        duplicate_session_role = ProgramSessionFaculty.objects.filter(
+            session=self.session,
+            person=self.person,
+        )
+        if self.pk:
+            duplicate_session_role = duplicate_session_role.exclude(pk=self.pk)
+        if duplicate_session_role.exists():
+            raise ValidationError(_('This person already has a chairperson, moderator, or panelist role in this session.'))
+        if self.session_id and self.person_id and self.session.conflicting_parallel_people({self.person_id}):
+            raise ValidationError(_('This person is already assigned to another session in a parallel hall at the same time.'))
+
 
 class ProgramSessionItem(models.Model):
     session = models.ForeignKey(ProgramSession, on_delete=models.CASCADE, related_name='items')
@@ -1053,6 +1154,11 @@ class ProgramItemFaculty(models.Model):
 
     def __str__(self):
         return f"{self.person} as {self.get_role_display()} for {self.item.display_title}"
+
+    def clean(self):
+        super().clean()
+        if self.item_id and self.person_id and self.item.session.conflicting_parallel_people({self.person_id}):
+            raise ValidationError(_('This person is already assigned to another session in a parallel hall at the same time.'))
 
 
 # Invitation Model START------------------------------------------------------------------------------------#

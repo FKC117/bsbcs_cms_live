@@ -21,6 +21,8 @@ from registration.views import (
     dashboard_participant_preview,
     dashboard_staff_activity,
     dashboard_program_session_builder,
+    dashboard_program_profile_search,
+    dashboard_program_profile_add,
 )
 
 sitemaps = {
@@ -42,6 +44,8 @@ urlpatterns = [
     path('dashboard/participant-preview/', dashboard_participant_preview, name='dashboard_participant_preview'),
     path('dashboard/staff-activity/', dashboard_staff_activity, name='dashboard_staff_activity'),
     path('dashboard/program-session-builder/', dashboard_program_session_builder, name='dashboard_program_session_builder'),
+    path('dashboard/program-session-builder/profile-search/', dashboard_program_profile_search, name='dashboard_program_profile_search'),
+    path('dashboard/program-session-builder/profile-add/', dashboard_program_profile_add, name='dashboard_program_profile_add'),
     path('', include(('website.urls', 'website'), namespace='website')),
     path('index/', views.index, name='index'),
 

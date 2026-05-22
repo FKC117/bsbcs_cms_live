@@ -1,0 +1,41 @@
+{% if profile_add_message %}
+    <div class="rounded-xl border border-green-100 bg-green-50 px-3 py-3 text-sm font-bold text-bsbcs-green">
+        {{ profile_add_message }}
+    </div>
+{% endif %}
+{% if profile_add_error %}
+    <div class="rounded-xl border border-pink-100 bg-pink-50 px-3 py-3 text-sm font-bold text-bsbcs-pink">
+        {{ profile_add_error }}
+    </div>
+{% endif %}
+{% if profile_search_query|length < 2 %}
+    <div class="rounded-xl border border-line bg-slate-50 px-3 py-3 text-xs font-semibold leading-5 text-slate-500">
+        Type at least two letters from a profile name or email.
+    </div>
+{% else %}
+    {% for profile in profile_search_results %}
+        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="truncate text-sm font-black text-ink">{{ profile.name }}</div>
+                    <div class="truncate text-xs font-semibold text-slate-500">{{ profile.email }}</div>
+                    <div class="text-xs font-semibold text-slate-500">{{ profile.phone }}{% if profile.country %} - {{ profile.country }}{% endif %}</div>
+                </div>
+                <form method="post"
+                      hx-post="{% url 'dashboard_program_profile_add' %}"
+                      hx-target="#program-profile-results"
+                      hx-swap="innerHTML">
+                    {% csrf_token %}
+                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                    <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                    <input type="hidden" name="profile_query" value="{{ profile_search_query }}">
+                    <button type="submit" class="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-bsbcs-blue hover:bg-bsbcs-blue hover:text-white">Add from Profile</button>
+                </form>
+            </div>
+        </div>
+    {% empty %}
+        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3 text-xs font-semibold leading-5 text-slate-500">
+            No user profile matched "{{ profile_search_query }}". Use the external person form beside this search.
+        </div>
+    {% endfor %}
+{% endif %}

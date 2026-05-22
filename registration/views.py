@@ -2852,6 +2852,14 @@ def dashboard_program_session_builder(request):
     generated_slot_warnings = []
     generated_preview_open = False
     person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
+    profile_search_query = (request.GET.get('profile_query') or '').strip()
+    profile_search_results = UserProfile.objects.none()
+    if len(profile_search_query) >= 2:
+        profile_search_results = UserProfile.objects.select_related('user').filter(
+            Q(name__icontains=profile_search_query)
+            | Q(email__icontains=profile_search_query)
+            | Q(user__email__icontains=profile_search_query)
+        ).order_by('name')[:8]
 
     def collect_generated_slot_warnings(program_day, hall_room, slots):
         if not program_day or not hall_room:
@@ -3200,6 +3208,18 @@ def dashboard_program_session_builder(request):
                     person = person_form.save()
                     messages.success(request, f'Program person "{person.name}" added.')
                     return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
+            elif setup_action == 'add_profile_person':
+                profile = UserProfile.objects.filter(pk=request.POST.get('profile_id')).first()
+                if not profile:
+                    messages.error(request, 'Choose a valid website profile to add as a program person.')
+                else:
+                    person, created, error = add_profile_to_program_person(profile)
+                    if error:
+                        messages.error(request, error)
+                    elif person:
+                        action = 'added from profile' if created else 'ready from profile'
+                        messages.success(request, f'Program person "{person.name}" is {action}.')
+                        return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'delete_session':
                 session_id = request.POST.get('session_id')
                 if session_id:
@@ -3240,6 +3260,43 @@ def dashboard_program_session_builder(request):
                     if talk_slot and (not parent_time_slot or talk_slot.time_slot_id != parent_time_slot.id):
                         form.add_error('talk_slot', 'Choose a talk slot inside this session time slot.')
                 items_valid = not any(form.errors for form in item_formset)
+
+            if session_valid and items_valid:
+                selected_people = set()
+                for field_name in ('chairpersons', 'moderators', 'panelists'):
+                    selected_people.update(
+                        person.id
+                        for person in session_form.cleaned_data.get(field_name) or []
+                    )
+                for form in item_formset:
+                    if not form.cleaned_data.get('title') and not form.cleaned_data.get('abstract_submission'):
+                        continue
+                    selected_people.update(
+                        person.id
+                        for person in form.cleaned_data.get('speakers') or []
+                    )
+                    selected_people.update(
+                        person.id
+                        for person in form.cleaned_data.get('presenters') or []
+                    )
+
+                parallel_conflicts = session_form.instance.conflicting_parallel_people(selected_people)
+                if parallel_conflicts:
+                    people_by_id = {
+                        person.id: person
+                        for person in ProgramPerson.objects.filter(pk__in=parallel_conflicts)
+                    }
+                    for person_id, sessions in parallel_conflicts.items():
+                        person = people_by_id.get(person_id)
+                        session_labels = ', '.join(
+                            f'"{session.title}" in {session.hall_room.name if session.hall_room else "another hall"}'
+                            for session in sessions
+                        )
+                        session_form.add_error(
+                            None,
+                            f'Scheduling conflict: {person.name if person else "A selected person"} is already assigned to {session_labels} during this parallel time window.',
+                        )
+                    session_valid = False
 
             if session_valid and items_valid:
                 with transaction.atomic():
@@ -3347,6 +3404,91 @@ def dashboard_program_session_builder(request):
         'generated_slot_warnings': generated_slot_warnings,
         'generated_preview_open': generated_preview_open,
         'person_form': person_form,
+        'profile_search_query': profile_search_query,
+        'profile_search_results': profile_search_results,
+    })
+
+
+def add_profile_to_program_person(profile):
+    person = ProgramPerson.objects.filter(profile=profile).first()
+    created = False
+    if person:
+        return person, created, None
+
+    person = ProgramPerson.objects.filter(email__iexact=profile.email).first()
+    if person and person.profile_id and person.profile_id != profile.id:
+        return None, created, 'Another website profile is already linked to the matching program person.'
+    if person:
+        person.profile = profile
+        update_fields = ['profile']
+        for field_name in ('name', 'email', 'phone', 'country'):
+            if not getattr(person, field_name):
+                setattr(person, field_name, getattr(profile, field_name))
+                update_fields.append(field_name)
+        person.save(update_fields=update_fields)
+        return person, created, None
+
+    person = ProgramPerson.objects.create(
+        profile=profile,
+        name=profile.name,
+        email=profile.email,
+        phone=profile.phone,
+        country=profile.country or 'Bangladesh',
+    )
+    return person, True, None
+
+
+@staff_member_required
+def dashboard_program_profile_search(request):
+    selected_event = Event.objects.filter(pk=request.GET.get('event')).first()
+    profile_search_query = (request.GET.get('profile_query') or '').strip()
+    profile_search_results = UserProfile.objects.none()
+    if len(profile_search_query) >= 2:
+        profile_search_results = UserProfile.objects.select_related('user').filter(
+            Q(name__icontains=profile_search_query)
+            | Q(email__icontains=profile_search_query)
+            | Q(user__email__icontains=profile_search_query)
+        ).order_by('name')[:8]
+    return render(request, 'partials/dashboard_program_profile_search_results.html', {
+        'selected_event': selected_event,
+        'profile_search_query': profile_search_query,
+        'profile_search_results': profile_search_results,
+    })
+
+
+@staff_member_required
+def dashboard_program_profile_add(request):
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    selected_event = Event.objects.filter(pk=request.POST.get('event')).first()
+    profile_search_query = (request.POST.get('profile_query') or '').strip()
+    profile = UserProfile.objects.filter(pk=request.POST.get('profile_id')).first()
+    profile_add_message = None
+    profile_add_error = None
+    if not profile:
+        profile_add_error = 'Choose a valid website profile to add as a program person.'
+    else:
+        person, created, error = add_profile_to_program_person(profile)
+        if error:
+            profile_add_error = error
+        else:
+            action = 'added to' if created else 'already ready in'
+            profile_add_message = f'{person.name} is {action} the program person library.'
+
+    profile_search_results = UserProfile.objects.none()
+    if len(profile_search_query) >= 2:
+        profile_search_results = UserProfile.objects.select_related('user').filter(
+            Q(name__icontains=profile_search_query)
+            | Q(email__icontains=profile_search_query)
+            | Q(user__email__icontains=profile_search_query)
+        ).order_by('name')[:8]
+    return render(request, 'partials/dashboard_program_profile_search_results.html', {
+        'selected_event': selected_event,
+        'profile_search_query': profile_search_query,
+        'profile_search_results': profile_search_results,
+        'profile_add_message': profile_add_message,
+        'profile_add_error': profile_add_error,
     })
 
 

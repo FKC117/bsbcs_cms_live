@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Program Session Builder</title>
     <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <script src="{% static 'js/htmx.js' %}"></script>
     <style>
         body { margin: 0; background: #EEF6FB; }
         .workflow-input,
@@ -777,19 +778,78 @@
                     }
                 </style>
 
-                {% if session_form.non_field_errors or item_formset.non_form_errors %}
-                    <div class="mb-4 rounded-xl bg-pink-50 px-4 py-3 text-sm font-semibold text-bsbcs-pink">
-                        {{ session_form.non_field_errors }}
-                        {{ item_formset.non_form_errors }}
-                    </div>
-                {% endif %}
-
                 {% if setup_complete %}
-                    <details class="mb-6 rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-4 transition-all" {% if person_form.errors %}open{% endif %}>
-                        <summary class="cursor-pointer text-sm font-black text-bsbcs-blue hover:text-bsbcs-navy transition-colors select-none">
-                            Add a new program person (Speaker / Chairperson)
-                        </summary>
-                        <form method="post" class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+                    <section id="program-people" class="mb-6 rounded-2xl border border-blue-100 bg-[linear-gradient(135deg,#F6FBFF_0%,#EEF9F7_100%)] p-4 shadow-sm">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <div class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-blue-100 bg-white text-bsbcs-blue shadow-sm">
+                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 14a4 4 0 1 0-8 0m8 0c0 2.21-1.79 4-4 4s-4-1.79-4-4m8 0h3m-11 0H5m12-7a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-7 1a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z" />
+                                    </svg>
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Program people</div>
+                                    <h2 class="mt-1 text-xl font-black text-ink">Build the faculty library before assigning sessions.</h2>
+                                    <p class="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600">Search an existing website profile for speakers and chairs, or add external faculty once for reuse across the program board.</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="rounded-xl border border-white bg-white/90 px-3 py-2 text-center shadow-sm">
+                                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">Library</div>
+                                    <div class="text-lg font-black text-bsbcs-navy">{{ people_count }}</div>
+                                </div>
+                                <button type="button" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-bsbcs-navy" data-open-modal="program-person-modal">Find or Add Person</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div id="program-person-modal" class="setup-modal" hidden {% if person_form.errors or profile_search_query %}data-open-on-load="true"{% endif %}>
+                        <div class="mx-auto my-8 max-w-6xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-lift">
+                            <div class="flex flex-wrap items-start justify-between gap-4 border-b border-line bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal px-5 py-4 text-white">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Faculty library</div>
+                                    <h3 class="mt-1 text-2xl font-black text-white">Add a program person</h3>
+                                    <p class="mt-1 text-sm font-semibold !text-white/75">Reuse a website profile when it exists. Add external program faculty only when it does not.</p>
+                                </div>
+                                <button type="button" class="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10 text-2xl leading-none text-white hover:bg-white/20" data-close-modal aria-label="Close program person modal">&times;</button>
+                            </div>
+                        <div class="grid gap-4 p-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
+                            <section class="rounded-2xl border border-line bg-white p-4 shadow-sm">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Existing profile</div>
+                                <h3 class="mt-1 text-lg font-black text-ink">Find a website user</h3>
+                                <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Search by name or email, then add that profile to the reusable program person library.</p>
+                                <form method="get" id="program-profile-search" class="mt-3 flex flex-col gap-2 sm:flex-row">
+                                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                    <label class="min-w-0 flex-1">
+                                        <span class="sr-only">Search user profiles</span>
+                                        <input type="search"
+                                               name="profile_query"
+                                               value="{{ profile_search_query }}"
+                                               class="workflow-input"
+                                               placeholder="Type a profile name or email"
+                                               minlength="2"
+                                               autocomplete="off"
+                                               hx-get="{% url 'dashboard_program_profile_search' %}"
+                                               hx-trigger="input changed delay:250ms, search"
+                                               hx-target="#program-profile-results"
+                                               hx-swap="innerHTML"
+                                               hx-include="#program-profile-search [name='event']"
+                                               hx-indicator="#program-profile-search-indicator">
+                                    </label>
+                                    <button type="submit" class="rounded-xl bg-bsbcs-navy px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-blue">Search</button>
+                                </form>
+                                <div id="program-profile-search-indicator" class="htmx-indicator mt-2 text-xs font-bold text-bsbcs-blue">Searching profiles...</div>
+
+                                <div id="program-profile-results" class="mt-3 space-y-2">
+                                    {% include "partials/dashboard_program_profile_search_results.html" %}
+                                </div>
+                            </section>
+
+                            <section class="rounded-2xl border border-line bg-white p-4 shadow-sm">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-pink">External person</div>
+                                <h3 class="mt-1 text-lg font-black text-ink">Enter details manually</h3>
+                                <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Use this when a speaker, chairperson, moderator, or panelist has no website profile yet.</p>
+                        <form method="post" class="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
                             {% csrf_token %}
                             <input type="hidden" name="event" value="{{ selected_event.id }}">
                             <input type="hidden" name="setup_action" value="add_person">
@@ -835,7 +895,10 @@
                                 <button type="submit" class="w-full rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy shadow-sm transition-all duration-200">Add Person</button>
                             </div>
                         </form>
-                    </details>
+                            </section>
+                        </div>
+                        </div>
+                    </div>
 
                     <!-- VISUAL SCHEDULE BOARD SECTION -->
                     <div class="mb-6">
@@ -902,9 +965,14 @@
                                                                         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-bsbcs-blue to-bsbcs-teal rounded-t-xl"></div>
                                                                         
                                                                         <div class="flex items-center justify-between gap-2 mb-2 pt-1">
-                                                                            <span class="rounded-full bg-mist text-bsbcs-navy text-xxs font-black px-2 py-0.5 border border-line">
-                                                                                {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}
-                                                                            </span>
+                                                                            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                                                <span class="rounded-full bg-mist text-bsbcs-navy text-xxs font-black px-2 py-0.5 border border-line">
+                                                                                    {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}
+                                                                                </span>
+                                                                                {% if session.is_parallel_session %}
+                                                                                    <span class="rounded-full border border-pink-100 bg-pink-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-bsbcs-pink" title="Another hall has an overlapping session in this time window.">Parallel</span>
+                                                                                {% endif %}
+                                                                            </div>
                                                                             <span class="text-xxs font-bold text-slate-400">Order #{{ session.order }}</span>
                                                                         </div>
                                                                         
@@ -1049,7 +1117,8 @@
                                                                             data-slot-end="{{ slot.end_time|time:"H:i" }}"
                                                                             data-slot-day-name="{{ day.name }}"
                                                                             data-slot-room-name="{{ room.name }}"
-                                                                            data-slot-time-range="{{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}">
+                                                                            data-slot-time-range="{{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}"
+                                                                            data-unavailable-session-people="{{ slot.parallel_reserved_person_ids|join:"," }}">
                                                                         <div class="rounded-full bg-slate-50 border border-slate-200 p-2 group-hover:bg-bsbcs-blue group-hover:border-bsbcs-blue group-hover:text-white transition-all text-slate-400">
                                                                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -1119,7 +1188,7 @@
         </div>
 
         <!-- Scrollable Form Container -->
-        <form method="post" id="session-real-form" class="flex-1 overflow-y-auto p-6 space-y-6">
+        <form method="post" id="session-real-form" class="flex-1 overflow-y-auto p-6 space-y-6" data-validation-unavailable-session-people="{% if session_form.instance.time_slot %}{{ session_form.instance.time_slot.parallel_reserved_person_ids|join:"," }}{% endif %}">
             {% csrf_token %}
             <input type="hidden" name="event" value="{{ selected_event.id }}">
             <input type="hidden" name="session_id" id="form-session-id" value="">
@@ -1131,6 +1200,16 @@
                 <span id="badge-room" class="bg-white border border-line rounded-lg px-2.5 py-1 text-xxs font-black text-ink"></span>
                 <span id="badge-time" class="bg-white border border-line rounded-lg px-2.5 py-1 text-xxs font-black text-ink"></span>
             </div>
+
+            {% if session_form.non_field_errors or session_form.errors or item_formset.non_form_errors or item_formset.errors %}
+                <div id="session-editor-errors" class="rounded-2xl border border-pink-100 bg-pink-50 px-4 py-3 text-sm font-semibold leading-6 text-bsbcs-pink">
+                    <div class="text-xs font-black uppercase tracking-[0.12em]">Fix before saving</div>
+                    {{ session_form.non_field_errors }}
+                    {{ session_form.errors }}
+                    {{ item_formset.non_form_errors }}
+                    {{ item_formset.errors }}
+                </div>
+            {% endif %}
 
             <!-- Hidden inputs that Django form demands -->
             <div style="display:none">
@@ -1182,6 +1261,9 @@
                         Session Chairs & Moderators
                     </h3>
                 </div>
+                <p class="text-xs font-semibold leading-5 text-slate-500">
+                    A person can hold one session role here. People already reserved in a parallel session are kept out of these choices.
+                </p>
 
                 <div class="space-y-4">
                     <div>
@@ -2146,7 +2228,7 @@
 
                     let visibleCount = 0;
                     options.forEach(opt => {
-                        if (!opt.value) return; // skip placeholder
+                        if (!opt.value || opt.element.disabled || opt.element.hidden) return; // skip placeholder and unavailable people
                         if (isMultiple && selectedValues.has(opt.value)) return; // skip already selected in multi
 
                         const match = opt.text.toLowerCase().includes(query);
@@ -2231,6 +2313,55 @@
             }
 
             initAllSearchableSelects();
+
+            const sessionRoleSelects = Array.from(document.querySelectorAll('#id_chairpersons, #id_moderators, #id_panelists'));
+            const talkFacultySelects = Array.from(document.querySelectorAll('.talk-speakers-select, .talk-presenters-select'));
+            let parallelUnavailableSessionPeople = new Set();
+
+            function setUnavailableSessionPeople(rawIds) {
+                parallelUnavailableSessionPeople = new Set(
+                    String(rawIds || '')
+                        .split(',')
+                        .map(value => value.trim())
+                        .filter(Boolean)
+                );
+                refreshProgramPersonChoices();
+            }
+
+            function refreshProgramPersonChoices() {
+                sessionRoleSelects.forEach(function (select) {
+                    const selectedInOtherRole = new Set();
+                    sessionRoleSelects.forEach(function (otherSelect) {
+                        if (otherSelect === select) return;
+                        Array.from(otherSelect.selectedOptions).forEach(option => {
+                            if (option.value) selectedInOtherRole.add(option.value);
+                        });
+                    });
+
+                    Array.from(select.options).forEach(function (option) {
+                        if (!option.value) return;
+                        const unavailableInParallelSession = parallelUnavailableSessionPeople.has(option.value);
+                        const alreadyUsedBySessionRole = selectedInOtherRole.has(option.value);
+                        const keepSelectedVisible = option.selected;
+                        option.disabled = !keepSelectedVisible && (unavailableInParallelSession || alreadyUsedBySessionRole);
+                        option.hidden = option.disabled;
+                    });
+                });
+
+                talkFacultySelects.forEach(function (select) {
+                    Array.from(select.options).forEach(function (option) {
+                        if (!option.value) return;
+                        const unavailableInParallelSession = parallelUnavailableSessionPeople.has(option.value);
+                        const keepSelectedVisible = option.selected;
+                        option.disabled = !keepSelectedVisible && unavailableInParallelSession;
+                        option.hidden = option.disabled;
+                    });
+                });
+            }
+
+            sessionRoleSelects.forEach(function (select) {
+                select.addEventListener('change', refreshProgramPersonChoices);
+            });
 
 
             // Formset rows unhiding & dynamic counting
@@ -2394,6 +2525,7 @@
             function resetSessionForm() {
                 sessionForm.reset();
                 document.getElementById('form-session-id').value = '';
+                setUnavailableSessionPeople('');
                 
                 // Reset multi selects
                 document.querySelectorAll('#id_chairpersons, #id_moderators, #id_panelists').forEach(select => {
@@ -2452,6 +2584,7 @@
                     document.getElementById('badge-day').textContent = dayName;
                     document.getElementById('badge-room').textContent = roomName;
                     document.getElementById('badge-time').textContent = timeRange;
+                    setUnavailableSessionPeople(button.dataset.unavailableSessionPeople);
                     syncTalkSessionWindows();
 
                     document.getElementById('sidebar-title').textContent = "Schedule Program Session";
@@ -2490,6 +2623,7 @@
                     document.getElementById('badge-day').textContent = data.day_label || 'Day';
                     document.getElementById('badge-room').textContent = data.room_label || 'Room';
                     document.getElementById('badge-time').textContent = data.time_label || 'Time slot';
+                    setUnavailableSessionPeople((data.parallel_reserved_people || []).join(','));
                     syncTalkSessionWindows();
 
                     document.getElementById('sidebar-title').textContent = "Edit Program Session";
@@ -2589,6 +2723,12 @@
                     document.getElementById('badge-day').textContent = dayTabLabel;
                     document.getElementById('badge-room').textContent = roomHeader;
                 }
+                const matchingSlotButton = document.querySelector(`[data-add-session-btn][data-slot-id="${timeSlotId}"]`);
+                if (matchingSlotButton) {
+                    setUnavailableSessionPeople(matchingSlotButton.dataset.unavailableSessionPeople);
+                } else {
+                    setUnavailableSessionPeople(sessionForm.dataset.validationUnavailableSessionPeople);
+                }
                 
                 const startTime = document.getElementById('id_start_time').value;
                 const endTime = document.getElementById('id_end_time').value;
@@ -2610,6 +2750,7 @@
                 updateFormsetUI();
 
                 openSidebar();
+                document.getElementById('session-editor-errors')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
 
         })();

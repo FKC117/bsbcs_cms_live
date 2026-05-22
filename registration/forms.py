@@ -283,6 +283,17 @@ class ProgramSessionBuilderForm(forms.ModelForm):
             self.add_error('program_day', 'Program day must belong to the selected event.')
         if event and hall_room and hall_room.event_id != event.id:  # type: ignore[attr-defined]
             self.add_error('hall_room', 'Hall room must belong to the selected event.')
+        session_role_people = {}
+        for field_name in ('chairpersons', 'moderators', 'panelists'):
+            for person in cleaned_data.get(field_name) or []:
+                previous_role = session_role_people.get(person.id)
+                if previous_role:
+                    self.add_error(
+                        field_name,
+                        f'{person.name} is already selected as {previous_role}. Use each person once across chairpersons, moderators, and panelists.',
+                    )
+                else:
+                    session_role_people[person.id] = field_name.rstrip('s')
         return cleaned_data
 
 

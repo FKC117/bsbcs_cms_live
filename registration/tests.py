@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from registration.models import (
-    Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson,
+    Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission
 )
@@ -89,7 +89,7 @@ class ProgramSessionBuilderTests(TestCase):
         # Unauthenticated user should be redirected to login
         response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+        self.assertIn('/admin/login/', response.url)
 
         # Authenticated non-staff user should also be redirected or denied
         self.client.force_login(self.user)
@@ -165,6 +165,81 @@ class ProgramSessionBuilderTests(TestCase):
         response = self.client.post(url, post_data)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(ProgramPerson.objects.filter(name='Dr. Robert Brown').exists())
+
+    def test_builder_can_add_program_person_from_user_profile(self):
+        self.client.force_login(self.staff_user)
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Dr. Existing Profile',
+            email='existing-profile@test.com',
+            phone='01700000000',
+            country='Bangladesh',
+        )
+        url = reverse('dashboard_program_session_builder')
+
+        search_response = self.client.get(f'{url}?event={self.event.id}&profile_query=Existing')
+
+        self.assertContains(search_response, 'Find a website user')
+        self.assertContains(search_response, profile.name)
+        self.assertContains(search_response, profile.email)
+
+        response = self.client.post(url, {
+            'event': self.event.id,
+            'setup_action': 'add_profile_person',
+            'profile_id': profile.id,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        person = ProgramPerson.objects.get(profile=profile)
+        self.assertEqual(person.name, profile.name)
+        self.assertEqual(person.email, profile.email)
+        self.assertEqual(person.phone, profile.phone)
+
+    def test_program_profile_live_search_matches_profile_name(self):
+        self.client.force_login(self.staff_user)
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Dr. Live Search Faculty',
+            email='live-faculty@test.com',
+            phone='01700000001',
+            country='Bangladesh',
+        )
+
+        short_response = self.client.get(reverse('dashboard_program_profile_search'), {
+            'event': self.event.id,
+            'profile_query': 'D',
+        })
+        response = self.client.get(reverse('dashboard_program_profile_search'), {
+            'event': self.event.id,
+            'profile_query': 'Live Search',
+        })
+
+        self.assertNotContains(short_response, profile.name)
+        self.assertContains(short_response, 'Type at least two letters')
+        self.assertContains(response, profile.name)
+        self.assertContains(response, profile.email)
+        self.assertContains(response, 'Add from Profile')
+
+    def test_program_profile_live_add_returns_success_without_builder_redirect(self):
+        self.client.force_login(self.staff_user)
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Dr. Inline Add',
+            email='inline-add@test.com',
+            phone='01700000002',
+            country='Bangladesh',
+        )
+
+        response = self.client.post(reverse('dashboard_program_profile_add'), {
+            'event': self.event.id,
+            'profile_id': profile.id,
+            'profile_query': 'Inline',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'is added to the program person library.')
+        self.assertContains(response, profile.name)
+        self.assertTrue(ProgramPerson.objects.filter(profile=profile).exists())
 
     def test_generate_slots_redirects_to_one_time_preview(self):
         self.client.force_login(self.staff_user)
@@ -371,6 +446,177 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(item.talk_slot, talk_slot)
         self.assertEqual(item.start_time, time(9, 20))
         self.assertEqual(item.end_time, time(9, 40))
+
+    def test_builder_blocks_people_in_overlapping_parallel_sessions(self):
+        self.client.force_login(self.staff_user)
+        parallel_room = HallRoom.objects.create(
+            event=self.event,
+            name='Parallel Hall',
+            location='First Floor',
+        )
+        parallel_slot = TimeSlot.objects.create(
+            event=self.event,
+            program_day=self.day,
+            hall_room=parallel_room,
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            slot_type=TimeSlot.SLOT_SESSION,
+        )
+        existing_session = ProgramSession.objects.create(
+            event=self.event,
+            time_slot=self.time_slot,
+            title='Hall A session',
+        )
+        ProgramSessionFaculty.objects.create(
+            session=existing_session,
+            person=self.person1,
+            role=ProgramSessionFaculty.ROLE_CHAIRPERSON,
+            order=1,
+        )
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'title': 'Hall B session',
+            'description': '',
+            'order': 1,
+            'time_slot': parallel_slot.id,
+            'program_day': self.day.id,
+            'hall_room': parallel_room.id,
+            'start_time': '09:00',
+            'end_time': '10:00',
+            'chairpersons': [],
+            'moderators': [],
+            'panelists': [],
+            'items-TOTAL_FORMS': 1,
+            'items-INITIAL_FORMS': 0,
+            'items-MIN_NUM_FORMS': 0,
+            'items-MAX_NUM_FORMS': 1000,
+            'items-0-order': 1,
+            'items-0-talk_slot': '',
+            'items-0-start_time': '09:20',
+            'items-0-end_time': '09:40',
+            'items-0-title': 'Conflicting parallel talk',
+            'items-0-abstract_submission': '',
+            'items-0-speakers': [self.person1.id],
+            'items-0-presenters': [],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Scheduling conflict')
+        self.assertContains(response, self.person1.name)
+        self.assertFalse(ProgramSession.objects.filter(title='Hall B session').exists())
+
+    def test_parallel_sessions_are_marked_on_schedule_board(self):
+        self.client.force_login(self.staff_user)
+        parallel_room = HallRoom.objects.create(
+            event=self.event,
+            name='Parallel Hall',
+            location='First Floor',
+        )
+        parallel_slot = TimeSlot.objects.create(
+            event=self.event,
+            program_day=self.day,
+            hall_room=parallel_room,
+            start_time=time(9, 30),
+            end_time=time(10, 30),
+            slot_type=TimeSlot.SLOT_SESSION,
+        )
+        ProgramSession.objects.create(event=self.event, time_slot=self.time_slot, title='Hall A session')
+        ProgramSession.objects.create(event=self.event, time_slot=parallel_slot, title='Hall B session')
+
+        response = self.client.get(f"{reverse('dashboard_program_session_builder')}?event={self.event.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'title="Another hall has an overlapping session in this time window.">Parallel</span>',
+            count=2,
+            html=False,
+        )
+
+    def test_session_roles_do_not_reuse_same_person(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'title': 'Duplicate role session',
+            'description': '',
+            'order': 1,
+            'time_slot': self.time_slot.id,
+            'program_day': self.day.id,
+            'hall_room': self.room.id,
+            'start_time': '09:00',
+            'end_time': '10:00',
+            'chairpersons': [self.person1.id],
+            'moderators': [self.person1.id],
+            'panelists': [],
+            'items-TOTAL_FORMS': 1,
+            'items-INITIAL_FORMS': 0,
+            'items-MIN_NUM_FORMS': 0,
+            'items-MAX_NUM_FORMS': 1000,
+            'items-0-order': '',
+            'items-0-talk_slot': '',
+            'items-0-start_time': '',
+            'items-0-end_time': '',
+            'items-0-title': '',
+            'items-0-abstract_submission': '',
+            'items-0-speakers': [],
+            'items-0-presenters': [],
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Use each person once across chairpersons, moderators, and panelists.')
+        self.assertContains(response, 'Fix before saving')
+        self.assertFalse(ProgramSession.objects.filter(title='Duplicate role session').exists())
+
+    def test_talks_can_reuse_same_person_inside_one_session(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'title': 'Talk reuse session',
+            'description': '',
+            'order': 1,
+            'time_slot': self.time_slot.id,
+            'program_day': self.day.id,
+            'hall_room': self.room.id,
+            'start_time': '09:00',
+            'end_time': '10:00',
+            'chairpersons': [],
+            'moderators': [],
+            'panelists': [],
+            'items-TOTAL_FORMS': 2,
+            'items-INITIAL_FORMS': 0,
+            'items-MIN_NUM_FORMS': 0,
+            'items-MAX_NUM_FORMS': 1000,
+            'items-0-order': 1,
+            'items-0-talk_slot': '',
+            'items-0-start_time': '09:05',
+            'items-0-end_time': '09:25',
+            'items-0-title': 'First talk',
+            'items-0-abstract_submission': '',
+            'items-0-speakers': [self.person1.id],
+            'items-0-presenters': [],
+            'items-1-order': 2,
+            'items-1-talk_slot': '',
+            'items-1-start_time': '09:30',
+            'items-1-end_time': '09:50',
+            'items-1-title': 'Second talk',
+            'items-1-abstract_submission': '',
+            'items-1-speakers': [self.person1.id],
+            'items-1-presenters': [],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        session = ProgramSession.objects.get(title='Talk reuse session')
+        self.assertEqual(
+            ProgramItemFaculty.objects.filter(
+                item__session=session,
+                person=self.person1,
+                role=ProgramItemFaculty.ROLE_SPEAKER,
+            ).count(),
+            2,
+        )
 
     def test_edit_program_session_success(self):
         self.client.force_login(self.staff_user)
