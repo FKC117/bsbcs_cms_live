@@ -2822,9 +2822,11 @@ def dashboard_program_session_builder(request):
             'program_day',
             'hall_room',
         ).prefetch_related(
+            'talk_slots',
             'program_sessions__faculty_roles__person',
             'program_sessions__items__faculty_roles__person',
             'program_sessions__items__abstract_submission',
+            'program_sessions__items__talk_slot',
         ).order_by('program_day__date', 'start_time')
 
     setup_status = {
@@ -2890,6 +2892,27 @@ def dashboard_program_session_builder(request):
                 })
         return warnings
 
+    def create_talk_slots(parent_slot, talk_slot_minutes):
+        if parent_slot.slot_type != TimeSlot.SLOT_SESSION or not talk_slot_minutes:
+            return
+
+        start_at = datetime.combine(parent_slot.program_day.date, parent_slot.start_time)
+        end_at = datetime.combine(parent_slot.program_day.date, parent_slot.end_time)
+        duration = timedelta(minutes=talk_slot_minutes)
+        talk_slots = []
+        order = 1
+        while start_at < end_at and len(talk_slots) < 240:
+            next_end = min(start_at + duration, end_at)
+            talk_slots.append(ProgramTalkSlot(
+                time_slot=parent_slot,
+                start_time=start_at.time(),
+                end_time=next_end.time(),
+                order=order,
+            ))
+            start_at = next_end
+            order += 1
+        ProgramTalkSlot.objects.bulk_create(talk_slots, ignore_conflicts=True)
+
     generated_preview_session_key = 'program_session_builder_generated_slot_preview'
 
     if request.method == 'GET' and selected_event:
@@ -2911,6 +2934,7 @@ def dashboard_program_session_builder(request):
                             'start_time': datetime.strptime(slot['start_time'], '%H:%M:%S').time(),
                             'end_time': datetime.strptime(slot['end_time'], '%H:%M:%S').time(),
                             'slot_type': slot['slot_type'],
+                            'talk_slot_minutes': slot.get('talk_slot_minutes'),
                         })
                     except (KeyError, TypeError, ValueError):
                         continue
@@ -3088,6 +3112,7 @@ def dashboard_program_session_builder(request):
                             'start_time': start_at.time(),
                             'end_time': next_end.time(),
                             'slot_type': TimeSlot.SLOT_SESSION,
+                            'talk_slot_minutes': slot_generator_form.cleaned_data.get('talk_slot_minutes'),
                         })
                         start_at = next_end
                     generated_slot_formset = GeneratedTimeSlotPreviewFormSet(initial=generated_initial, prefix='generated')
@@ -3109,6 +3134,7 @@ def dashboard_program_session_builder(request):
                                 'start_time': slot['start_time'].isoformat(),
                                 'end_time': slot['end_time'].isoformat(),
                                 'slot_type': slot['slot_type'],
+                                'talk_slot_minutes': slot.get('talk_slot_minutes'),
                             }
                             for slot in generated_initial
                         ],
@@ -3157,12 +3183,13 @@ def dashboard_program_session_builder(request):
                         except ValidationError as exc:
                             form.add_error(None, exc)
                         else:
-                            pending_slots.append(time_slot)
+                            pending_slots.append((time_slot, form.cleaned_data.get('talk_slot_minutes')))
 
                     if pending_slots and not any(form.errors for form in generated_slot_formset):
                         with transaction.atomic():
-                            for time_slot in pending_slots:
+                            for time_slot, talk_slot_minutes in pending_slots:
                                 time_slot.save()
+                                create_talk_slots(time_slot, talk_slot_minutes)
                         messages.success(request, f'{len(pending_slots)} generated time slot(s) saved.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
                     if not pending_slots and not any(form.errors for form in generated_slot_formset):
@@ -3204,7 +3231,17 @@ def dashboard_program_session_builder(request):
             if selected_event and not setup_complete:
                 session_form.add_error(None, 'Complete program day, hall room, and time slot setup before creating a session.')
 
-            if session_form.is_valid() and item_formset.is_valid():
+            session_valid = session_form.is_valid()
+            items_valid = item_formset.is_valid()
+            if session_valid and items_valid:
+                parent_time_slot = session_form.cleaned_data.get('time_slot')
+                for form in item_formset:
+                    talk_slot = form.cleaned_data.get('talk_slot')
+                    if talk_slot and (not parent_time_slot or talk_slot.time_slot_id != parent_time_slot.id):
+                        form.add_error('talk_slot', 'Choose a talk slot inside this session time slot.')
+                items_valid = not any(form.errors for form in item_formset)
+
+            if session_valid and items_valid:
                 with transaction.atomic():
                     session = session_form.save()
 
@@ -3232,6 +3269,7 @@ def dashboard_program_session_builder(request):
                             continue
                         item = ProgramSessionItem.objects.create(
                             session=session,
+                            talk_slot=form.cleaned_data.get('talk_slot'),
                             abstract_submission=form.cleaned_data.get('abstract_submission'),
                             title=form.cleaned_data.get('title'),
                             start_time=form.cleaned_data.get('start_time'),
@@ -3273,6 +3311,8 @@ def dashboard_program_session_builder(request):
         'faculty_roles__person',
         'items__faculty_roles__person',
         'items__abstract_submission',
+        'items__talk_slot',
+        'time_slot__talk_slots',
     )
     if selected_event:
         recent_sessions = recent_sessions.filter(event=selected_event)

@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -1054,7 +1054,7 @@ class ProgramSessionItemInline(admin.TabularInline):
     model = ProgramSessionItem
     extra = 1
     autocomplete_fields = ('abstract_submission',)
-    fields = ('order', 'start_time', 'end_time', 'title', 'abstract_submission')
+    fields = ('order', 'talk_slot', 'start_time', 'end_time', 'title', 'abstract_submission')
     ordering = ('order', 'start_time')
 
 
@@ -1100,19 +1100,32 @@ class ProgramItemFacultyInline(admin.TabularInline):
     ordering = ('role', 'order')
 
 
+@admin.register(ProgramTalkSlot)
+class ProgramTalkSlotAdmin(admin.ModelAdmin):
+    list_display = ('time_label', 'time_slot', 'get_event', 'order', 'label')
+    list_filter = ('time_slot__event', 'time_slot__program_day', 'time_slot__hall_room')
+    search_fields = ('time_slot__event__name', 'time_slot__program_day__name', 'time_slot__hall_room__name', 'label')
+    autocomplete_fields = ('time_slot',)
+    ordering = ('time_slot__program_day__date', 'time_slot__start_time', 'order', 'start_time')
+
+    def get_event(self, obj):
+        return obj.time_slot.event
+    get_event.short_description = 'Event'  # type: ignore
+
+
 @admin.register(ProgramSessionItem)
 class ProgramSessionItemAdmin(admin.ModelAdmin):
     list_display = ('display_title', 'session', 'get_event', 'start_time', 'end_time', 'order', 'get_speakers')
     list_filter = ('session__event', 'session__program_day', 'session__hall_room')
     search_fields = ('title', 'abstract_submission__title', 'session__title', 'faculty_roles__person__name')
-    autocomplete_fields = ('session', 'abstract_submission')
+    autocomplete_fields = ('session', 'abstract_submission', 'talk_slot')
     inlines = [ProgramItemFacultyInline]
     fieldsets = (
         ('Talk or activity', {
             'fields': ('session', 'title', 'abstract_submission', 'description', 'order')
         }),
         ('Timing', {
-            'fields': ('start_time', 'end_time')
+            'fields': ('talk_slot', 'start_time', 'end_time')
         }),
     )
 

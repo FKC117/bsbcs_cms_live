@@ -361,8 +361,16 @@ class TimeSlotGeneratorForm(forms.Form):
     slot_minutes = forms.IntegerField(
         min_value=5,
         max_value=240,
-        initial=30,
+        initial=120,
         widget=forms.NumberInput(attrs={'class': 'workflow-input', 'min': 5, 'max': 240, 'step': 5}),
+    )
+    talk_slot_minutes = forms.IntegerField(
+        min_value=5,
+        max_value=120,
+        initial=20,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'workflow-input', 'min': 5, 'max': 120, 'step': 5}),
+        help_text='Optional internal talk block duration for each generated session slot.',
     )
 
     def __init__(self, *args, **kwargs):
@@ -398,6 +406,12 @@ class GeneratedTimeSlotPreviewForm(forms.Form):
         required=False,
         max_length=120,
         widget=forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional block label'}),
+    )
+    talk_slot_minutes = forms.IntegerField(
+        required=False,
+        min_value=5,
+        max_value=120,
+        widget=forms.NumberInput(attrs={'class': 'workflow-input', 'min': 5, 'max': 120, 'step': 5, 'placeholder': '20'}),
     )
 
     def clean(self):
@@ -458,6 +472,11 @@ class ProgramPersonQuickCreateForm(forms.ModelForm):
 
 class ProgramSessionItemBuilderForm(forms.Form):
     order = forms.IntegerField(required=False, min_value=0, widget=forms.NumberInput(attrs={'class': 'workflow-input'}))
+    talk_slot = forms.ModelChoiceField(
+        queryset=ProgramTalkSlot.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={'class': 'workflow-input talk-slot-select'}),
+    )
     start_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
     end_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'workflow-input', 'type': 'time'}))
     title = forms.CharField(
@@ -489,14 +508,19 @@ class ProgramSessionItemBuilderForm(forms.Form):
         ).order_by('title')
         if event:
             abstracts = abstracts.filter(event=event)
+            self.fields['talk_slot'].queryset = ProgramTalkSlot.objects.filter(
+                time_slot__event=event,
+            ).select_related('time_slot').order_by('time_slot__program_day__date', 'time_slot__start_time', 'order', 'start_time')
         else:
             abstracts = AbstractSubmission.objects.none()
+            self.fields['talk_slot'].queryset = ProgramTalkSlot.objects.none()
         self.fields['abstract_submission'].queryset = abstracts
 
     def clean(self):
         cleaned_data = super().clean()
         has_any_value = any([
             cleaned_data.get('order') is not None,
+            cleaned_data.get('talk_slot'),
             cleaned_data.get('start_time'),
             cleaned_data.get('end_time'),
             cleaned_data.get('title'),
@@ -506,11 +530,33 @@ class ProgramSessionItemBuilderForm(forms.Form):
         ])
         if has_any_value and not cleaned_data.get('title') and not cleaned_data.get('abstract_submission'):
             raise forms.ValidationError('Each program item needs either an approved abstract or a text-based title.')
+        talk_slot = cleaned_data.get('talk_slot')
+        if talk_slot:
+            cleaned_data['start_time'] = talk_slot.start_time
+            cleaned_data['end_time'] = talk_slot.end_time
         return cleaned_data
+
+
+class BaseProgramSessionItemBuilderFormSet(forms.BaseFormSet):
+    def clean(self):
+        super().clean()
+        used_slots = {}
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data'):
+                continue
+            talk_slot = form.cleaned_data.get('talk_slot')
+            if not talk_slot:
+                continue
+            if talk_slot.pk in used_slots:
+                form.add_error('talk_slot', 'This talk slot is already selected by another talk item.')
+                used_slots[talk_slot.pk].add_error('talk_slot', 'This talk slot is already selected by another talk item.')
+            else:
+                used_slots[talk_slot.pk] = form
 
 
 ProgramSessionItemBuilderFormSet = forms.formset_factory(
     ProgramSessionItemBuilderForm,
+    formset=BaseProgramSessionItemBuilderFormSet,
     extra=8,
     max_num=20,
     validate_max=False,

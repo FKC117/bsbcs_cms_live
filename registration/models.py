@@ -758,6 +758,7 @@ class ProgramSession(models.Model):
                 ),
                 'title': item.title,
                 'display_title': item.display_title,
+                'talk_slot': str(item.talk_slot_id) if item.talk_slot_id else '',
                 'abstract_submission': str(item.abstract_submission_id) if item.abstract_submission_id else '',
                 'abstract_title': item.abstract_submission.title if item.abstract_submission else '',
                 'speakers': item_role_ids[ProgramItemFaculty.ROLE_SPEAKER],
@@ -791,6 +792,17 @@ class ProgramSession(models.Model):
             'moderator_labels': role_labels[ProgramSessionFaculty.ROLE_MODERATOR],
             'panelist_labels': role_labels[ProgramSessionFaculty.ROLE_PANELIST],
             'occupancy': self.timeline_occupancy,
+            'talk_slots': [
+                {
+                    'id': str(talk_slot.id),
+                    'time_slot': str(talk_slot.time_slot_id),
+                    'start_time': talk_slot.start_time.strftime('%H:%M'),
+                    'end_time': talk_slot.end_time.strftime('%H:%M'),
+                    'time_label': talk_slot.time_label,
+                    'label': talk_slot.label or '',
+                }
+                for talk_slot in self.time_slot.talk_slots.all()
+            ] if self.time_slot else [],
             'items': items,
         }
 
@@ -945,6 +957,13 @@ class ProgramSessionFaculty(models.Model):
 
 class ProgramSessionItem(models.Model):
     session = models.ForeignKey(ProgramSession, on_delete=models.CASCADE, related_name='items')
+    talk_slot = models.OneToOneField(
+        'ProgramTalkSlot',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='assigned_item',
+    )
     abstract_submission = models.ForeignKey(AbstractSubmission, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_session_items')
     title = models.CharField(max_length=400, blank=True, null=True, help_text='Use this for non-abstract talks or manual titles.')
     start_time = models.TimeField(blank=True, null=True)
@@ -967,9 +986,48 @@ class ProgramSessionItem(models.Model):
             raise ValidationError(_('Add either an abstract submission or a text-based title.'))
         if self.abstract_submission and self.session and self.abstract_submission.event_id != self.session.event_id:
             raise ValidationError(_('Selected abstract must belong to the same event as the session.'))
+        if self.talk_slot and self.session and self.talk_slot.time_slot_id != self.session.time_slot_id:
+            raise ValidationError(_('Selected talk slot must belong to this session time slot.'))
+
+    def save(self, *args, **kwargs):
+        if self.talk_slot:
+            self.start_time = self.talk_slot.start_time
+            self.end_time = self.talk_slot.end_time
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.display_title
+
+
+class ProgramTalkSlot(models.Model):
+    time_slot = models.ForeignKey(TimeSlot, on_delete=models.CASCADE, related_name='talk_slots')
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    order = models.PositiveIntegerField(default=0)
+    label = models.CharField(max_length=120, blank=True, null=True)
+
+    class Meta:
+        ordering = ['time_slot__start_time', 'order', 'start_time', 'id']
+        unique_together = ('time_slot', 'start_time', 'end_time')
+        verbose_name = 'Program Talk Slot'
+        verbose_name_plural = 'Program Talk Slots'
+
+    def __str__(self):
+        return f"{self.time_label} - {self.time_slot}"
+
+    @property
+    def time_label(self):
+        return f"{self.start_time.strftime('%I:%M %p').lstrip('0')} - {self.end_time.strftime('%I:%M %p').lstrip('0')}"
+
+    def clean(self):
+        super().clean()
+        if self.time_slot and self.time_slot.slot_type != TimeSlot.SLOT_SESSION:
+            raise ValidationError(_('Talk slots can only be generated inside session time slots.'))
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError(_('Talk slot end time must be after start time.'))
+        if self.time_slot_id and self.start_time and self.end_time:
+            if self.start_time < self.time_slot.start_time or self.end_time > self.time_slot.end_time:
+                raise ValidationError(_('Talk slot must stay inside its parent session time slot.'))
 
 
 class ProgramItemFaculty(models.Model):

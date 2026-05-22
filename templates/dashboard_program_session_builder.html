@@ -571,7 +571,7 @@
                             <div>
                                 <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Slot generator</div>
                                 <h3 class="mt-1 text-xl font-black text-ink">Build slot preview from a time range</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">Generate equal blocks first. You can adjust times and mark tea/lunch/dinner blocks in the preview before saving.</p>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">Generate parent session blocks first. Each session block can also receive smaller talk slots that admins pick while adding talks.</p>
                             </div>
                             <button type="button" class="rounded-full border border-line px-3 py-1 text-lg leading-none text-slate-500 hover:bg-slate-50" data-close-modal>&times;</button>
                         </div>
@@ -592,7 +592,7 @@
                                     {{ slot_generator_form.hall_room.errors }}
                                 </label>
                             </div>
-                            <div class="grid gap-2 sm:grid-cols-3">
+                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                 <label>
                                     <span class="compact-label">Range start</span>
                                     {{ slot_generator_form.start_time }}
@@ -604,11 +604,19 @@
                                     {{ slot_generator_form.end_time.errors }}
                                 </label>
                                 <label>
-                                    <span class="compact-label">Minutes per slot</span>
+                                    <span class="compact-label">Session block minutes</span>
                                     {{ slot_generator_form.slot_minutes }}
                                     {{ slot_generator_form.slot_minutes.errors }}
                                 </label>
+                                <label>
+                                    <span class="compact-label">Talk block minutes</span>
+                                    {{ slot_generator_form.talk_slot_minutes }}
+                                    {{ slot_generator_form.talk_slot_minutes.errors }}
+                                </label>
                             </div>
+                            <p class="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold leading-5 text-bsbcs-navy">
+                                Example: a 120 minute session block with 20 minute talk blocks gives six selectable talk windows inside that session.
+                            </p>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <button type="button" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-bsbcs-blue hover:bg-blue-100" data-open-modal="time-slot-library-modal">&larr; Back to Slots</button>
                                 <div class="flex flex-wrap justify-end gap-2">
@@ -666,15 +674,16 @@
                             {% endif %}
                             <div class="max-h-[62vh] overflow-auto rounded-xl border border-line">
                                 <div class="min-w-[760px] divide-y divide-line">
-                                    <div class="grid grid-cols-[120px_120px_190px_minmax(0,1fr)_80px] gap-2 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-500">
+                                    <div class="grid grid-cols-[120px_120px_170px_140px_minmax(0,1fr)_80px] gap-2 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-500">
                                         <div>Start</div>
                                         <div>End</div>
                                         <div>Block type</div>
+                                        <div>Talk minutes</div>
                                         <div>Label</div>
                                         <div>Drop</div>
                                     </div>
                                     {% for form in generated_slot_formset %}
-                                        <div class="grid grid-cols-[120px_120px_190px_minmax(0,1fr)_80px] gap-2 px-3 py-2">
+                                        <div class="grid grid-cols-[120px_120px_170px_140px_minmax(0,1fr)_80px] gap-2 px-3 py-2">
                                             <label>
                                                 <span class="sr-only">Start</span>
                                                 {{ form.start_time }}
@@ -689,6 +698,11 @@
                                                 <span class="sr-only">Block type</span>
                                                 {{ form.slot_type }}
                                                 {{ form.slot_type.errors }}
+                                            </label>
+                                            <label>
+                                                <span class="sr-only">Talk block minutes</span>
+                                                {{ form.talk_slot_minutes }}
+                                                {{ form.talk_slot_minutes.errors }}
                                             </label>
                                             <label>
                                                 <span class="sr-only">Label</span>
@@ -1223,8 +1237,21 @@
                             </div>
 
                             <!-- Timing & Abstract selection -->
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div class="grid gap-2 grid-cols-2">
+                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                                <div class="space-y-2">
+                                    <label class="block">
+                                        <span class="compact-label text-[10px]">Generated Talk Slot</span>
+                                        <select name="{{ form.talk_slot.html_name }}" id="{{ form.talk_slot.auto_id }}" class="workflow-input !py-1.5 text-xs" data-talk-slot>
+                                            <option value="">Manual talk time</option>
+                                            {% for slot in form.fields.talk_slot.queryset %}
+                                                <option value="{{ slot.id }}" data-parent-time-slot="{{ slot.time_slot_id }}" data-start="{{ slot.start_time|time:'H:i' }}" data-end="{{ slot.end_time|time:'H:i' }}" {% if form.talk_slot.value|stringformat:"s" == slot.id|stringformat:"s" %}selected{% endif %}>
+                                                    {{ slot.time_slot.program_day.name }} - {{ slot.time_slot.hall_room.name }} - {{ slot.start_time|time:"g:i A" }} - {{ slot.end_time|time:"g:i A" }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        {{ form.talk_slot.errors }}
+                                    </label>
+                                    <div class="grid gap-2 grid-cols-2">
                                     <label class="block">
                                         <span class="compact-label text-[10px]">Start Time</span>
                                         <input type="time" name="{{ form.start_time.html_name }}" id="{{ form.start_time.auto_id }}" value="{{ form.start_time.value|default:"" }}" class="workflow-input !py-1.5 text-xs" data-talk-start>
@@ -1233,6 +1260,8 @@
                                         <span class="compact-label text-[10px]">End Time</span>
                                         <input type="time" name="{{ form.end_time.html_name }}" id="{{ form.end_time.auto_id }}" value="{{ form.end_time.value|default:"" }}" class="workflow-input !py-1.5 text-xs" data-talk-end>
                                     </label>
+                                    </div>
+                                    <p class="text-[11px] font-semibold leading-5 text-slate-500" data-talk-slot-help>Pick a generated talk slot to fill times, or keep manual times for an exception.</p>
                                 </div>
                                 <div class="relative">
                                     <label class="compact-label text-[10px]">Link Approved Abstract</label>
@@ -1692,6 +1721,54 @@
                 const sessionWindow = currentSessionWindowLabel();
                 document.querySelectorAll('[data-talk-session-window]').forEach(function (label) {
                     label.textContent = sessionWindow;
+                });
+                refreshTalkSlotChoices();
+            }
+
+            function selectedSessionTimeSlotId() {
+                return document.getElementById('id_time_slot').value || '';
+            }
+
+            function applyTalkSlotToRow(row) {
+                const talkSlotSelect = row.querySelector('[data-talk-slot]');
+                const startInput = row.querySelector('[data-talk-start]');
+                const endInput = row.querySelector('[data-talk-end]');
+                const helper = row.querySelector('[data-talk-slot-help]');
+                const selectedOption = talkSlotSelect.options[talkSlotSelect.selectedIndex];
+                const usingGeneratedSlot = Boolean(selectedOption && selectedOption.value);
+
+                startInput.readOnly = usingGeneratedSlot;
+                endInput.readOnly = usingGeneratedSlot;
+                startInput.classList.toggle('bg-blue-50', usingGeneratedSlot);
+                endInput.classList.toggle('bg-blue-50', usingGeneratedSlot);
+
+                if (usingGeneratedSlot) {
+                    startInput.value = selectedOption.dataset.start || '';
+                    endInput.value = selectedOption.dataset.end || '';
+                    helper.textContent = 'Timing follows this generated talk slot. Switch to manual talk time to edit it directly.';
+                } else {
+                    helper.textContent = 'Pick a generated talk slot to fill times, or keep manual times for an exception.';
+                }
+            }
+
+            function refreshTalkSlotChoices() {
+                const parentTimeSlotId = selectedSessionTimeSlotId();
+                document.querySelectorAll('[data-talk-slot]').forEach(function (select) {
+                    let hasGeneratedChoices = false;
+                    Array.from(select.options).forEach(function (option) {
+                        if (!option.value) return;
+                        const matchesParent = Boolean(parentTimeSlotId && option.dataset.parentTimeSlot === parentTimeSlotId);
+                        option.hidden = !matchesParent;
+                        option.disabled = !matchesParent;
+                        if (matchesParent) hasGeneratedChoices = true;
+                    });
+
+                    const selectedOption = select.options[select.selectedIndex];
+                    if (selectedOption && selectedOption.value && selectedOption.disabled) {
+                        select.value = '';
+                    }
+                    select.disabled = !parentTimeSlotId || !hasGeneratedChoices;
+                    applyTalkSlotToRow(select.closest('.talk-form-row'));
                 });
             }
 
@@ -2220,6 +2297,8 @@
                         
                         // Copy basic values
                         currentRow.querySelector('[data-talk-order]').value = nextRow.querySelector('[data-talk-order]').value;
+                        currentRow.querySelector('[data-talk-slot]').value = nextRow.querySelector('[data-talk-slot]').value;
+                        currentRow.querySelector('[data-talk-slot]').dispatchEvent(new Event('change'));
                         currentRow.querySelector('[data-talk-start]').value = nextRow.querySelector('[data-talk-start]').value;
                         currentRow.querySelector('[data-talk-end]').value = nextRow.querySelector('[data-talk-end]').value;
                         currentRow.querySelector('[data-talk-title]').value = nextRow.querySelector('[data-talk-title]').value;
@@ -2252,6 +2331,8 @@
                     // Clear the last visible row that was shifted up
                     const lastRow = talkRows[visibleTalks - 1];
                     lastRow.querySelector('[data-talk-order]').value = visibleTalks;
+                    lastRow.querySelector('[data-talk-slot]').value = '';
+                    lastRow.querySelector('[data-talk-slot]').dispatchEvent(new Event('change'));
                     lastRow.querySelector('[data-talk-start]').value = '';
                     lastRow.querySelector('[data-talk-end]').value = '';
                     lastRow.querySelector('[data-talk-title]').value = '';
@@ -2302,6 +2383,12 @@
                 });
             });
 
+            document.querySelectorAll('[data-talk-slot]').forEach(select => {
+                select.addEventListener('change', function () {
+                    applyTalkSlotToRow(select.closest('.talk-form-row'));
+                });
+            });
+
 
             // Reset Form Fields Helper
             function resetSessionForm() {
@@ -2316,6 +2403,8 @@
 
                 talkRows.forEach((row, idx) => {
                     row.querySelector('[data-talk-order]').value = idx + 1;
+                    row.querySelector('[data-talk-slot]').value = '';
+                    row.querySelector('[data-talk-slot]').dispatchEvent(new Event('change'));
                     row.querySelector('[data-talk-start]').value = '';
                     row.querySelector('[data-talk-end]').value = '';
                     row.querySelector('[data-talk-title]').value = '';
@@ -2435,6 +2524,8 @@
                         if (!row) return;
 
                         row.querySelector('[data-talk-order]').value = item.order;
+                        row.querySelector('[data-talk-slot]').value = item.talk_slot || '';
+                        row.querySelector('[data-talk-slot]').dispatchEvent(new Event('change'));
                         row.querySelector('[data-talk-start]').value = item.start_time || '';
                         row.querySelector('[data-talk-end]').value = item.end_time || '';
                         row.querySelector('[data-talk-title]').value = item.title;

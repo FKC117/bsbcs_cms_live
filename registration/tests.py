@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from registration.models import (
     Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson,
-    ProgramSession, ProgramSessionFaculty, ProgramSessionItem,
+    ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission
 )
 
@@ -189,6 +189,30 @@ class ProgramSessionBuilderTests(TestCase):
         refreshed_response = self.client.get(response.url)
         self.assertNotContains(refreshed_response, 'id="generated-slot-preview-modal" class="setup-modal" hidden data-open-on-load="true"')
 
+    def test_saved_generated_session_slot_creates_child_talk_slots(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'setup_action': 'save_generated_slots',
+            'generated_program_day': self.day.id,
+            'generated_hall_room': self.room.id,
+            'generated-TOTAL_FORMS': 1,
+            'generated-INITIAL_FORMS': 0,
+            'generated-MIN_NUM_FORMS': 0,
+            'generated-MAX_NUM_FORMS': 240,
+            'generated-0-start_time': '10:00',
+            'generated-0-end_time': '12:00',
+            'generated-0-slot_type': TimeSlot.SLOT_SESSION,
+            'generated-0-talk_slot_minutes': 20,
+            'generated-0-label': 'Workshop',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        generated_parent = TimeSlot.objects.get(label='Workshop')
+        self.assertEqual(generated_parent.talk_slots.count(), 6)
+        self.assertTrue(generated_parent.talk_slots.filter(start_time=time(10, 0), end_time=time(10, 20)).exists())
+        self.assertTrue(generated_parent.talk_slots.filter(start_time=time(11, 40), end_time=time(12, 0)).exists())
+
     def test_setup_day_and_room_can_be_corrected_from_builder(self):
         self.client.force_login(self.staff_user)
         url = reverse('dashboard_program_session_builder')
@@ -305,6 +329,48 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(item2.title, 'Panel Q&A Discussion')
         self.assertIsNone(item2.abstract_submission)
         self.assertTrue(ProgramItemFaculty.objects.filter(item=item2, person=self.person2, role=ProgramItemFaculty.ROLE_SPEAKER).exists())
+
+    def test_program_item_can_use_generated_talk_slot(self):
+        self.client.force_login(self.staff_user)
+        talk_slot = ProgramTalkSlot.objects.create(
+            time_slot=self.time_slot,
+            start_time=time(9, 20),
+            end_time=time(9, 40),
+            order=2,
+        )
+
+        response = self.client.post(reverse('dashboard_program_session_builder'), {
+            'event': self.event.id,
+            'title': 'Talk slot session',
+            'description': '',
+            'order': 1,
+            'time_slot': self.time_slot.id,
+            'program_day': self.day.id,
+            'hall_room': self.room.id,
+            'start_time': '09:00',
+            'end_time': '10:00',
+            'chairpersons': [],
+            'moderators': [],
+            'panelists': [],
+            'items-TOTAL_FORMS': 1,
+            'items-INITIAL_FORMS': 0,
+            'items-MIN_NUM_FORMS': 0,
+            'items-MAX_NUM_FORMS': 1000,
+            'items-0-order': 1,
+            'items-0-talk_slot': talk_slot.id,
+            'items-0-start_time': '',
+            'items-0-end_time': '',
+            'items-0-title': 'Generated talk window',
+            'items-0-abstract_submission': '',
+            'items-0-speakers': [],
+            'items-0-presenters': [],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        item = ProgramSessionItem.objects.get(title='Generated talk window')
+        self.assertEqual(item.talk_slot, talk_slot)
+        self.assertEqual(item.start_time, time(9, 20))
+        self.assertEqual(item.end_time, time(9, 40))
 
     def test_edit_program_session_success(self):
         self.client.force_login(self.staff_user)
