@@ -247,9 +247,28 @@ def complete_membership_payment(payment_record):
     # 1. Update Payment Status
     payment_record.status = 'completed'
     payment_record.save()
+    logger.info(
+        "membership_payment_completed payment_id=%s user_profile_id=%s user_profile_email=%s merchant_invoice=%s amount=%s",
+        payment_record.id,
+        payment_record.user_profile_id,
+        payment_record.user_profile.email,
+        payment_record.merchant_invoice_number,
+        payment_record.amount,
+    )
 
     # 2. Get/Activate Member
     member, created = Member.objects.get_or_create(user_profile=payment_record.user_profile)
+    if member.approval_status != 'approved':
+        logger.warning(
+            "membership_activation_skipped_unapproved payment_id=%s member_id=%s user_profile_id=%s user_profile_email=%s approval_status=%s",
+            payment_record.id,
+            member.id,
+            payment_record.user_profile_id,
+            payment_record.user_profile.email,
+            member.approval_status,
+        )
+        return False
+
     member.is_active_member = True
     
     # Calculate subscription dates
@@ -264,6 +283,15 @@ def complete_membership_payment(payment_record):
     member.subscription_expiry_date = current_expiry + relativedelta(years=payment_record.duration_years)
     member.membership_type = payment_record.membership_type
     member.save()
+    logger.info(
+        "membership_member_activated payment_id=%s member_id=%s user_profile_email=%s membership_type_id=%s subscription_start=%s subscription_expiry=%s",
+        payment_record.id,
+        member.id,
+        payment_record.user_profile.email,
+        payment_record.membership_type_id,
+        member.subscription_start_date,
+        member.subscription_expiry_date,
+    )
     process_pending_event_intents(member)
 
     # 3. Generate and Save Invoice
@@ -274,9 +302,20 @@ def complete_membership_payment(payment_record):
         relative_path = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
         payment_record.invoice = relative_path
         payment_record.save()
+        logger.info(
+            "membership_invoice_generated payment_id=%s user_profile_email=%s invoice=%s",
+            payment_record.id,
+            payment_record.user_profile.email,
+            relative_path,
+        )
         
         # 4. Send Email
         send_membership_invoice_email(payment_record)
+        logger.info(
+            "membership_invoice_email_sent payment_id=%s user_profile_email=%s",
+            payment_record.id,
+            payment_record.user_profile.email,
+        )
         return True
     except Exception as e:
         logger.error(f"Error in automatic post-payment processing: {str(e)}")

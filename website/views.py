@@ -31,6 +31,65 @@ from datetime import timedelta
 
 logger = logging.getLogger('payment')
 
+MEMBERSHIP_SUCCESS_STATUSES = ['completed']
+BKASH_ALREADY_COMPLETED_CODE = '2062'
+
+
+def _membership_user_log_context(request):
+    user = getattr(request, 'user', None)
+    user_profile = getattr(user, 'userprofile', None) if user and user.is_authenticated else None
+    return {
+        'user_id': getattr(user, 'id', None),
+        'user_email': getattr(user, 'email', '') or getattr(user, 'username', ''),
+        'username': getattr(user, 'username', ''),
+        'user_profile_id': getattr(user_profile, 'id', None),
+        'user_profile_email': getattr(user_profile, 'email', None),
+    }
+
+
+def _membership_payment_log_context(request, payment=None, member=None, extra=None):
+    if payment and not member:
+        member = Member.objects.filter(user_profile=payment.user_profile).first()
+    context = {
+        **_membership_user_log_context(request),
+        'flow': 'membership',
+        'member_id': getattr(member, 'id', None),
+        'membership_payment_id': getattr(payment, 'id', None),
+        'membership_type_id': getattr(payment, 'membership_type_id', None),
+        'merchant_invoice_number': getattr(payment, 'merchant_invoice_number', None),
+        'paymentID': getattr(payment, 'transaction_id', None),
+        'trxID': getattr(payment, 'trxID', None),
+        'amount': str(getattr(payment, 'amount', '')) if payment else None,
+        'status': getattr(payment, 'status', None),
+        'approval_status': getattr(member, 'approval_status', None),
+        'is_active_member': getattr(member, 'is_active_member', None),
+    }
+    if payment:
+        context.update({
+            'owner_user_id': getattr(payment.user_profile.user, 'id', None),
+            'owner_user_email': getattr(payment.user_profile.user, 'email', '') or getattr(payment.user_profile.user, 'username', ''),
+            'owner_user_profile_id': payment.user_profile_id,
+            'owner_user_profile_email': payment.user_profile.email,
+        })
+    if extra:
+        context.update(extra)
+    return context
+
+
+def _log_membership_payment(level, message, request, payment=None, member=None, extra=None):
+    payload = _membership_payment_log_context(request, payment, member, extra)
+    getattr(logger, level)(message + " %s", json.dumps(payload, default=str))
+
+
+def _render_membership_success(request, payment_record, message=None):
+    member = Member.objects.get(user_profile=payment_record.user_profile)
+    if message:
+        messages.success(request, message)
+    return render(request, 'pages/membership_success.html', {
+        'payment': payment_record,
+        'member': member
+    })
+
 from registration.models import (
     Event as RegistrationEvent, FeatureSpeaker, AboutTheConference, 
     Invitation, ProgramDay, TimeSlot, ProgramSchedule
@@ -720,8 +779,28 @@ def membership_payment_init(request):
 
     # Ensure Member object exists
     member, created = Member.objects.get_or_create(user_profile=user_profile)
+    _log_membership_payment('info', 'payment_access', request, member=member, extra={'method': request.method})
+
+    if member.is_active_member:
+        latest_completed_payment = MembershipPayment.objects.filter(
+            user_profile=user_profile,
+            status='completed',
+        ).order_by('-created_at').first()
+        _log_membership_payment('info', 'payment_access_already_active', request, payment=latest_completed_payment, member=member, extra={
+            'method': request.method,
+            'reason': 'member_already_active_before_create',
+        })
+        messages.info(request, "Your membership payment is already completed and your membership is active.")
+        return redirect('user_profile')
 
     if request.method == 'POST':
+        if member.approval_status != 'approved':
+            _log_membership_payment('warning', 'payment_access_denied', request, member=member, extra={
+                'reason': 'membership_not_approved',
+            })
+            messages.error(request, "Your membership must be approved before payment.")
+            return redirect('website:homepage')
+
         token = get_bkash_token()
         if not token:
             messages.error(request, "Failed to connect to payment gateway. Please try again later.")
@@ -729,8 +808,11 @@ def membership_payment_init(request):
 
         # Get membership type and duration
         type_id = request.POST.get('membership_type')
-        years = int(request.POST.get('years', 1))
-        
+        try:
+            years = int(request.POST.get('years', 1))
+        except (TypeError, ValueError):
+            years = 1
+
         try:
             membership_type = MembershipType.objects.get(id=type_id)
         except (MembershipType.DoesNotExist, ValueError):
@@ -752,6 +834,10 @@ def membership_payment_init(request):
             merchant_invoice_number=invoice_number,
             status='initiated'
         )
+        _log_membership_payment('info', 'payment_record_created', request, payment=payment, member=member, extra={
+            'duration_years': years,
+            'membership_type_id': membership_type.id,
+        })
         
         payer_reference = user_profile.phone or "NoPhone"
         
@@ -764,6 +850,14 @@ def membership_payment_init(request):
 
         payment_response = create_bkash_payment(
             token, amount, payer_reference, callback_url, merchant_invoice_number
+        )
+        logger.info(
+            "payment_create_response %s",
+            json.dumps(_membership_payment_log_context(request, payment, member, {
+                'bkash_statusCode': payment_response.get('statusCode') if payment_response else None,
+                'bkash_statusMessage': payment_response.get('statusMessage') if payment_response else None,
+                'paymentID': payment_response.get('paymentID') if payment_response else None,
+            }), default=str)
         )
 
         if payment_response and payment_response.get("statusCode") == "0000":
@@ -792,11 +886,39 @@ def membership_payment_callback(request):
     payment_id = request.GET.get('paymentID')
     status = request.GET.get('status')
     merchant_invoice_number = request.GET.get('merchant_invoice_number')
+    payment = MembershipPayment.objects.filter(merchant_invoice_number=merchant_invoice_number).select_related('user_profile__user').first()
+    member = Member.objects.filter(user_profile=payment.user_profile).first() if payment else None
+    _log_membership_payment('info', 'payment_callback_received', request, payment=payment, member=member, extra={
+        'paymentID': payment_id,
+        'callback_status': status,
+        'merchant_invoice_number': merchant_invoice_number,
+    })
+
+    if not payment:
+        messages.error(request, "Invalid payment session.")
+        return redirect('website:homepage')
+
+    if payment.user_profile.user_id != request.user.id:
+        _log_membership_payment('warning', 'payment_callback_denied', request, payment=payment, member=member, extra={
+            'reason': 'payment_owner_mismatch',
+        })
+        messages.error(request, "You are not allowed to access this payment link.")
+        return redirect('website:homepage')
 
     if status == 'cancel' or status == 'failure':
-        MembershipPayment.objects.filter(
-            merchant_invoice_number=merchant_invoice_number
-        ).update(status='cancelled' if status == 'cancel' else 'failed')
+        if payment.status not in MEMBERSHIP_SUCCESS_STATUSES:
+            status_before = payment.status
+            payment.status = 'cancelled' if status == 'cancel' else 'failed'
+            payment.save()
+            _log_membership_payment('warning', 'payment_callback_marked_terminal', request, payment=payment, member=member, extra={
+                'status_before': status_before,
+                'status_after': payment.status,
+                'callback_status': status,
+            })
+        else:
+            _log_membership_payment('warning', 'payment_callback_completed_overwrite_skipped', request, payment=payment, member=member, extra={
+                'callback_status': status,
+            })
         messages.error(request, f"Membership payment {status}ed.")
         return redirect('website:homepage')
 
@@ -804,10 +926,23 @@ def membership_payment_callback(request):
         messages.error(request, "Invalid payment session.")
         return redirect('website:homepage')
 
+    if payment.status in MEMBERSHIP_SUCCESS_STATUSES:
+        _log_membership_payment('info', 'payment_callback_already_completed', request, payment=payment, member=member, extra={
+            'paymentID': payment_id,
+            'status_before': payment.status,
+        })
+        return redirect(reverse('website:membership_payment_finalize') + f"?paymentID={payment.transaction_id or payment_id}")
+
     # Update payment record with tokenized payment ID
-    MembershipPayment.objects.filter(
-        merchant_invoice_number=merchant_invoice_number
-    ).update(transaction_id=payment_id, status='pending')
+    status_before = payment.status
+    payment.transaction_id = payment_id
+    payment.status = 'pending'
+    payment.save()
+    _log_membership_payment('info', 'payment_callback_marked_pending', request, payment=payment, member=member, extra={
+        'status_before': status_before,
+        'status_after': payment.status,
+        'paymentID': payment_id,
+    })
 
     return redirect(reverse('website:membership_payment_finalize') + f"?paymentID={payment_id}")
 
@@ -820,32 +955,116 @@ def membership_payment_finalize(request):
         messages.error(request, "Payment ID missing.")
         return redirect('website:homepage')
 
-    payment_record = get_object_or_404(MembershipPayment, transaction_id=payment_id)
-    
+    payment_record = get_object_or_404(MembershipPayment.objects.select_related('user_profile__user', 'membership_type'), transaction_id=payment_id)
+    member = Member.objects.filter(user_profile=payment_record.user_profile).first()
+    _log_membership_payment('info', 'payment_finalize_access', request, payment=payment_record, member=member, extra={
+        'paymentID': payment_id,
+        'status_before': payment_record.status,
+    })
+
+    if payment_record.user_profile.user_id != request.user.id:
+        _log_membership_payment('warning', 'payment_finalize_denied', request, payment=payment_record, member=member, extra={
+            'reason': 'payment_owner_mismatch',
+        })
+        messages.error(request, "You are not allowed to access this payment link.")
+        return redirect('website:homepage')
+
+    if payment_record.status in MEMBERSHIP_SUCCESS_STATUSES:
+        _log_membership_payment('info', 'payment_finalize_skip_already_completed', request, payment=payment_record, member=member, extra={
+            'paymentID': payment_id,
+        })
+        return _render_membership_success(request, payment_record, "Your membership payment was already finalized.")
+
     token = get_bkash_token()
     if not token:
         messages.error(request, "Session expired. Please contact support.")
         return redirect('website:homepage')
 
     execute_response = execute_payment(token, payment_id)
+    logger.info(
+        "payment_execute_response %s",
+        json.dumps(_membership_payment_log_context(request, payment_record, member, {
+            'bkash_statusCode': execute_response.get('statusCode') if execute_response else None,
+            'bkash_statusMessage': execute_response.get('statusMessage') if execute_response else None,
+            'paymentID': payment_id,
+            'trxID': execute_response.get('trxID') if execute_response else payment_record.trxID,
+            'status_before': payment_record.status,
+            'raw_response': execute_response,
+        }), default=str)
+    )
 
     if execute_response and execute_response.get('statusCode') == '0000':
         # Success!
         payment_record.trxID = execute_response.get('trxID')
         # This helper handles activation, invoice generation and emailing
-        complete_membership_payment(payment_record)
-
-        # Fetch updated member for template
+        completion_ok = complete_membership_payment(payment_record)
+        payment_record.refresh_from_db()
         member = Member.objects.get(user_profile=payment_record.user_profile)
+        _log_membership_payment('info', 'payment_finalize_marked_completed', request, payment=payment_record, member=member, extra={
+            'bkash_statusCode': execute_response.get('statusCode'),
+            'bkash_statusMessage': execute_response.get('statusMessage'),
+            'completion_ok': completion_ok,
+        })
+
+        if not completion_ok:
+            messages.warning(request, "Payment completed, but membership activation needs admin review.")
+            return redirect('website:homepage')
 
         messages.success(request, f"Your {payment_record.membership_type.name if payment_record.membership_type else ''} membership has been successfully activated!")
         return render(request, 'pages/membership_success.html', {
             'payment': payment_record,
             'member': member
         })
+    elif execute_response and execute_response.get('statusCode') == BKASH_ALREADY_COMPLETED_CODE:
+        query_response = payment_query(token, payment_id)
+        logger.info(
+            "payment_query_after_already_completed %s",
+            json.dumps(_membership_payment_log_context(request, payment_record, member, {
+                'bkash_statusCode': query_response.get('statusCode') if query_response else None,
+                'bkash_statusMessage': query_response.get('statusMessage') if query_response else None,
+                'paymentID': payment_id,
+                'raw_response': query_response,
+            }), default=str)
+        )
+        if query_response and (
+            query_response.get('transactionStatus') == 'Completed'
+            or query_response.get('statusCode') == '0000'
+        ):
+            payment_record.trxID = query_response.get('trxID', payment_record.trxID)
+            completion_ok = complete_membership_payment(payment_record)
+            payment_record.refresh_from_db()
+            member = Member.objects.get(user_profile=payment_record.user_profile)
+            _log_membership_payment('warning', 'payment_execute_already_completed_marked_completed', request, payment=payment_record, member=member, extra={
+                'bkash_statusCode': execute_response.get('statusCode'),
+                'bkash_statusMessage': execute_response.get('statusMessage'),
+                'completion_ok': completion_ok,
+            })
+            if not completion_ok:
+                messages.warning(request, "Payment completed, but membership activation needs admin review.")
+                return redirect('website:homepage')
+            return _render_membership_success(request, payment_record, "Your membership payment was already completed with bKash and finalized locally.")
+        _log_membership_payment('warning', 'payment_execute_already_completed_kept_pending', request, payment=payment_record, member=member, extra={
+            'bkash_statusCode': execute_response.get('statusCode'),
+            'bkash_statusMessage': execute_response.get('statusMessage'),
+        })
+        messages.warning(request, "bKash says this payment was already completed, but local verification was inconclusive. Please contact support.")
+        return redirect('website:homepage')
     else:
-        payment_record.status = 'failed'
-        payment_record.save()
+        if payment_record.status not in MEMBERSHIP_SUCCESS_STATUSES:
+            status_before = payment_record.status
+            payment_record.status = 'failed'
+            payment_record.save()
+            _log_membership_payment('warning', 'payment_finalize_marked_failed', request, payment=payment_record, member=member, extra={
+                'status_before': status_before,
+                'status_after': payment_record.status,
+                'bkash_statusCode': execute_response.get('statusCode') if execute_response else None,
+                'bkash_statusMessage': execute_response.get('statusMessage') if execute_response else None,
+            })
+        else:
+            _log_membership_payment('warning', 'payment_finalize_completed_overwrite_skipped', request, payment=payment_record, member=member, extra={
+                'bkash_statusCode': execute_response.get('statusCode') if execute_response else None,
+                'bkash_statusMessage': execute_response.get('statusMessage') if execute_response else None,
+            })
         msg = execute_response.get('statusMessage') if execute_response else "Finalization failed."
         messages.error(request, f"Payment failed: {msg}")
         return redirect('website:homepage')

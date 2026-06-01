@@ -1437,6 +1437,64 @@ def render_error_page(request, error_message):
     }
     return render(request, 'payment_message.html', context)
 
+
+SUCCESS_PAYMENT_STATUSES = ['completed', 'paid']
+BKASH_ALREADY_COMPLETED_CODE = '2062'
+
+
+def _payment_user_log_context(request):
+    user = getattr(request, 'user', None)
+    user_profile = getattr(user, 'userprofile', None) if user and user.is_authenticated else None
+    return {
+        'user_id': getattr(user, 'id', None),
+        'user_email': getattr(user, 'email', '') or getattr(user, 'username', ''),
+        'username': getattr(user, 'username', ''),
+        'user_profile_id': getattr(user_profile, 'id', None),
+        'user_profile_email': getattr(user_profile, 'email', None),
+    }
+
+
+def _event_payment_log_context(request, payment_status, extra=None):
+    participant = payment_status.participant
+    context = {
+        **_payment_user_log_context(request),
+        'flow': 'event',
+        'event_id': payment_status.event_id,
+        'participant_id': participant.id,
+        'participant_email': participant.email,
+        'payment_status_id': payment_status.id,
+        'merchant_invoice_number': payment_status.merchant_invoice_number,
+        'paymentID': payment_status.transaction_id,
+        'trxID': payment_status.trxID,
+        'amount': str(payment_status.amount),
+        'status': payment_status.status,
+    }
+    if extra:
+        context.update(extra)
+    return context
+
+
+def _log_event_payment(level, message, request, payment_status, extra=None):
+    payload = _event_payment_log_context(request, payment_status, extra)
+    getattr(logger, level)(message + " %s", json.dumps(payload, default=str))
+
+
+def _render_event_payment_success(request, payment_status, payment_details=None, message="Payment successfully finalized."):
+    return render(
+        request,
+        'finalize_payment.html',
+        {
+            'message': message,
+            'payment_details': payment_details or {
+                'paymentID': payment_status.transaction_id,
+                'trxID': payment_status.trxID,
+                'amount': payment_status.amount,
+                'merchantInvoiceNumber': payment_status.merchant_invoice_number,
+                'transactionStatus': payment_status.status,
+            },
+        }
+    )
+
 # Step 1: Grant Token
 
 from django.core.cache import cache
@@ -1597,6 +1655,28 @@ def payment(request, event_id, participant_id):
     participant = get_object_or_404(Participant, id=participant_id)
     event = get_object_or_404(Event, id=event_id)
     payment_status = get_object_or_404(PaymentStatus, participant=participant, event=event)
+    _log_event_payment('info', 'payment_access', request, payment_status, {'method': request.method})
+
+    if participant.user_id != request.user.id:
+        _log_event_payment('warning', 'payment_access_denied', request, payment_status, {
+            'reason': 'participant_owner_mismatch',
+            'owner_user_id': participant.user_id,
+        })
+        messages.error(request, "You are not allowed to access this payment link.")
+        return redirect('registration:home', event_id=event.pk)
+
+    if payment_status.status in SUCCESS_PAYMENT_STATUSES:
+        _log_event_payment('info', 'payment_access_already_completed', request, payment_status, {
+            'method': request.method,
+            'status_before': payment_status.status,
+            'reason': 'payment_already_completed_before_create',
+        })
+        messages.info(request, "This event payment is already completed.")
+        return _render_event_payment_success(
+            request,
+            payment_status,
+            message="Payment already finalized.",
+        )
 
     if request.method == 'POST':
         try:
@@ -1621,9 +1701,17 @@ def payment(request, event_id, participant_id):
                 reverse_lazy('registration:payment_success', kwargs={'event_id': event_id, 'participant_id': participant_id})
             ) + f"?merchant_invoice_number={merchant_invoice_number}"
             payment_response = create_bkash_payment(token, amount, payer_reference, callback_url, merchant_invoice_number)
-            
-            logger.info("Merchant Invoice Number sent to bkash: %s", merchant_invoice_number)
-            
+
+            logger.info(
+                "payment_create_response %s",
+                json.dumps(_event_payment_log_context(request, payment_status, {
+                    'merchant_invoice_number': merchant_invoice_number,
+                    'bkash_statusCode': payment_response.get('statusCode') if payment_response else None,
+                    'bkash_statusMessage': payment_response.get('statusMessage') if payment_response else None,
+                    'paymentID': payment_response.get('paymentID') if payment_response else None,
+                }), default=str)
+            )
+
             if payment_response and payment_response.get("statusCode") == "0000":  # type: ignore[union-attr]
                 # Redirect to bKash payment page
                 return redirect(payment_response["bkashURL"])
@@ -1653,18 +1741,39 @@ def payment_success(request, event_id, participant_id):
     # Save payment ID to database for future reference
     participant = get_object_or_404(Participant, id=participant_id)
     event = get_object_or_404(Event, id=event_id)
-    
-    PaymentStatus.objects.update_or_create(
-        participant=participant,
-        event=event,
-        defaults={
-            'transaction_id': payment_id,
-            'status': 'pending',
-            'amount': participant.get_payable_amount(),
-            'merchant_invoice_number': merchant_invoice_number  # Check if this is being set correctly
-        }
-    )
-    logger.info("Generated Merchant Invoice Number: %s", merchant_invoice_number)
+    payment_status = get_object_or_404(PaymentStatus, participant=participant, event=event)
+    _log_event_payment('info', 'payment_callback_received', request, payment_status, {
+        'paymentID': payment_id,
+        'merchant_invoice_number': merchant_invoice_number,
+        'callback_status': request.GET.get('status'),
+    })
+
+    if participant.user_id != request.user.id:
+        _log_event_payment('warning', 'payment_callback_denied', request, payment_status, {
+            'reason': 'participant_owner_mismatch',
+            'owner_user_id': participant.user_id,
+        })
+        messages.error(request, "You are not allowed to access this payment link.")
+        return redirect('registration:home', event_id=event.pk)
+
+    if payment_status.status in SUCCESS_PAYMENT_STATUSES:
+        _log_event_payment('info', 'payment_callback_already_completed', request, payment_status, {
+            'paymentID': payment_id,
+            'status_before': payment_status.status,
+        })
+        return redirect(reverse('registration:finalize_payment', kwargs={'event_id': event_id, 'participant_id': participant_id}))
+
+    status_before = payment_status.status
+    payment_status.transaction_id = payment_id
+    payment_status.status = 'pending'
+    payment_status.amount = participant.get_payable_amount()
+    payment_status.merchant_invoice_number = merchant_invoice_number or payment_status.merchant_invoice_number
+    payment_status.save()
+    _log_event_payment('info', 'payment_callback_marked_pending', request, payment_status, {
+        'paymentID': payment_id,
+        'status_before': status_before,
+        'status_after': payment_status.status,
+    })
 
     # Redirect to finalize the payment
     messages.success(request, "Payment completed. Finalizing...")
@@ -1683,6 +1792,28 @@ def finalize_payment(request, event_id, participant_id):
     try:
         # Retrieve PaymentStatus record
         payment_status = get_object_or_404(PaymentStatus, participant_id=participant_id, event_id=event_id)
+        _log_event_payment('info', 'payment_finalize_access', request, payment_status, {
+            'method': request.method,
+            'status_before': payment_status.status,
+        })
+
+        if payment_status.participant.user_id != request.user.id:
+            _log_event_payment('warning', 'payment_finalize_denied', request, payment_status, {
+                'reason': 'participant_owner_mismatch',
+                'owner_user_id': payment_status.participant.user_id,
+            })
+            messages.error(request, "You are not allowed to access this payment link.")
+            return redirect('registration:home', event_id=event_id)
+
+        if payment_status.status in SUCCESS_PAYMENT_STATUSES:
+            _log_event_payment('info', 'payment_finalize_skip_already_completed', request, payment_status, {
+                'status_before': payment_status.status,
+            })
+            return _render_event_payment_success(
+                request,
+                payment_status,
+                message="Payment already finalized.",
+            )
 
         # Execute payment logic
         token = get_bkash_token()
@@ -1697,16 +1828,65 @@ def finalize_payment(request, event_id, participant_id):
         execute_response = execute_payment(token, payment_status.transaction_id)
 
         # Debug point: Log the execute response
-        try:
-            logger.info("Execute Payment API Response: %s", json.dumps(execute_response))
-        except Exception:
-            logger.info("Execute Payment API Response (raw): %s", str(execute_response))
+        logger.info(
+            "payment_execute_response %s",
+            json.dumps(_event_payment_log_context(request, payment_status, {
+                'bkash_statusCode': execute_response.get('statusCode') if execute_response else None,
+                'bkash_statusMessage': execute_response.get('statusMessage') if execute_response else None,
+                'paymentID': execute_response.get('paymentID') if execute_response else payment_status.transaction_id,
+                'trxID': execute_response.get('trxID') if execute_response else payment_status.trxID,
+                'status_before': payment_status.status,
+                'raw_response': execute_response,
+            }), default=str)
+        )
 
         # Handle specific Execute API error cases
         if execute_response:
             status_code = execute_response.get('statusCode')
             status_message = execute_response.get('statusMessage', 'Invalid payment state.')
-            
+
+            if status_code == BKASH_ALREADY_COMPLETED_CODE:
+                query_response = payment_query(token, payment_status.transaction_id)
+                logger.info(
+                    "payment_query_after_already_completed %s",
+                    json.dumps(_event_payment_log_context(request, payment_status, {
+                        'bkash_statusCode': query_response.get('statusCode') if query_response else None,
+                        'bkash_statusMessage': query_response.get('statusMessage') if query_response else None,
+                        'paymentID': payment_status.transaction_id,
+                        'raw_response': query_response,
+                    }), default=str)
+                )
+                if query_response and (
+                    query_response.get('transactionStatus') == 'Completed'
+                    or query_response.get('statusCode') == '0000'
+                ):
+                    status_before = payment_status.status
+                    payment_status.status = 'completed'
+                    payment_status.amount = query_response.get('amount', payment_status.amount)
+                    payment_status.merchant_invoice_number = query_response.get('merchantInvoiceNumber', payment_status.merchant_invoice_number)
+                    payment_status.transaction_id = query_response.get('paymentID', payment_status.transaction_id)
+                    payment_status.trxID = query_response.get('trxID', payment_status.trxID)
+                    payment_status.save()
+                    _log_event_payment('warning', 'payment_execute_already_completed_marked_completed', request, payment_status, {
+                        'status_before': status_before,
+                        'status_after': payment_status.status,
+                        'bkash_statusCode': status_code,
+                    })
+                    return _render_event_payment_success(
+                        request,
+                        payment_status,
+                        query_response,
+                        message="Payment already completed with bKash and finalized locally.",
+                    )
+                _log_event_payment('warning', 'payment_execute_already_completed_kept_pending', request, payment_status, {
+                    'bkash_statusCode': status_code,
+                    'bkash_statusMessage': status_message,
+                })
+                return render(request, 'payment_message.html', {
+                    'title': 'Payment Needs Review',
+                    'error_message': 'bKash says this payment was already completed, but local verification was inconclusive. Please contact support.',
+                })
+
             # Map known error cases
             error_messages = {
                 "2001": "Duplicate transaction detected. Please try again.",
@@ -1714,20 +1894,36 @@ def finalize_payment(request, event_id, participant_id):
                 "4001": "Wrong OTP provided. Please restart the payment.",
                 "5001": "Wrong PIN provided. Please restart the payment.",
             }
-            
+
             # Handle specific errors
             if status_code in error_messages:
-                payment_status.status = 'failed'
-                payment_status.save()
+                if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+                    status_before = payment_status.status
+                    payment_status.status = 'failed'
+                    payment_status.save()
+                    _log_event_payment('warning', 'payment_finalize_marked_failed', request, payment_status, {
+                        'status_before': status_before,
+                        'status_after': payment_status.status,
+                        'bkash_statusCode': status_code,
+                        'bkash_statusMessage': status_message,
+                    })
                 return render(request, 'payment_message.html', {
                     'title': 'Payment Failure',
                     'error_message': error_messages[status_code]
                 })
-            
+
             # Handle unknown status codes
             elif status_code != "0000":
-                payment_status.status = 'failed'
-                payment_status.save()
+                if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+                    status_before = payment_status.status
+                    payment_status.status = 'failed'
+                    payment_status.save()
+                    _log_event_payment('warning', 'payment_finalize_marked_failed', request, payment_status, {
+                        'status_before': status_before,
+                        'status_after': payment_status.status,
+                        'bkash_statusCode': status_code,
+                        'bkash_statusMessage': status_message,
+                    })
                 return render(request, 'payment_message.html', {
                     'title': 'Payment Failure',
                     'error_message': status_message
@@ -1735,16 +1931,26 @@ def finalize_payment(request, event_id, participant_id):
 
         # Handle Execute API Success
         if execute_response and execute_response.get('statusCode') == '0000':
+            status_before = payment_status.status
             payment_status.status = 'completed'
             payment_status.amount = execute_response.get('amount', payment_status.amount)
             payment_status.merchant_invoice_number = execute_response.get('merchantInvoiceNumber', payment_status.merchant_invoice_number)
             payment_status.transaction_id = execute_response.get('paymentID')
             payment_status.trxID = execute_response.get('trxID')  # Use trxID from execute response
             payment_status.save()
+            _log_event_payment('info', 'payment_finalize_marked_completed', request, payment_status, {
+                'status_before': status_before,
+                'status_after': payment_status.status,
+                'bkash_statusCode': execute_response.get('statusCode'),
+                'bkash_statusMessage': execute_response.get('statusMessage'),
+            })
 
             # Generate Invoice and Send Email
             try:
                 invoice_path = generate_invoice(payment_status.participant, payment_status.event, payment_status)
+                _log_event_payment('info', 'payment_invoice_generated', request, payment_status, {
+                    'invoice_path': invoice_path,
+                })
                 send_invoice_email(payment_status.participant, payment_status.event, payment_status, invoice_path)
             except Exception as e:
                 logger.exception("Invoice/Email Error: %s", e)
@@ -1761,8 +1967,15 @@ def finalize_payment(request, event_id, participant_id):
             })
 
         # Fallback: Handle incomplete Execute API response
-        payment_status.status = 'failed'
-        payment_status.save()
+        if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+            status_before = payment_status.status
+            payment_status.status = 'failed'
+            payment_status.save()
+            _log_event_payment('warning', 'payment_finalize_marked_failed', request, payment_status, {
+                'status_before': status_before,
+                'status_after': payment_status.status,
+                'reason': 'incomplete_execute_response',
+            })
         return render(request, 'payment_message.html', {
             'title': 'Payment Failure',
             'error_message': 'Payment finalization failed. Please contact support.',
@@ -1780,9 +1993,28 @@ def finalize_payment(request, event_id, participant_id):
 def payment_failure(request, event_id, participant_id):
     participant = get_object_or_404(Participant, id=participant_id)
     event = get_object_or_404(Event, id=event_id)
+    payment_status = get_object_or_404(PaymentStatus, participant=participant, event=event)
+    _log_event_payment('warning', 'payment_failure_callback', request, payment_status, {
+        'reason': request.GET.get('reason', "Payment failed. Please try again."),
+        'status_before': payment_status.status,
+    })
+
+    if participant.user_id != request.user.id:
+        _log_event_payment('warning', 'payment_failure_denied', request, payment_status, {
+            'reason': 'participant_owner_mismatch',
+            'owner_user_id': participant.user_id,
+        })
+        messages.error(request, "You are not allowed to access this payment link.")
+        return redirect('registration:home', event_id=event.pk)
 
     # Update payment status to 'failed'
-    PaymentStatus.objects.filter(participant=participant, event=event).update(status='failed')
+    if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+        payment_status.status = 'failed'
+        payment_status.save()
+    else:
+        _log_event_payment('warning', 'payment_failure_completed_overwrite_skipped', request, payment_status, {
+            'status_after': payment_status.status,
+        })
 
     # Optional: Show a failure reason
     failure_reason = request.GET.get('reason', "Payment failed. Please try again.")

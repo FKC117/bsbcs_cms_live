@@ -186,7 +186,6 @@
                                         <p class="mt-1 text-sm">Your membership is active. The validity date will be updated by the BSBCS admin team.</p>
                                     {% endif %}
                                 </div>
-                                <a href="{% url 'website:membership_payment_init' %}" class="block rounded-xl border border-pink-300 px-4 py-3 text-center font-bold text-pink-700 hover:bg-pink-50">Renew Membership</a>
                             {% elif member and member.approval_status == 'pending' %}
                                 <div class="rounded-xl bg-blue-50 p-4 text-blue-800">
                                     <strong>Application under review</strong>
