@@ -1004,3 +1004,50 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertIn('Event Scoped Session', mail.outbox[0].body)
         self.assertIn('Panelist', mail.outbox[0].body)
         self.assertNotIn('Do Not Include Session', mail.outbox[0].body)
+
+    def test_program_builder_event_context_lists_active_events_only(self):
+        self.client.force_login(self.staff_user)
+        closed_event = Event.objects.create(
+            name='Closed Builder Event',
+            slogan='Closed program',
+            year=2025,
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 2),
+            location='Dhaka',
+            event_status='closed',
+            registration='Closed',
+        )
+        upcoming_event = Event.objects.create(
+            name='Upcoming Builder Event',
+            slogan='Upcoming program',
+            year=2027,
+            start_date=date(2027, 1, 1),
+            end_date=date(2027, 1, 2),
+            location='Dhaka',
+            event_status='upcoming',
+            registration='Open',
+        )
+
+        response = self.client.get(reverse('dashboard_program_session_builder'))
+
+        self.assertContains(response, self.event.name)
+        self.assertNotContains(response, closed_event.name)
+        self.assertNotContains(response, upcoming_event.name)
+
+    def test_program_builder_ignores_inactive_selected_event(self):
+        self.client.force_login(self.staff_user)
+        closed_event = Event.objects.create(
+            name='Closed Selected Event',
+            slogan='Closed selected program',
+            year=2025,
+            start_date=date(2025, 2, 1),
+            end_date=date(2025, 2, 2),
+            location='Dhaka',
+            event_status='closed',
+            registration='Closed',
+        )
+
+        response = self.client.get(f"{reverse('dashboard_program_session_builder')}?event={closed_event.id}")
+
+        self.assertContains(response, 'Choose an event before building schedule.')
+        self.assertNotContains(response, f'Prepare {closed_event.name}')

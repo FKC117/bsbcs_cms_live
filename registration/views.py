@@ -2808,10 +2808,11 @@ def dashboard_staff_activity(request):
 def dashboard_program_session_builder(request):
     from website.models import SiteSettings
 
+    active_builder_events = Event.objects.filter(event_status='active').order_by('-year', 'name')
     selected_event = None
     event_id = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
     if event_id:
-        selected_event = Event.objects.filter(pk=event_id).first()
+        selected_event = active_builder_events.filter(pk=event_id).first()
 
     program_days = ProgramDay.objects.none()
     hall_rooms = HallRoom.objects.none()
@@ -3469,7 +3470,7 @@ def dashboard_program_session_builder(request):
         'session_form': session_form,
         'item_formset': item_formset,
         'selected_event': selected_event,
-        'events': Event.objects.order_by('-year', 'name'),
+        'events': active_builder_events,
         'people_count': ProgramPerson.objects.count(),
         'event_program_people': event_program_people,
         'assigned_event_program_people': assigned_event_program_people,
