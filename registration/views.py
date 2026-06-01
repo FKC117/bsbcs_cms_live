@@ -34,7 +34,11 @@ from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db import transaction
-from .program_emails import build_program_assignment_summary, send_program_assignment_email
+from .program_emails import (
+    build_program_assignment_summary,
+    count_program_assignment_talks,
+    send_program_assignment_email,
+)
 
 
 # Payment logger (writes to payment.log via settings)
@@ -3095,16 +3099,31 @@ def dashboard_program_session_builder(request):
             Q(session_roles__session__event=selected_event)
             | Q(item_roles__item__session__event=selected_event)
         ).distinct().order_by('name')
+        program_email_log_map = {
+            log.person_id: log
+            for log in ProgramPersonEmailLog.objects.filter(
+                event=selected_event,
+                person__in=assigned_event_program_people,
+            )
+        }
         for person in assigned_event_program_people:
             assignments = build_program_assignment_summary(person, event=selected_event)
+            email_log = program_email_log_map.get(person.id)
             program_email_people.append({
                 'person': person,
                 'assignments': assignments,
                 'session_count': len(assignments),
+                'talk_count': count_program_assignment_talks(assignments),
                 'is_sendable': bool(person.email and assignments),
+                'email_log': email_log,
+                'email_sent': bool(email_log and email_log.last_sent_at),
             })
     program_email_sendable_count = sum(
         candidate['is_sendable']
+        for candidate in program_email_people
+    )
+    program_email_sent_count = sum(
+        candidate['email_sent']
         for candidate in program_email_people
     )
     program_email_missing_email_count = sum(
@@ -3528,6 +3547,22 @@ def dashboard_program_session_builder(request):
                     else:
                         if sent:
                             sent_count += 1
+                            email_log, _ = ProgramPersonEmailLog.objects.get_or_create(
+                                event=selected_event,
+                                person=person,
+                            )
+                            email_log.last_sent_at = timezone.now()
+                            email_log.last_sent_by = request.user
+                            email_log.send_count = (email_log.send_count or 0) + 1
+                            email_log.last_session_count = len(reason)
+                            email_log.last_talk_count = count_program_assignment_talks(reason)
+                            email_log.save(update_fields=[
+                                'last_sent_at',
+                                'last_sent_by',
+                                'send_count',
+                                'last_session_count',
+                                'last_talk_count',
+                            ])
                         elif reason == 'missing_email':
                             missing_email_count += 1
                         else:
@@ -3730,6 +3765,7 @@ def dashboard_program_session_builder(request):
         'person_form': person_form,
         'program_email_people': program_email_people,
         'program_email_sendable_count': program_email_sendable_count,
+        'program_email_sent_count': program_email_sent_count,
         'program_email_missing_email_count': program_email_missing_email_count,
         'profile_search_query': profile_search_query,
         'profile_search_results': profile_search_results,

@@ -17,6 +17,12 @@
                             <p style="margin-top:0;">Dear {{ person.name }},</p>
                             <p>We are pleased to share the current program details prepared for your participation. We sincerely appreciate your contribution to the {{ site_name }} program.</p>
                             <p>Please review the session information below. If any detail needs clarification, the {{ site_name }} team will be happy to assist.</p>
+                            <p style="margin:16px 0 0;padding:12px;border-radius:10px;background:#f3f8fd;color:#102033;font-size:14px;line-height:1.6;">
+                                <strong>Summary:</strong>
+                                {{ session_count }} session{{ session_count|pluralize }}
+                                {% if talk_count %} and {{ talk_count }} talk/activity role{{ talk_count|pluralize }}{% endif %}
+                                included in this email.
+                            </p>
 
                             {% for assignment in assignments %}
                                 <table width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0;border:1px solid #d7e4f2;border-radius:12px;overflow:hidden;">

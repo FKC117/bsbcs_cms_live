@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -1093,6 +1093,23 @@ class ProgramPersonAdmin(admin.ModelAdmin):
                 f"{failed_count} program details email(s) failed.",
                 messages.ERROR,
             )
+
+
+@admin.register(ProgramPersonEmailLog)
+class ProgramPersonEmailLogAdmin(admin.ModelAdmin):
+    list_display = (
+        'person',
+        'event',
+        'last_sent_at',
+        'last_sent_by',
+        'send_count',
+        'last_session_count',
+        'last_talk_count',
+    )
+    list_filter = ('event', 'last_sent_at')
+    search_fields = ('person__name', 'person__email', 'event__name', 'last_sent_by__username')
+    autocomplete_fields = ('person', 'event', 'last_sent_by')
+    readonly_fields = ('last_sent_at', 'send_count', 'last_session_count', 'last_talk_count')
 
 
 class ProgramSessionFacultyInline(admin.TabularInline):

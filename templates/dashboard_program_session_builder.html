@@ -924,7 +924,7 @@
                                 <input type="hidden" name="event" value="{{ selected_event.id }}">
                                 <input type="hidden" name="setup_action" value="send_program_person_emails">
 
-                                <div class="grid gap-3 sm:grid-cols-3">
+                                <div class="grid gap-3 sm:grid-cols-4">
                                     <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
                                         <div class="text-[10px] font-black uppercase tracking-wider text-slate-500">Assigned people</div>
                                         <div class="mt-1 text-2xl font-black text-bsbcs-navy">{{ program_email_people|length }}</div>
@@ -932,6 +932,10 @@
                                     <div class="rounded-2xl border border-green-100 bg-green-50 p-3">
                                         <div class="text-[10px] font-black uppercase tracking-wider text-slate-500">Ready to email</div>
                                         <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ program_email_sendable_count }}</div>
+                                    </div>
+                                    <div class="rounded-2xl border {% if program_email_sent_count %}border-blue-100 bg-blue-50{% else %}border-line bg-slate-50{% endif %} p-3">
+                                        <div class="text-[10px] font-black uppercase tracking-wider text-slate-500">Already sent</div>
+                                        <div class="mt-1 text-2xl font-black {% if program_email_sent_count %}text-bsbcs-blue{% else %}text-slate-500{% endif %}">{{ program_email_sent_count }}</div>
                                     </div>
                                     <div class="rounded-2xl border {% if program_email_missing_email_count %}border-amber-100 bg-amber-50{% else %}border-line bg-slate-50{% endif %} p-3">
                                         <div class="text-[10px] font-black uppercase tracking-wider text-slate-500">Missing email</div>
@@ -942,14 +946,14 @@
                                 <div class="mt-4 max-h-[56vh] overflow-auto rounded-2xl border border-line">
                                     {% if program_email_people %}
                                         <div class="min-w-[700px] divide-y divide-line">
-                                            <div class="grid grid-cols-[52px_minmax(0,1.2fr)_minmax(0,1.5fr)_120px] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
+                                            <div class="grid grid-cols-[52px_minmax(0,1.2fr)_minmax(0,1.5fr)_150px] gap-3 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">
                                                 <div>Send</div>
                                                 <div>Program person</div>
                                                 <div>Program details in this event</div>
                                                 <div>Email state</div>
                                             </div>
                                             {% for candidate in program_email_people %}
-                                                <label class="grid grid-cols-[52px_minmax(0,1.2fr)_minmax(0,1.5fr)_120px] items-start gap-3 px-4 py-3 text-sm text-slate-700 {% if not candidate.is_sendable %}bg-slate-50/70{% endif %}">
+                                                <label class="grid grid-cols-[52px_minmax(0,1.2fr)_minmax(0,1.5fr)_150px] items-start gap-3 px-4 py-3 text-sm text-slate-700 {% if not candidate.is_sendable %}bg-slate-50/70{% endif %}">
                                                     <span class="pt-1">
                                                         <input type="checkbox" name="program_person_ids" value="{{ candidate.person.id }}" class="h-4 w-4 rounded border-slate-300 text-bsbcs-blue focus:ring-bsbcs-blue" {% if candidate.is_sendable %}checked{% else %}disabled{% endif %}>
                                                     </span>
@@ -959,6 +963,9 @@
                                                     </span>
                                                     <span class="space-y-1">
                                                         <span class="block text-xs font-black text-bsbcs-blue">{{ candidate.session_count }} session{{ candidate.session_count|pluralize }}</span>
+                                                        {% if candidate.talk_count %}
+                                                            <span class="block text-xs font-bold text-slate-500">{{ candidate.talk_count }} talk/activity role{{ candidate.talk_count|pluralize }}</span>
+                                                        {% endif %}
                                                         {% for assignment in candidate.assignments|slice:":3" %}
                                                             <span class="block text-xs font-semibold leading-5 text-slate-600">
                                                                 {{ assignment.session.title }}
@@ -971,10 +978,16 @@
                                                         {% endif %}
                                                     </span>
                                                     <span class="pt-1">
-                                                        {% if candidate.is_sendable %}
-                                                            <span class="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-bsbcs-green ring-1 ring-green-100">Ready</span>
+                                                        {% if candidate.email_sent %}
+                                                            <span class="block rounded-full bg-blue-50 px-2.5 py-1 text-center text-[10px] font-black uppercase tracking-wider text-bsbcs-blue ring-1 ring-blue-100">Sent</span>
+                                                            <span class="mt-1 block text-[11px] font-semibold leading-4 text-slate-500">
+                                                                {{ candidate.email_log.last_sent_at|date:"M j, Y g:i A" }}
+                                                                {% if candidate.email_log.send_count > 1 %}<br>Sent {{ candidate.email_log.send_count }} times{% endif %}
+                                                            </span>
+                                                        {% elif candidate.is_sendable %}
+                                                            <span class="block rounded-full bg-green-50 px-2.5 py-1 text-center text-[10px] font-black uppercase tracking-wider text-bsbcs-green ring-1 ring-green-100">Ready</span>
                                                         {% else %}
-                                                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-bsbcs-amber ring-1 ring-amber-100">Fix email</span>
+                                                            <span class="block rounded-full bg-amber-50 px-2.5 py-1 text-center text-[10px] font-black uppercase tracking-wider text-bsbcs-amber ring-1 ring-amber-100">Fix email</span>
                                                         {% endif %}
                                                     </span>
                                                 </label>

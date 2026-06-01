@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core import mail
 from registration.models import (
-    Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson, UserProfile,
+    Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission
 )
@@ -1004,6 +1004,15 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertIn('Event Scoped Session', mail.outbox[0].body)
         self.assertIn('Panelist', mail.outbox[0].body)
         self.assertNotIn('Do Not Include Session', mail.outbox[0].body)
+        email_log = ProgramPersonEmailLog.objects.get(event=self.event, person=self.person1)
+        self.assertEqual(email_log.send_count, 1)
+        self.assertEqual(email_log.last_sent_by, self.staff_user)
+        self.assertEqual(email_log.last_session_count, 1)
+        self.assertEqual(email_log.last_talk_count, 0)
+
+        page_response = self.client.get(builder_url)
+        self.assertContains(page_response, 'Already sent')
+        self.assertContains(page_response, 'Sent')
 
     def test_program_builder_event_context_lists_active_events_only(self):
         self.client.force_login(self.staff_user)

@@ -712,6 +712,25 @@ class ProgramPerson(models.Model):
         return f"{self.name} - {details}" if details else self.name
 
 
+class ProgramPersonEmailLog(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_person_email_logs')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='event_email_logs')
+    last_sent_at = models.DateTimeField(blank=True, null=True)
+    last_sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_person_emails_sent')
+    send_count = models.PositiveIntegerField(default=0)
+    last_session_count = models.PositiveIntegerField(default=0)
+    last_talk_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('event', 'person')
+        ordering = ['event__start_date', 'person__name']
+        verbose_name = 'Program Person Email Log'
+        verbose_name_plural = 'Program Person Email Logs'
+
+    def __str__(self):
+        return f"{self.person} - {self.event} email summary"
+
+
 class ProgramSession(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_sessions')
     time_slot = models.ForeignKey(TimeSlot, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')

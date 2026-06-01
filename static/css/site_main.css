@@ -3558,8 +3558,8 @@ button{
   grid-template-columns: 120px 120px 170px 140px minmax(0,1fr) 80px;
 }
 
-.grid-cols-\[52px_minmax\(0\2c 1\.2fr\)_minmax\(0\2c 1\.5fr\)_120px\]{
-  grid-template-columns: 52px minmax(0,1.2fr) minmax(0,1.5fr) 120px;
+.grid-cols-\[52px_minmax\(0\2c 1\.2fr\)_minmax\(0\2c 1\.5fr\)_150px\]{
+  grid-template-columns: 52px minmax(0,1.2fr) minmax(0,1.5fr) 150px;
 }
 
 .grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_160px_minmax\(0\2c 1fr\)_94px\]{
@@ -4017,11 +4017,6 @@ button{
 .border-pink-100{
   --tw-border-opacity: 1;
   border-color: rgb(252 231 243 / var(--tw-border-opacity, 1));
-}
-
-.border-pink-300{
-  --tw-border-opacity: 1;
-  border-color: rgb(249 168 212 / var(--tw-border-opacity, 1));
 }
 
 .border-pink-500{
@@ -5200,6 +5195,11 @@ button{
 
 .tracking-widest{
   letter-spacing: 0.1em;
+}
+
+.\!text-white{
+  --tw-text-opacity: 1 !important;
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1)) !important;
 }
 
 .\!text-white\/75{
@@ -6408,6 +6408,10 @@ button{
 
   .sm\:grid-cols-3{
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-4{
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_150px_auto\]{

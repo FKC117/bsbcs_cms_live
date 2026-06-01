@@ -71,6 +71,10 @@ def build_program_assignment_summary(person, event=None):
     return summarized_assignments
 
 
+def count_program_assignment_talks(assignments):
+    return sum(len(assignment['talks']) for assignment in assignments)
+
+
 def program_assignment_email_subject(assignments):
     events = {
         assignment['session'].event
@@ -94,6 +98,7 @@ def send_program_assignment_email(person, event=None):
         'person': person,
         'assignments': assignments,
         'session_count': len(assignments),
+        'talk_count': count_program_assignment_talks(assignments),
         'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
         'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
     }
