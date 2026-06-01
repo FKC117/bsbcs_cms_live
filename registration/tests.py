@@ -114,6 +114,18 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Day 1")
         self.assertContains(response, "Main Auditorium")
 
+    def test_global_dashboard_shows_guided_workflows(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('global_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Guided workflows")
+        self.assertContains(response, "Participant approval")
+        self.assertContains(response, "Membership approval")
+        self.assertContains(response, "Corporate approval")
+        self.assertContains(response, "Abstract approval")
+        self.assertContains(response, "Event payment details")
+        self.assertContains(response, "Membership payment details")
+
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)
         url = reverse('dashboard_program_session_builder')
