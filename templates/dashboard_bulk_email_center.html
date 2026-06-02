@@ -5,6 +5,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bulk Email Center</title>
+    {% if selected_campaign_progress.is_sending %}
+        <meta http-equiv="refresh" content="8">
+    {% endif %}
     <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
     <style>
         body { margin: 0; background: #EEF6FB; }
@@ -272,20 +275,41 @@
                     <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
                         <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
                             <div class="text-xs font-black uppercase text-slate-500">Recipients</div>
-                            <div class="mt-1 text-2xl font-black text-ink">{{ selected_campaign.recipient_count }}</div>
+                            <div class="mt-1 text-2xl font-black text-ink">{{ selected_campaign_progress.total }}</div>
                         </div>
                         <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
                             <div class="text-xs font-black uppercase text-slate-500">Pending</div>
-                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign.pending_count }}</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign_progress.pending }}</div>
                         </div>
                         <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
                             <div class="text-xs font-black uppercase text-slate-500">Sent</div>
-                            <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ selected_campaign.sent_count }}</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ selected_campaign_progress.sent }}</div>
                         </div>
                         <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
                             <div class="text-xs font-black uppercase text-slate-500">Failed</div>
-                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign.failed_count }}</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign_progress.failed }}</div>
                         </div>
+                    </div>
+
+                    <div class="mt-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Delivery progress</div>
+                                <div class="mt-1 text-sm font-semibold text-slate-600">
+                                    {{ selected_campaign_progress.completed }} of {{ selected_campaign_progress.total }} processed
+                                    {% if selected_campaign_progress.pending %}with {{ selected_campaign_progress.pending }} pending{% endif %}
+                                </div>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1.5 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">
+                                {{ selected_campaign_progress.percent }}%
+                            </div>
+                        </div>
+                        <div class="mt-3 h-3 overflow-hidden rounded-full bg-white ring-1 ring-blue-100">
+                            <div class="h-full rounded-full bg-gradient-to-r from-bsbcs-blue to-bsbcs-teal transition-all" style="width: {{ selected_campaign_progress.percent }}%;"></div>
+                        </div>
+                        {% if selected_campaign_progress.is_sending %}
+                            <div class="mt-2 text-xs font-bold text-bsbcs-blue">Sending is running in the Celery worker. This page refreshes every 8 seconds while the campaign is in progress.</div>
+                        {% endif %}
                     </div>
 
                     <div class="mt-4 grid gap-3">
@@ -394,6 +418,20 @@
                                 <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Step 4</div>
                                 <h3 class="mt-1 text-lg font-black text-ink">Send and audit</h3>
                                 <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Only pending rows are sent. Already sent recipients are kept untouched.</p>
+                                <div class="mt-4 rounded-xl border border-line bg-white p-3">
+                                    <div class="flex items-center justify-between gap-3 text-xs font-black uppercase text-slate-500">
+                                        <span>Processed</span>
+                                        <span class="text-bsbcs-blue">{{ selected_campaign_progress.percent }}%</span>
+                                    </div>
+                                    <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div class="h-full rounded-full bg-gradient-to-r from-bsbcs-green to-bsbcs-teal" style="width: {{ selected_campaign_progress.percent }}%;"></div>
+                                    </div>
+                                    <div class="mt-2 grid grid-cols-3 gap-2 text-center text-xs font-black">
+                                        <div class="rounded-lg bg-green-50 px-2 py-2 text-bsbcs-green">{{ selected_campaign_progress.sent }} sent</div>
+                                        <div class="rounded-lg bg-pink-50 px-2 py-2 text-bsbcs-pink">{{ selected_campaign_progress.failed }} failed</div>
+                                        <div class="rounded-lg bg-blue-50 px-2 py-2 text-bsbcs-blue">{{ selected_campaign_progress.pending }} pending</div>
+                                    </div>
+                                </div>
                                 <form method="post" class="mt-4">
                                     {% csrf_token %}
                                     <input type="hidden" name="bulk_email_action" value="send_pending">

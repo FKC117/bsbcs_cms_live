@@ -7,6 +7,21 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def csv_config(name, default=''):
+    raw_value = config(name, default=default)
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
+
+def unique_list(items):
+    seen = set()
+    values = []
+    for item in items:
+        if item not in seen:
+            values.append(item)
+            seen.add(item)
+    return values
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -16,22 +31,26 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-# Apache production hosts - include IP, primary domain, and www variant
-ALLOWED_HOSTS = [
+# Apache production hosts - include IP, primary domain, beta, and www variants.
+DEFAULT_ALLOWED_HOSTS = [
     '163.53.151.197',
     'bsbcs.analyticabd.xyz',       # Direct IP access
     'bsbcs.info',           # Primary domain
     'www.bsbcs.info',       # www subdomain
+    'beta.bsbcs.info',      # Beta subdomain
     'localhost',            # Local testing (optional, remove if not needed)
     '127.0.0.1',           # Loopback (optional, remove if not needed)
 ]
+ALLOWED_HOSTS = unique_list(DEFAULT_ALLOWED_HOSTS + csv_config('ALLOWED_HOSTS'))
 
 # CSRF Trusted Origins for HTTPS
-CSRF_TRUSTED_ORIGINS = [
+DEFAULT_CSRF_TRUSTED_ORIGINS = [
     'https://bsbcs.info',
     'https://www.bsbcs.info',
+    'https://beta.bsbcs.info',
     'https://bsbcs.analyticabd.xyz',
 ]
+CSRF_TRUSTED_ORIGINS = unique_list(DEFAULT_CSRF_TRUSTED_ORIGINS + csv_config('CSRF_TRUSTED_ORIGINS'))
 
 # Handle HTTPS proxy headers from Apache
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -194,6 +213,17 @@ EMAIL_USE_TLS = False
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('EMAIL_HOST_USER', default='noreply@bsbcs.org')
+
+# Celery / Redis
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = config('CELERY_TASK_TIME_LIMIT', default=1800, cast=int)
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
 
 # Site Configuration
 SITE_NAME = 'BSBCS'

@@ -39,6 +39,11 @@ from .program_emails import (
     count_program_assignment_talks,
     send_program_assignment_email,
 )
+from .bulk_email_services import (
+    prepare_bulk_email_recipients,
+    upsert_bulk_email_recipient,
+)
+from .tasks import send_pending_bulk_email_campaign
 
 
 # Payment logger (writes to payment.log via settings)
@@ -3436,7 +3441,7 @@ def dashboard_bulk_email_center(request):
             if not campaign:
                 messages.error(request, 'Choose a valid campaign first.')
             else:
-                added = _prepare_bulk_email_recipients(campaign)
+                added = prepare_bulk_email_recipients(campaign)
                 messages.success(request, f'Recipient preparation complete. New recipients added: {added}.')
 
         elif action == 'add_manual_recipient':
@@ -3445,7 +3450,7 @@ def dashboard_bulk_email_center(request):
             name = (request.POST.get('recipient_name') or '').strip()
             if not campaign:
                 messages.error(request, 'Choose a valid campaign first.')
-            elif _bulk_email_upsert_recipient(
+            elif upsert_bulk_email_recipient(
                 campaign,
                 email,
                 name=name,
@@ -3463,27 +3468,18 @@ def dashboard_bulk_email_center(request):
                 messages.error(request, 'Choose a valid campaign first.')
             else:
                 if not campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).exists():
-                    _prepare_bulk_email_recipients(campaign)
+                    prepare_bulk_email_recipients(campaign)
                 pending_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
-                sent = 0
-                failed = 0
-                campaign.status = BulkEmail.STATUS_SENDING
-                campaign.save(update_fields=['status', 'updated_at'])
-                for recipient in pending_recipients:
-                    if _send_bulk_email_recipient(request, campaign, recipient):
-                        sent += 1
-                    else:
-                        failed += 1
-                campaign.status = BulkEmail.STATUS_PARTIAL if campaign.failed_count else BulkEmail.STATUS_SENT
-                campaign.save(update_fields=['status', 'updated_at'])
-                if sent:
-                    BulkEmailsReporting.objects.create(
-                        subject=campaign.subject,
-                        body=campaign.body,
-                        recipients=', '.join(campaign.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).values_list('email', flat=True)),
-                        attachment=campaign.attachment if campaign.attachment else None,
+                if not pending_recipients.exists():
+                    messages.warning(request, 'No pending recipients are available for this campaign.')
+                else:
+                    campaign.status = BulkEmail.STATUS_SENDING
+                    campaign.save(update_fields=['status', 'updated_at'])
+                    task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
+                    messages.success(
+                        request,
+                        f'Bulk email send queued for {pending_recipients.count()} pending recipients. Task ID: {task.id}.',
                     )
-                messages.success(request, f'Send complete. Sent: {sent}. Failed: {failed}.')
 
         url = reverse('dashboard_bulk_email_center')
         if redirect_campaign_id:
@@ -3501,6 +3497,22 @@ def dashboard_bulk_email_center(request):
     selected_logs_qs = selected_campaign.send_logs.select_related('recipient', 'sent_by').order_by('-created_at') if selected_campaign else BulkEmailSendLog.objects.none()
     selected_recipients_page = Paginator(selected_recipients_qs, 15).get_page(request.GET.get('recipient_page'))
     selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
+    selected_campaign_progress = None
+    if selected_campaign:
+        recipient_total = selected_campaign.recipient_count
+        sent_total = selected_campaign.sent_count
+        failed_total = selected_campaign.failed_count
+        pending_total = selected_campaign.pending_count
+        completed_total = sent_total + failed_total
+        selected_campaign_progress = {
+            'total': recipient_total,
+            'sent': sent_total,
+            'failed': failed_total,
+            'pending': pending_total,
+            'completed': completed_total,
+            'percent': int((completed_total / recipient_total) * 100) if recipient_total else 0,
+            'is_sending': selected_campaign.status == BulkEmail.STATUS_SENDING,
+        }
     base_query = {}
     if selected_campaign:
         base_query['campaign'] = selected_campaign.id
@@ -3545,6 +3557,7 @@ def dashboard_bulk_email_center(request):
         'site_settings': SiteSettings.objects.first(),
         'campaigns': campaigns,
         'selected_campaign': selected_campaign,
+        'selected_campaign_progress': selected_campaign_progress,
         'selected_recipients': selected_recipients_page,
         'selected_logs': selected_logs_page,
         'recipient_page_obj': selected_recipients_page,

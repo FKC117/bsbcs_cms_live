@@ -1532,6 +1532,7 @@ from django.core.mail import EmailMessage
 from django.core.validators import validate_email
 from django.contrib.auth import get_user_model
 from django.shortcuts import render
+from .tasks import send_pending_bulk_email_campaign
 
 User = get_user_model()  # Fetch the user model
 
@@ -1777,29 +1778,18 @@ class BulkEmailAdmin(admin.ModelAdmin):
         return True
 
     def send_pending_recipients(self, request, queryset):
-        sent = 0
-        failed = 0
+        queued = 0
         for bulk_email in queryset:
             pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
             if not pending_recipients.exists():
                 self._prepare_recipients(bulk_email)
                 pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
-            bulk_email.status = BulkEmail.STATUS_SENDING
-            bulk_email.save(update_fields=['status', 'updated_at'])
-            for recipient in pending_recipients:
-                if self._send_one_recipient(request, bulk_email, recipient):
-                    sent += 1
-                else:
-                    failed += 1
-            bulk_email.status = BulkEmail.STATUS_PARTIAL if bulk_email.failed_count else BulkEmail.STATUS_SENT
-            bulk_email.save(update_fields=['status', 'updated_at'])
-            BulkEmailsReporting.objects.create(
-                subject=bulk_email.subject,
-                body=bulk_email.body,
-                recipients=', '.join(bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).values_list('email', flat=True)),
-                attachment=bulk_email.attachment if bulk_email.attachment else None,
-            )
-        self.message_user(request, f"Bulk email complete. Sent: {sent}. Failed: {failed}.")
+            if pending_recipients.exists():
+                bulk_email.status = BulkEmail.STATUS_SENDING
+                bulk_email.save(update_fields=['status', 'updated_at'])
+                send_pending_bulk_email_campaign.delay(bulk_email.id, request.user.id)
+                queued += 1
+        self.message_user(request, f"Queued {queued} bulk email campaign(s). The Celery worker will send pending recipients.")
     send_pending_recipients.short_description = "Step 2 - Send pending recipients individually"
 
     def mail_to_active_users(self, request, queryset):
