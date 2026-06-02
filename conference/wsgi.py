@@ -8,14 +8,14 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/wsgi/
 """
 
 import os
+from pathlib import Path
 
 from django.core.wsgi import get_wsgi_application
 
 from dotenv import load_dotenv
 
-# Define the path to your .env file relative to the project root
-project_folder = os.path.expanduser('/var/www/html/conference/')
-load_dotenv(os.path.join(project_folder, '.env'))
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conference.settings')
 
