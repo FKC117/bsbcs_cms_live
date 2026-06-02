@@ -2464,6 +2464,10 @@ from registration.models import (
     CorporateEventRegistration,
     CorporateEventAttendee,
     CorporatePayment,
+    BulkEmail,
+    BulkEmailRecipient,
+    BulkEmailSendLog,
+    EmailGroup,
 )
 from django.core.paginator import Paginator
 from urllib.parse import urlencode
@@ -3178,6 +3182,382 @@ def global_dashboard(request):
     if request.headers.get('HX-Request'):
         return render(request, 'partials/dashboard_content.html', context)
     return render(request, 'dashboard.html', context)
+
+
+def _bulk_email_valid_email(email):
+    from django.core.validators import validate_email
+
+    if not email:
+        return None
+    normalized = email.strip()
+    try:
+        validate_email(normalized)
+    except ValidationError:
+        return None
+    return normalized
+
+
+def _bulk_email_identity_for_email(email):
+    normalized = _bulk_email_valid_email(email)
+    if not normalized:
+        return {}
+
+    user = User.objects.filter(email__iexact=normalized).first()
+    profile = UserProfile.objects.filter(email__iexact=normalized).first()
+    if not profile and user:
+        profile = UserProfile.objects.filter(user=user).first()
+
+    name = ''
+    if profile and profile.name:
+        name = profile.name
+    elif user:
+        name = user.get_full_name() or user.username
+
+    return {
+        'name': name,
+        'user': user,
+        'user_profile': profile,
+    }
+
+
+def _bulk_email_upsert_recipient(bulk_email, email, name='', source_type=BulkEmailRecipient.SOURCE_MANUAL, **links):
+    normalized = _bulk_email_valid_email(email)
+    if not normalized:
+        return False
+    identity = _bulk_email_identity_for_email(normalized)
+    for key in ['user', 'user_profile']:
+        links.setdefault(key, identity.get(key))
+    defaults = {
+        'name': name or identity.get('name') or '',
+        'source_type': source_type,
+        **{key: value for key, value in links.items() if value is not None},
+    }
+    _, created = BulkEmailRecipient.objects.get_or_create(
+        bulk_email=bulk_email,
+        email=normalized,
+        defaults=defaults,
+    )
+    return created
+
+
+def _prepare_bulk_email_recipients(bulk_email):
+    added = 0
+    if bulk_email.audience_type == BulkEmail.AUDIENCE_ACTIVE_USERS:
+        users = User.objects.filter(is_active=True).exclude(email='')
+        for user in users:
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                user.email,
+                name=user.get_full_name() or user.username,
+                source_type=BulkEmailRecipient.SOURCE_USER,
+                user=user,
+            ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP:
+        if not bulk_email.email_group:
+            return 0
+        for email in bulk_email.email_group.parsed_emails():
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                email,
+                source_type=BulkEmailRecipient.SOURCE_EMAIL_GROUP,
+            ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_PARTICIPANTS and bulk_email.event:
+        participants = Participant.objects.filter(event=bulk_email.event).exclude(email='')
+        for participant in participants:
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                participant.email,
+                name=participant.name,
+                source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
+                participant=participant,
+            ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_UNPAID and bulk_email.event:
+        payments = PaymentStatus.objects.filter(
+            event=bulk_email.event,
+            status__in=UNPAID_PAYMENT_STATUSES,
+            participant__isnull=False,
+        ).select_related('participant')
+        for payment in payments:
+            participant = payment.participant
+            if participant:
+                added += int(_bulk_email_upsert_recipient(
+                    bulk_email,
+                    participant.email,
+                    name=participant.name,
+                    source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
+                    participant=participant,
+                ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS and bulk_email.event:
+        abstracts = AbstractSubmission.objects.filter(event=bulk_email.event).select_related('user')
+        for abstract in abstracts:
+            email = abstract.user.email if abstract.user_id else ''
+            name = abstract.user.get_full_name() or abstract.user.username if abstract.user_id else ''
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                email,
+                name=name,
+                source_type=BulkEmailRecipient.SOURCE_ABSTRACT,
+                abstract_submission=abstract,
+                user=abstract.user if abstract.user_id else None,
+            ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_CORPORATE_CONTACTS:
+        accounts = CorporateAccount.objects.filter(status='approved').exclude(email='')
+        for account in accounts:
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                account.email,
+                name=account.contact_name,
+                source_type=BulkEmailRecipient.SOURCE_CORPORATE,
+                corporate_account=account,
+            ))
+        requests = CorporateAccountRequest.objects.filter(status='approved').exclude(email='')
+        for account_request in requests:
+            added += int(_bulk_email_upsert_recipient(
+                bulk_email,
+                account_request.email,
+                name=account_request.contact_name,
+                source_type=BulkEmailRecipient.SOURCE_CORPORATE,
+                corporate_request=account_request,
+            ))
+
+    if bulk_email.recipient_count:
+        bulk_email.status = BulkEmail.STATUS_RECIPIENTS_READY
+        bulk_email.save(update_fields=['status', 'updated_at'])
+    return added
+
+
+def _send_bulk_email_recipient(request, bulk_email, recipient):
+    email = EmailMessage(
+        subject=bulk_email.subject,
+        body=bulk_email.body,
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
+        to=[recipient.email],
+    )
+    if bulk_email.attachment:
+        email.attach_file(bulk_email.attachment.path)
+    try:
+        email.send()
+    except Exception as exc:
+        recipient.status = BulkEmailRecipient.STATUS_FAILED
+        recipient.error_message = str(exc)
+        recipient.save(update_fields=['status', 'error_message'])
+        BulkEmailSendLog.objects.create(
+            bulk_email=bulk_email,
+            recipient=recipient,
+            email=recipient.email,
+            status=BulkEmailRecipient.STATUS_FAILED,
+            message=str(exc),
+            sent_by=request.user,
+        )
+        return False
+
+    recipient.status = BulkEmailRecipient.STATUS_SENT
+    recipient.error_message = ''
+    recipient.sent_at = timezone.now()
+    recipient.save(update_fields=['status', 'error_message', 'sent_at'])
+    BulkEmailSendLog.objects.create(
+        bulk_email=bulk_email,
+        recipient=recipient,
+        email=recipient.email,
+        status=BulkEmailRecipient.STATUS_SENT,
+        sent_by=request.user,
+    )
+    return True
+
+
+@staff_member_required
+def dashboard_bulk_email_center(request):
+    from website.models import SiteSettings
+
+    if request.method == 'POST':
+        action = request.POST.get('bulk_email_action')
+        selected_campaign_id = request.POST.get('campaign_id')
+        redirect_campaign_id = selected_campaign_id
+
+        if action == 'create_campaign':
+            subject = (request.POST.get('subject') or '').strip()
+            body = (request.POST.get('body') or '').strip()
+            audience_type = request.POST.get('audience_type') or BulkEmail.AUDIENCE_MANUAL
+            event = Event.objects.filter(pk=request.POST.get('event') or None).first()
+            email_group = EmailGroup.objects.filter(pk=request.POST.get('email_group') or None).first()
+
+            if not subject or not body:
+                messages.error(request, 'Subject and message body are required.')
+            elif audience_type not in dict(BulkEmail.AUDIENCE_CHOICES):
+                messages.error(request, 'Choose a valid audience.')
+            elif audience_type in [
+                BulkEmail.AUDIENCE_EVENT_PARTICIPANTS,
+                BulkEmail.AUDIENCE_EVENT_UNPAID,
+                BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS,
+            ] and not event:
+                messages.error(request, 'Choose an event for this audience.')
+            elif audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP and not email_group:
+                messages.error(request, 'Choose an email group for this audience.')
+            else:
+                campaign = BulkEmail.objects.create(
+                    subject=subject,
+                    body=body,
+                    attachment=request.FILES.get('attachment'),
+                    audience_type=audience_type,
+                    event=event,
+                    email_group=email_group,
+                    created_by=request.user,
+                )
+                redirect_campaign_id = campaign.id
+                messages.success(request, f'Campaign "{campaign.subject}" created. Prepare recipients when ready.')
+
+        elif action == 'create_group':
+            group_id = request.POST.get('group_id')
+            name = (request.POST.get('name') or '').strip()
+            email_addresses = (request.POST.get('email_addresses') or '').strip()
+            if not name or not email_addresses:
+                messages.error(request, 'Group name and email addresses are required.')
+            else:
+                group = EmailGroup.objects.filter(pk=group_id).first() if group_id else None
+                if group:
+                    group.name = name
+                    group.email_addresses = email_addresses
+                    group.save(update_fields=['name', 'email_addresses'])
+                    messages.success(request, f'Email group "{group.name}" updated.')
+                else:
+                    group, created = EmailGroup.objects.get_or_create(
+                        name=name,
+                        defaults={'email_addresses': email_addresses},
+                    )
+                    if created:
+                        messages.success(request, f'Email group "{group.name}" created.')
+                    else:
+                        group.email_addresses = email_addresses
+                        group.save(update_fields=['email_addresses'])
+                        messages.success(request, f'Email group "{group.name}" updated.')
+
+        elif action == 'prepare_recipients':
+            campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                added = _prepare_bulk_email_recipients(campaign)
+                messages.success(request, f'Recipient preparation complete. New recipients added: {added}.')
+
+        elif action == 'add_manual_recipient':
+            campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
+            email = request.POST.get('recipient_email')
+            name = (request.POST.get('recipient_name') or '').strip()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            elif _bulk_email_upsert_recipient(
+                campaign,
+                email,
+                name=name,
+                source_type=BulkEmailRecipient.SOURCE_MANUAL,
+            ):
+                campaign.status = BulkEmail.STATUS_RECIPIENTS_READY
+                campaign.save(update_fields=['status', 'updated_at'])
+                messages.success(request, f'{email} added to this campaign.')
+            else:
+                messages.warning(request, 'That email is invalid or already exists in this campaign.')
+
+        elif action == 'send_pending':
+            campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                if not campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).exists():
+                    _prepare_bulk_email_recipients(campaign)
+                pending_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
+                sent = 0
+                failed = 0
+                campaign.status = BulkEmail.STATUS_SENDING
+                campaign.save(update_fields=['status', 'updated_at'])
+                for recipient in pending_recipients:
+                    if _send_bulk_email_recipient(request, campaign, recipient):
+                        sent += 1
+                    else:
+                        failed += 1
+                campaign.status = BulkEmail.STATUS_PARTIAL if campaign.failed_count else BulkEmail.STATUS_SENT
+                campaign.save(update_fields=['status', 'updated_at'])
+                if sent:
+                    BulkEmailsReporting.objects.create(
+                        subject=campaign.subject,
+                        body=campaign.body,
+                        recipients=', '.join(campaign.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).values_list('email', flat=True)),
+                        attachment=campaign.attachment if campaign.attachment else None,
+                    )
+                messages.success(request, f'Send complete. Sent: {sent}. Failed: {failed}.')
+
+        url = reverse('dashboard_bulk_email_center')
+        if redirect_campaign_id:
+            url = f'{url}?campaign={redirect_campaign_id}#active-campaign'
+        return redirect(url)
+
+    campaigns = BulkEmail.objects.select_related('event', 'email_group', 'created_by').order_by('-created_at')
+    selected_campaign = campaigns.filter(pk=request.GET.get('campaign')).first()
+    if not selected_campaign:
+        selected_campaign = campaigns.first()
+    recent_logs = BulkEmailSendLog.objects.select_related('bulk_email', 'recipient', 'sent_by').order_by('-created_at')[:12]
+    groups = EmailGroup.objects.order_by('name')
+    events = Event.objects.order_by('-year', 'name')
+    selected_recipients_qs = selected_campaign.recipients.order_by('status', 'email') if selected_campaign else BulkEmailRecipient.objects.none()
+    selected_logs_qs = selected_campaign.send_logs.select_related('recipient', 'sent_by').order_by('-created_at') if selected_campaign else BulkEmailSendLog.objects.none()
+    selected_recipients_page = Paginator(selected_recipients_qs, 15).get_page(request.GET.get('recipient_page'))
+    selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
+    base_query = {}
+    if selected_campaign:
+        base_query['campaign'] = selected_campaign.id
+    group_data_json = json.dumps([
+        {
+            'id': group.id,
+            'name': group.name,
+            'email_addresses': group.email_addresses,
+            'emails': group.parsed_emails(),
+        }
+        for group in groups
+    ]).replace('</', '<\\/')
+    totals = {
+        'campaigns': BulkEmail.objects.count(),
+        'drafts': BulkEmail.objects.filter(status=BulkEmail.STATUS_DRAFT).count(),
+        'ready': BulkEmail.objects.filter(status=BulkEmail.STATUS_RECIPIENTS_READY).count(),
+        'recipients': BulkEmailRecipient.objects.count(),
+        'pending': BulkEmailRecipient.objects.filter(status=BulkEmailRecipient.STATUS_PENDING).count(),
+        'sent': BulkEmailRecipient.objects.filter(status=BulkEmailRecipient.STATUS_SENT).count(),
+        'failed': BulkEmailRecipient.objects.filter(status=BulkEmailRecipient.STATUS_FAILED).count(),
+        'groups': EmailGroup.objects.count(),
+    }
+    workflow_steps = [
+        {
+            'label': 'Create campaign',
+            'detail': 'Write the subject, message body, attachment, and choose an audience source.',
+        },
+        {
+            'label': 'Prepare recipients',
+            'detail': 'Select a campaign and generate individual recipient rows from the chosen audience.',
+        },
+        {
+            'label': 'Review recipient rows',
+            'detail': 'Check pending, failed, skipped, and sent recipient rows before sending.',
+        },
+        {
+            'label': 'Send and audit',
+            'detail': 'Send pending recipients individually and inspect per-recipient delivery logs here.',
+        },
+    ]
+    return render(request, 'dashboard_bulk_email_center.html', {
+        'site_settings': SiteSettings.objects.first(),
+        'campaigns': campaigns,
+        'selected_campaign': selected_campaign,
+        'selected_recipients': selected_recipients_page,
+        'selected_logs': selected_logs_page,
+        'recipient_page_obj': selected_recipients_page,
+        'log_page_obj': selected_logs_page,
+        'bulk_email_base_query': urlencode(base_query),
+        'recent_logs': recent_logs,
+        'groups': groups,
+        'group_data_json': group_data_json,
+        'events': events,
+        'audience_choices': BulkEmail.AUDIENCE_CHOICES,
+        'totals': totals,
+        'workflow_steps': workflow_steps,
+    })
 
 
 @staff_member_required

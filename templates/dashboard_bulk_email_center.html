@@ -1,0 +1,621 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bulk Email Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        body.modal-open { overflow: hidden; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .workflow-textarea { min-height: 8rem; }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .workflow-modal[hidden] { display: none; }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Communication workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="#create-campaign" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Create Campaign</a>
+                <a href="#create-group" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Create Group</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Bulk email center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Create, prepare, send, and audit bulk emails here.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">This workflow stays inside the dashboard. Django admin remains available for deep maintenance, but staff should not need it for ordinary bulk email work.</p>
+            </div>
+            <div class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid grid-cols-2 gap-2">
+                    <a href="#create-campaign" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-center text-sm font-black text-white hover:bg-bsbcs-navy">New campaign</a>
+                    <a href="#active-campaign" class="rounded-xl border border-line px-4 py-3 text-center text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Work selected</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Campaigns</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.campaigns }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Drafts</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.drafts }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Ready</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.ready }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Recipients</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.recipients }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Sent</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.sent }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Failed</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.failed }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Groups</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.groups }}</div>
+            </div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-4">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Workflow</div>
+                <h2 class="mt-1 text-xl font-black text-ink">Run a bulk email campaign in four steps</h2>
+            </div>
+            <div class="grid gap-3 lg:grid-cols-4">
+                {% for step in workflow_steps %}
+                    <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+                        <div class="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">{{ forloop.counter }}</div>
+                        <h3 class="mt-3 text-base font-black text-ink">{{ step.label }}</h3>
+                        <p class="mt-2 text-sm font-semibold leading-5 text-slate-600">{{ step.detail }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="mt-3 grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+            <form id="create-campaign" method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="bulk_email_action" value="create_campaign">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 1</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Compose campaign</h2>
+                        <p class="mt-1 max-w-2xl text-sm font-semibold leading-5 text-slate-600">Write the email once, then choose who receives it. Recipient rows are generated after the campaign is saved.</p>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase text-bsbcs-blue ring-1 ring-blue-100">New campaign</span>
+                </div>
+                <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+                        <label class="compact-label">Subject</label>
+                        <input class="workflow-input" type="text" name="subject" placeholder="Email subject" required>
+
+                        <label class="compact-label mt-4">Message body</label>
+                        <textarea class="workflow-textarea min-h-[220px]" name="body" placeholder="Write the message that will be sent to every prepared recipient." required></textarea>
+                    </div>
+
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div class="text-sm font-black text-ink">Audience and delivery</div>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Choose one source. Event and group fields appear only when that source needs them.</p>
+
+                        <label class="compact-label mt-4">Audience source</label>
+                        <select class="workflow-select" name="audience_type" data-audience-source required>
+                            {% for value, label in audience_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <div class="mt-3" data-event-field>
+                            <label class="compact-label">Related event</label>
+                            <select class="workflow-select" name="event">
+                                <option value="">No event</option>
+                                {% for event in events %}
+                                    <option value="{{ event.id }}">{{ event.name }} {{ event.year }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">Used for event participants, unpaid participants, and abstract submitters.</p>
+                        </div>
+
+                        <div class="mt-3" data-group-field>
+                            <label class="compact-label">Reusable email group</label>
+                            <select class="workflow-select" name="email_group">
+                                <option value="">No group</option>
+                                {% for group in groups %}
+                                    <option value="{{ group.id }}">{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">Used when the audience source is Email group.</p>
+                        </div>
+
+                        <label class="compact-label mt-3">Attachment</label>
+                        <input class="workflow-input" type="file" name="attachment">
+
+                        <button class="mt-4 w-full rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy" type="submit">Create Campaign</button>
+                    </div>
+                </div>
+            </form>
+
+            <section id="create-group" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Reusable audience</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Email groups</h2>
+                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Saved lists for campaigns that use the Email group audience.</p>
+                        </div>
+                        <button type="button" data-open-group-modal data-clear-group class="rounded-lg bg-bsbcs-blue px-3 py-2 text-xs font-black text-white hover:bg-bsbcs-navy">New Group</button>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-black text-ink">Saved groups</h3>
+                    <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black uppercase text-bsbcs-blue">{{ groups|length }} groups</span>
+                </div>
+                <div class="mt-2 max-h-56 space-y-2 overflow-auto pr-1">
+                    {% for group in groups %}
+                        <button type="button" class="group w-full rounded-xl border border-line bg-slate-50 px-3 py-2.5 text-left hover:border-bsbcs-blue hover:bg-white" data-edit-group data-group-id="{{ group.id }}">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="truncate font-black text-ink">{{ group.name }}</div>
+                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ group.parsed_emails|length }} stored addresses</div>
+                                </div>
+                                <span class="rounded-lg border border-line bg-white px-2.5 py-1 text-[11px] font-black text-bsbcs-blue group-hover:border-bsbcs-blue">Edit</span>
+                            </div>
+                        </button>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue">No reusable email group created yet.</div>
+                    {% endfor %}
+                </div>
+
+            </section>
+        </section>
+
+        <section id="active-campaign" class="mt-3 grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-3">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Campaign list</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Select campaign</h2>
+                </div>
+                <div class="max-h-[620px] space-y-2 overflow-auto pr-1">
+                    {% for campaign in campaigns %}
+                        <a href="?campaign={{ campaign.id }}#active-campaign" class="block rounded-xl border p-3 {% if selected_campaign and selected_campaign.id == campaign.id %}border-bsbcs-blue bg-blue-50{% else %}border-line bg-slate-50/70 hover:border-bsbcs-blue hover:bg-white{% endif %}">
+                            <div class="font-black text-ink">{{ campaign.subject }}</div>
+                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ campaign.get_audience_type_display }}</div>
+                            <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-black uppercase">
+                                <span class="rounded-full bg-white px-2 py-1 text-bsbcs-blue ring-1 ring-line">{{ campaign.get_status_display }}</span>
+                                <span class="rounded-full bg-white px-2 py-1 text-slate-600 ring-1 ring-line">{{ campaign.recipient_count }} recipients</span>
+                            </div>
+                        </a>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue">No campaign created yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                {% if selected_campaign %}
+                    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Selected campaign</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">{{ selected_campaign.subject }}</h2>
+                            <p class="mt-1 text-sm font-semibold text-slate-500">{{ selected_campaign.get_audience_type_display }}{% if selected_campaign.event %} - {{ selected_campaign.event.name }} {{ selected_campaign.event.year }}{% endif %}{% if selected_campaign.email_group %} - {{ selected_campaign.email_group.name }}{% endif %}</p>
+                        </div>
+                        <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-bsbcs-blue ring-1 ring-blue-100">{{ selected_campaign.get_status_display }}</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                            <div class="text-xs font-black uppercase text-slate-500">Recipients</div>
+                            <div class="mt-1 text-2xl font-black text-ink">{{ selected_campaign.recipient_count }}</div>
+                        </div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                            <div class="text-xs font-black uppercase text-slate-500">Pending</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign.pending_count }}</div>
+                        </div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                            <div class="text-xs font-black uppercase text-slate-500">Sent</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ selected_campaign.sent_count }}</div>
+                        </div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                            <div class="text-xs font-black uppercase text-slate-500">Failed</div>
+                            <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ selected_campaign.failed_count }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid gap-3">
+                        <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="max-w-3xl">
+                                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Step 2</div>
+                                    <h3 class="mt-1 text-lg font-black text-ink">Prepare this campaign audience</h3>
+                                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">
+                                        {% if selected_campaign.audience_type == 'manual' %}
+                                            Manual campaigns are built in Step 3 by adding recipients yourself. Prepare can still refresh the campaign status.
+                                        {% else %}
+                                            Generate recipient rows from {{ selected_campaign.get_audience_type_display|lower }} before review and sending.
+                                        {% endif %}
+                                    </p>
+                                </div>
+                                <form method="post" class="w-full sm:w-auto">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="bulk_email_action" value="prepare_recipients">
+                                    <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                                    <button class="w-full rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy sm:w-auto" type="submit">
+                                        {% if selected_campaign.recipient_count %}Refresh Recipients{% else %}Prepare Recipients{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-line bg-white p-4">
+                            <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Step 3</div>
+                                    <h3 class="mt-1 text-lg font-black text-ink">Review recipient rows</h3>
+                                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Check who will receive this campaign. Failed or skipped rows stay visible here for correction.</p>
+                                </div>
+                                <span class="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-black uppercase text-slate-600 ring-1 ring-line">
+                                    {{ recipient_page_obj.start_index }}-{{ recipient_page_obj.end_index }} of {{ recipient_page_obj.paginator.count }}
+                                </span>
+                            </div>
+
+                            {% if selected_campaign.audience_type == 'manual' %}
+                                <form method="post" class="mb-4 rounded-2xl border border-dashed border-blue-200 bg-slate-50 p-3">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="bulk_email_action" value="add_manual_recipient">
+                                    <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                                    <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px] lg:items-end">
+                                        <div>
+                                            <label class="compact-label">Recipient name</label>
+                                            <input class="workflow-input" type="text" name="recipient_name" placeholder="Optional name">
+                                        </div>
+                                        <div>
+                                            <label class="compact-label">Recipient email</label>
+                                            <input class="workflow-input" type="email" name="recipient_email" placeholder="name@example.com" required>
+                                        </div>
+                                        <button class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50" type="submit">Add Recipient</button>
+                                    </div>
+                                </form>
+                            {% endif %}
+
+                            <div class="overflow-hidden rounded-xl border border-line">
+                                <div class="grid grid-cols-[minmax(0,1fr)_120px_120px] gap-3 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                                    <div>Recipient</div>
+                                    <div>Source</div>
+                                    <div>Status</div>
+                                </div>
+                                <div class="max-h-[420px] overflow-auto">
+                                    {% for recipient in selected_recipients %}
+                                        <div class="grid grid-cols-[minmax(0,1fr)_120px_120px] gap-3 border-t border-line px-3 py-3 text-sm">
+                                            <div class="min-w-0">
+                                                <div class="truncate font-black text-ink">{{ recipient.name|default:"Name not found" }}</div>
+                                                <div class="truncate text-xs font-medium text-slate-500">{{ recipient.email }}</div>
+                                                {% if recipient.error_message %}
+                                                    <div class="mt-1 text-xs font-semibold text-bsbcs-pink">{{ recipient.error_message }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="text-xs font-semibold text-slate-600">{{ recipient.get_source_type_display }}</div>
+                                            <div class="{% if recipient.status == 'sent' %}text-bsbcs-green{% elif recipient.status == 'failed' %}text-bsbcs-pink{% else %}text-bsbcs-blue{% endif %} text-xs font-black uppercase">{{ recipient.get_status_display }}</div>
+                                        </div>
+                                    {% empty %}
+                                        <div class="border-t border-line px-3 py-5 text-sm font-semibold text-slate-500">
+                                            {% if selected_campaign.audience_type == 'manual' %}
+                                                Add manual recipients above before sending.
+                                            {% else %}
+                                                No recipients prepared yet. Use Step 2 to prepare the selected audience.
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% if recipient_page_obj.paginator.num_pages > 1 %}
+                                <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                    <div class="text-xs font-black uppercase text-slate-500">Page {{ recipient_page_obj.number }} of {{ recipient_page_obj.paginator.num_pages }}</div>
+                                    <div class="flex flex-wrap gap-2">
+                                        {% if recipient_page_obj.has_previous %}
+                                            <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.previous_page_number }}&log_page={{ log_page_obj.number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
+                                        {% endif %}
+                                        {% if recipient_page_obj.has_next %}
+                                            <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.next_page_number }}&log_page={{ log_page_obj.number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="grid gap-3 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+                            <div class="rounded-2xl border border-line bg-slate-50 p-4">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Step 4</div>
+                                <h3 class="mt-1 text-lg font-black text-ink">Send and audit</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Only pending rows are sent. Already sent recipients are kept untouched.</p>
+                                <form method="post" class="mt-4">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="bulk_email_action" value="send_pending">
+                                    <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                                    {% if selected_campaign.pending_count %}
+                                        <button class="w-full rounded-xl bg-bsbcs-green px-4 py-3 text-sm font-black text-white hover:bg-emerald-700" type="submit">Send {{ selected_campaign.pending_count }} Pending</button>
+                                    {% else %}
+                                        <button class="w-full cursor-not-allowed rounded-xl bg-slate-200 px-4 py-3 text-sm font-black text-slate-500" type="button" disabled>No Pending Recipients</button>
+                                    {% endif %}
+                                </form>
+                            </div>
+
+                            <div class="rounded-2xl border border-line bg-white p-4">
+                                <div class="mb-2 flex items-center justify-between gap-3">
+                                    <h3 class="text-lg font-black text-ink">Campaign logs</h3>
+                                    <span class="text-xs font-bold text-slate-500">{{ log_page_obj.start_index }}-{{ log_page_obj.end_index }} of {{ log_page_obj.paginator.count }}</span>
+                                </div>
+                                <div class="max-h-72 space-y-2 overflow-auto">
+                                    {% for log in selected_logs %}
+                                        <div class="rounded-xl border border-line bg-slate-50 p-3">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <div class="min-w-0">
+                                                    <div class="truncate text-sm font-black text-ink">{{ log.email }}</div>
+                                                    <div class="text-xs font-semibold text-slate-500">{{ log.created_at|date:"M d, Y h:i A" }}{% if log.sent_by %} by {{ log.sent_by.username }}{% endif %}</div>
+                                                </div>
+                                                <span class="{% if log.status == 'sent' %}text-bsbcs-green{% elif log.status == 'failed' %}text-bsbcs-pink{% else %}text-slate-600{% endif %} text-xs font-black uppercase">{{ log.status }}</span>
+                                            </div>
+                                            {% if log.message %}
+                                                <div class="mt-2 text-xs font-semibold text-bsbcs-pink">{{ log.message }}</div>
+                                            {% endif %}
+                                        </div>
+                                    {% empty %}
+                                    <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue">No send log for this campaign yet.</div>
+                                {% endfor %}
+                                </div>
+                                {% if log_page_obj.paginator.num_pages > 1 %}
+                                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div class="text-xs font-black uppercase text-slate-500">Page {{ log_page_obj.number }} of {{ log_page_obj.paginator.num_pages }}</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            {% if log_page_obj.has_previous %}
+                                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.previous_page_number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
+                                            {% endif %}
+                                            {% if log_page_obj.has_next %}
+                                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.next_page_number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="rounded-xl bg-blue-50 p-6 text-center text-sm font-semibold text-bsbcs-blue">Create a campaign first. It will appear here for preparation and sending.</div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="workflow-modal fixed inset-0 z-50 grid place-items-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm" data-group-modal hidden>
+    <form method="post" class="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/40 bg-white shadow-lift">
+        {% csrf_token %}
+        <input type="hidden" name="bulk_email_action" value="create_group">
+        <input type="hidden" name="group_id" data-group-id value="">
+        <div class="flex items-start justify-between gap-4 bg-gradient-to-r from-bsbcs-navy to-bsbcs-teal px-6 py-5 text-white">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Reusable audience</div>
+                <h2 class="mt-1 text-2xl font-black !text-white" data-group-title>Email group editor</h2>
+                <p class="mt-1 text-sm font-semibold leading-5 !text-white/75">Create or update a reusable address list for bulk email campaigns.</p>
+            </div>
+            <button type="button" data-close-group-modal class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/25 bg-white/10 text-2xl font-semibold text-white hover:bg-white/20" aria-label="Close group editor">&times;</button>
+        </div>
+        <div class="p-6">
+            <div class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <div class="text-sm font-black text-ink">Group editor</div>
+                <span class="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase text-bsbcs-blue ring-1 ring-blue-100" data-group-mode>New</span>
+            </div>
+            <label class="compact-label">Group name</label>
+            <input class="workflow-input" type="text" name="name" data-group-name required>
+            <label class="compact-label mt-4">Email addresses</label>
+            <textarea class="workflow-textarea min-h-[180px]" name="email_addresses" data-group-emails placeholder="One email per line or comma-separated" required></textarea>
+            <div class="mt-4 rounded-2xl border border-line bg-slate-50 p-3">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-black text-ink">Saved address list</h3>
+                    <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-black uppercase text-slate-600 ring-1 ring-line" data-group-email-count>0 emails</span>
+                </div>
+                <div class="mt-2 max-h-40 space-y-1 overflow-auto text-sm font-semibold text-slate-600" data-group-email-preview>
+                    Add email addresses to preview the list here.
+                </div>
+            </div>
+            <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <button type="button" data-close-group-modal class="rounded-xl border border-line px-5 py-3 text-sm font-black text-slate-700 hover:border-slate-400 hover:bg-slate-50">Cancel</button>
+                <button class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white hover:bg-bsbcs-navy" type="submit" data-group-submit>Save Group</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script id="email-group-data" type="application/json">{{ group_data_json|safe }}</script>
+<script>
+    (function () {
+        const audienceSelect = document.querySelector('[data-audience-source]');
+        const eventField = document.querySelector('[data-event-field]');
+        const groupField = document.querySelector('[data-group-field]');
+        const eventAudiences = new Set(['event_participants', 'event_unpaid', 'abstract_submitters']);
+
+        function updateAudienceFields() {
+            if (!audienceSelect) return;
+            const value = audienceSelect.value;
+            if (eventField) eventField.hidden = !eventAudiences.has(value);
+            if (groupField) groupField.hidden = value !== 'email_group';
+        }
+
+        if (audienceSelect) {
+            audienceSelect.addEventListener('change', updateAudienceFields);
+            updateAudienceFields();
+        }
+
+        const groupId = document.querySelector('[data-group-id]');
+        const groupName = document.querySelector('[data-group-name]');
+        const groupEmails = document.querySelector('[data-group-emails]');
+        const groupSubmit = document.querySelector('[data-group-submit]');
+        const groupMode = document.querySelector('[data-group-mode]');
+        const groupTitle = document.querySelector('[data-group-title]');
+        const groupModal = document.querySelector('[data-group-modal]');
+        const clearGroupButton = document.querySelector('[data-clear-group]');
+        const closeGroupButtons = document.querySelectorAll('[data-close-group-modal]');
+        const groupEmailPreview = document.querySelector('[data-group-email-preview]');
+        const groupEmailCount = document.querySelector('[data-group-email-count]');
+        let groupData = [];
+
+        try {
+            const groupDataElement = document.getElementById('email-group-data');
+            groupData = groupDataElement ? JSON.parse(groupDataElement.textContent || '[]') : [];
+        } catch (error) {
+            groupData = [];
+        }
+
+        function parseGroupEmails(rawValue) {
+            const seen = new Set();
+            return (rawValue || '')
+                .replace(/\n/g, ',')
+                .split(',')
+                .map((email) => email.trim())
+                .filter((email) => {
+                    const key = email.toLowerCase();
+                    if (!email || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+        }
+
+        function updateGroupEmailPreview() {
+            if (!groupEmailPreview || !groupEmailCount) return;
+            const emails = parseGroupEmails(groupEmails?.value || '');
+            groupEmailCount.textContent = `${emails.length} email${emails.length === 1 ? '' : 's'}`;
+            if (!emails.length) {
+                groupEmailPreview.textContent = 'Add email addresses to preview the list here.';
+                return;
+            }
+            groupEmailPreview.textContent = '';
+            emails.forEach((email) => {
+                const row = document.createElement('div');
+                row.className = 'rounded-lg bg-white px-3 py-2 ring-1 ring-line';
+                row.textContent = email;
+                groupEmailPreview.appendChild(row);
+            });
+        }
+
+        function setGroupForm(id, name, emails) {
+            if (groupId) groupId.value = id || '';
+            if (groupName) groupName.value = name || '';
+            if (groupEmails) groupEmails.value = emails || '';
+            if (groupSubmit) groupSubmit.textContent = id ? 'Update Group' : 'Save Group';
+            if (groupMode) groupMode.textContent = id ? 'Editing' : 'New';
+            if (groupTitle) groupTitle.textContent = id ? 'Edit email group' : 'Create email group';
+            updateGroupEmailPreview();
+        }
+
+        function openGroupModal() {
+            if (!groupModal) return;
+            groupModal.hidden = false;
+            document.body.classList.add('modal-open');
+            setTimeout(() => groupName?.focus(), 0);
+        }
+
+        function closeGroupModal() {
+            if (!groupModal) return;
+            groupModal.hidden = true;
+            document.body.classList.remove('modal-open');
+        }
+
+        document.querySelectorAll('[data-edit-group]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const id = Number(button.getAttribute('data-group-id'));
+                const group = groupData.find((item) => Number(item.id) === id);
+                setGroupForm(id, group?.name || '', group?.email_addresses || '');
+                openGroupModal();
+            });
+        });
+
+        clearGroupButton?.addEventListener('click', () => {
+            setGroupForm('', '', '');
+            openGroupModal();
+        });
+
+        groupEmails?.addEventListener('input', updateGroupEmailPreview);
+
+        closeGroupButtons.forEach((button) => {
+            button.addEventListener('click', closeGroupModal);
+        });
+
+        groupModal?.addEventListener('click', (event) => {
+            if (event.target === groupModal) closeGroupModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && groupModal && !groupModal.hidden) {
+                closeGroupModal();
+            }
+        });
+    })();
+</script>
+</body>
+</html>

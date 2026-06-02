@@ -126,6 +126,16 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Event payment details")
         self.assertContains(response, "Membership payment details")
 
+    def test_bulk_email_center_renders_dashboard_workflow(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_bulk_email_center'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bulk email center")
+        self.assertContains(response, "Create campaign")
+        self.assertContains(response, "Prepare recipients")
+        self.assertContains(response, "Review recipient rows")
+        self.assertContains(response, "Send and audit")
+
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)
         url = reverse('dashboard_program_session_builder')

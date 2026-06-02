@@ -1525,20 +1525,282 @@ class FeedbackResponseAdmin(ImportExportModelAdmin):
 
 # Bulk email and group emails admin start here -------------------------------------------------------------#
 from django.contrib import admin
-from .models import BulkEmail, BulkEmailsReporting, EmailGroup
+from .models import BulkEmail, BulkEmailRecipient, BulkEmailSendLog, BulkEmailsReporting, EmailGroup
 from import_export import resources
 from import_export.admin import ExportMixin
 from django.core.mail import EmailMessage
+from django.core.validators import validate_email
 from django.contrib.auth import get_user_model
 from django.shortcuts import render
 
 User = get_user_model()  # Fetch the user model
 
 
+class BulkEmailRecipientInline(admin.TabularInline):
+    model = BulkEmailRecipient
+    extra = 0
+    fields = ('email', 'name', 'source_type', 'status', 'sent_at', 'error_message')
+    readonly_fields = ('sent_at',)
+    show_change_link = True
+
+
+class BulkEmailSendLogInline(admin.TabularInline):
+    model = BulkEmailSendLog
+    extra = 0
+    fields = ('email', 'status', 'message', 'sent_by', 'created_at')
+    readonly_fields = ('email', 'status', 'message', 'sent_by', 'created_at')
+    can_delete = False
+    max_num = 0
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(BulkEmail)
 class BulkEmailAdmin(admin.ModelAdmin):
-    list_display = ('subject', 'created_at')
-    actions = ['mail_to_active_users', 'mail_to_email_group']
+    list_display = (
+        'subject', 'audience_type', 'event', 'email_group', 'status',
+        'recipient_total', 'sent_total', 'failed_total', 'created_at',
+    )
+    list_filter = ('status', 'audience_type', 'event', 'created_at')
+    search_fields = ('subject', 'body', 'event__name', 'email_group__name')
+    readonly_fields = (
+        'created_at', 'updated_at', 'recipient_total', 'sent_total',
+        'failed_total', 'pending_total',
+    )
+    actions = [
+        'prepare_recipients_from_audience',
+        'send_pending_recipients',
+        'mail_to_active_users',
+        'mail_to_email_group',
+    ]
+    fieldsets = (
+        ('Email content', {
+            'fields': ('subject', 'body', 'attachment')
+        }),
+        ('Audience setup', {
+            'fields': ('audience_type', 'event', 'email_group', 'status')
+        }),
+        ('Delivery summary', {
+            'fields': ('recipient_total', 'pending_total', 'sent_total', 'failed_total')
+        }),
+        ('Timestamps', {
+            'fields': ('created_by', 'created_at', 'updated_at')
+        }),
+    )
+    inlines = []
+
+    def get_inlines(self, request, obj):
+        if obj:
+            return [BulkEmailRecipientInline, BulkEmailSendLogInline]
+        return []
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def recipient_total(self, obj):
+        return obj.recipient_count if obj.pk else 0
+    recipient_total.short_description = "Recipients"
+
+    def sent_total(self, obj):
+        return obj.sent_count if obj.pk else 0
+    sent_total.short_description = "Sent"
+
+    def failed_total(self, obj):
+        return obj.failed_count if obj.pk else 0
+    failed_total.short_description = "Failed"
+
+    def pending_total(self, obj):
+        return obj.pending_count if obj.pk else 0
+    pending_total.short_description = "Pending"
+
+    def _valid_email_or_none(self, email):
+        if not email:
+            return None
+        normalized = email.strip()
+        try:
+            validate_email(normalized)
+        except ValidationError:
+            return None
+        return normalized
+
+    def _upsert_recipient(self, bulk_email, email, name='', source_type=BulkEmailRecipient.SOURCE_MANUAL, **links):
+        normalized = self._valid_email_or_none(email)
+        if not normalized:
+            return False
+        defaults = {
+            'name': name or '',
+            'source_type': source_type,
+            **{key: value for key, value in links.items() if value is not None},
+        }
+        _, created = BulkEmailRecipient.objects.get_or_create(
+            bulk_email=bulk_email,
+            email=normalized,
+            defaults=defaults,
+        )
+        return created
+
+    def _prepare_recipients(self, bulk_email):
+        added = 0
+        if bulk_email.audience_type == BulkEmail.AUDIENCE_ACTIVE_USERS:
+            users = User.objects.filter(is_active=True).exclude(email='')
+            for user in users:
+                if self._upsert_recipient(
+                    bulk_email,
+                    user.email,
+                    name=user.get_full_name() or user.username,
+                    source_type=BulkEmailRecipient.SOURCE_USER,
+                    user=user,
+                ):
+                    added += 1
+        elif bulk_email.audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP:
+            if not bulk_email.email_group:
+                return 0
+            for email in bulk_email.email_group.parsed_emails():
+                if self._upsert_recipient(
+                    bulk_email,
+                    email,
+                    source_type=BulkEmailRecipient.SOURCE_EMAIL_GROUP,
+                ):
+                    added += 1
+        elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_PARTICIPANTS and bulk_email.event:
+            participants = Participant.objects.filter(event=bulk_email.event).exclude(email='')
+            for participant in participants:
+                if self._upsert_recipient(
+                    bulk_email,
+                    participant.email,
+                    name=participant.name,
+                    source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
+                    participant=participant,
+                ):
+                    added += 1
+        elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_UNPAID and bulk_email.event:
+            payments = PaymentStatus.objects.filter(
+                event=bulk_email.event,
+                status__in=['unpaid', 'pending', 'failed', 'initiated'],
+                participant__isnull=False,
+            ).select_related('participant')
+            for payment in payments:
+                participant = payment.participant
+                if participant and self._upsert_recipient(
+                    bulk_email,
+                    participant.email,
+                    name=participant.name,
+                    source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
+                    participant=participant,
+                ):
+                    added += 1
+        elif bulk_email.audience_type == BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS and bulk_email.event:
+            abstracts = AbstractSubmission.objects.filter(event=bulk_email.event).select_related('user')
+            for abstract in abstracts:
+                email = abstract.user.email if abstract.user_id else ''
+                name = abstract.user.get_full_name() or abstract.user.username if abstract.user_id else ''
+                if self._upsert_recipient(
+                    bulk_email,
+                    email,
+                    name=name,
+                    source_type=BulkEmailRecipient.SOURCE_ABSTRACT,
+                    abstract_submission=abstract,
+                    user=abstract.user if abstract.user_id else None,
+                ):
+                    added += 1
+        elif bulk_email.audience_type == BulkEmail.AUDIENCE_CORPORATE_CONTACTS:
+            accounts = CorporateAccount.objects.filter(is_active=True).exclude(email='')
+            for account in accounts:
+                if self._upsert_recipient(
+                    bulk_email,
+                    account.email,
+                    name=account.contact_name,
+                    source_type=BulkEmailRecipient.SOURCE_CORPORATE,
+                    corporate_account=account,
+                ):
+                    added += 1
+            requests = CorporateAccountRequest.objects.filter(status='approved').exclude(email='')
+            for account_request in requests:
+                if self._upsert_recipient(
+                    bulk_email,
+                    account_request.email,
+                    name=account_request.contact_name,
+                    source_type=BulkEmailRecipient.SOURCE_CORPORATE,
+                    corporate_request=account_request,
+                ):
+                    added += 1
+        if bulk_email.recipient_count:
+            bulk_email.status = BulkEmail.STATUS_RECIPIENTS_READY
+            bulk_email.save(update_fields=['status', 'updated_at'])
+        return added
+
+    def prepare_recipients_from_audience(self, request, queryset):
+        prepared = 0
+        for bulk_email in queryset:
+            prepared += self._prepare_recipients(bulk_email)
+        self.message_user(request, f"Prepared recipient lists. New valid recipients found: {prepared}.")
+    prepare_recipients_from_audience.short_description = "Step 1 - Prepare recipients from selected audience"
+
+    def _send_one_recipient(self, request, bulk_email, recipient):
+        email = EmailMessage(
+            subject=bulk_email.subject,
+            body=bulk_email.body,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
+            to=[recipient.email],
+        )
+        if bulk_email.attachment:
+            email.attach_file(bulk_email.attachment.path)
+        try:
+            email.send()
+        except Exception as exc:
+            recipient.status = BulkEmailRecipient.STATUS_FAILED
+            recipient.error_message = str(exc)
+            recipient.save(update_fields=['status', 'error_message'])
+            BulkEmailSendLog.objects.create(
+                bulk_email=bulk_email,
+                recipient=recipient,
+                email=recipient.email,
+                status=BulkEmailRecipient.STATUS_FAILED,
+                message=str(exc),
+                sent_by=request.user,
+            )
+            return False
+        recipient.status = BulkEmailRecipient.STATUS_SENT
+        recipient.error_message = ''
+        recipient.sent_at = timezone.now()
+        recipient.save(update_fields=['status', 'error_message', 'sent_at'])
+        BulkEmailSendLog.objects.create(
+            bulk_email=bulk_email,
+            recipient=recipient,
+            email=recipient.email,
+            status=BulkEmailRecipient.STATUS_SENT,
+            sent_by=request.user,
+        )
+        return True
+
+    def send_pending_recipients(self, request, queryset):
+        sent = 0
+        failed = 0
+        for bulk_email in queryset:
+            pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
+            if not pending_recipients.exists():
+                self._prepare_recipients(bulk_email)
+                pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
+            bulk_email.status = BulkEmail.STATUS_SENDING
+            bulk_email.save(update_fields=['status', 'updated_at'])
+            for recipient in pending_recipients:
+                if self._send_one_recipient(request, bulk_email, recipient):
+                    sent += 1
+                else:
+                    failed += 1
+            bulk_email.status = BulkEmail.STATUS_PARTIAL if bulk_email.failed_count else BulkEmail.STATUS_SENT
+            bulk_email.save(update_fields=['status', 'updated_at'])
+            BulkEmailsReporting.objects.create(
+                subject=bulk_email.subject,
+                body=bulk_email.body,
+                recipients=', '.join(bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).values_list('email', flat=True)),
+                attachment=bulk_email.attachment if bulk_email.attachment else None,
+            )
+        self.message_user(request, f"Bulk email complete. Sent: {sent}. Failed: {failed}.")
+    send_pending_recipients.short_description = "Step 2 - Send pending recipients individually"
 
     def mail_to_active_users(self, request, queryset):
         # Ensure only one email instance is selected
@@ -1627,6 +1889,25 @@ class BulkEmailAdmin(admin.ModelAdmin):
             return render(request, 'admin/select_email_group.html', context)
 
     mail_to_email_group.short_description = "Mail to Email Group"
+
+
+@admin.register(BulkEmailRecipient)
+class BulkEmailRecipientAdmin(admin.ModelAdmin):
+    list_display = ('bulk_email', 'email', 'name', 'source_type', 'status', 'sent_at', 'created_at')
+    list_filter = ('status', 'source_type', 'bulk_email__audience_type', 'created_at')
+    search_fields = ('bulk_email__subject', 'email', 'name', 'error_message')
+    readonly_fields = ('created_at', 'sent_at')
+
+
+@admin.register(BulkEmailSendLog)
+class BulkEmailSendLogAdmin(admin.ModelAdmin):
+    list_display = ('bulk_email', 'email', 'status', 'sent_by', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('bulk_email__subject', 'email', 'message')
+    readonly_fields = ('bulk_email', 'recipient', 'email', 'status', 'message', 'sent_by', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
 
 
 class BulkEmailsReportingResource(resources.ModelResource):

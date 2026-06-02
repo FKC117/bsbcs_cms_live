@@ -3138,6 +3138,10 @@ button{
   max-height: 9rem;
 }
 
+.max-h-40{
+  max-height: 10rem;
+}
+
 .max-h-56{
   max-height: 14rem;
 }
@@ -3146,8 +3150,16 @@ button{
   max-height: 16rem;
 }
 
+.max-h-72{
+  max-height: 18rem;
+}
+
 .max-h-\[38vh\]{
   max-height: 38vh;
+}
+
+.max-h-\[420px\]{
+  max-height: 420px;
 }
 
 .max-h-\[56vh\]{
@@ -3156,6 +3168,10 @@ button{
 
 .max-h-\[60vh\]{
   max-height: 60vh;
+}
+
+.max-h-\[620px\]{
+  max-height: 620px;
 }
 
 .max-h-\[62vh\]{
@@ -3192,6 +3208,14 @@ button{
 
 .min-h-\[130px\]{
   min-height: 130px;
+}
+
+.min-h-\[180px\]{
+  min-height: 180px;
+}
+
+.min-h-\[220px\]{
+  min-height: 220px;
 }
 
 .min-h-\[42px\]{
@@ -3512,6 +3536,10 @@ button{
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+.cursor-not-allowed{
+  cursor: not-allowed;
+}
+
 .cursor-pointer{
   cursor: pointer;
 }
@@ -3560,6 +3588,10 @@ button{
 
 .grid-cols-\[52px_minmax\(0\2c 1\.2fr\)_minmax\(0\2c 1\.5fr\)_150px\]{
   grid-template-columns: 52px minmax(0,1.2fr) minmax(0,1.5fr) 150px;
+}
+
+.grid-cols-\[minmax\(0\2c 1fr\)_120px_120px\]{
+  grid-template-columns: minmax(0,1fr) 120px 120px;
 }
 
 .grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_160px_minmax\(0\2c 1fr\)_94px\]{
@@ -4114,6 +4146,10 @@ button{
   border-color: rgb(255 255 255 / 0.3);
 }
 
+.border-white\/40{
+  border-color: rgb(255 255 255 / 0.4);
+}
+
 .border-white\/70{
   border-color: rgb(255 255 255 / 0.7);
 }
@@ -4397,6 +4433,11 @@ button{
   background-color: rgb(241 245 249 / var(--tw-bg-opacity, 1));
 }
 
+.bg-slate-200{
+  --tw-bg-opacity: 1;
+  background-color: rgb(226 232 240 / var(--tw-bg-opacity, 1));
+}
+
 .bg-slate-50{
   --tw-bg-opacity: 1;
   background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1));
@@ -4412,6 +4453,10 @@ button{
 
 .bg-slate-50\/70{
   background-color: rgb(248 250 252 / 0.7);
+}
+
+.bg-slate-950\/55{
+  background-color: rgb(2 6 23 / 0.55);
 }
 
 .bg-success-light{
@@ -4934,6 +4979,10 @@ button{
 
 .pb-6{
   padding-bottom: 1.5rem;
+}
+
+.pb-7{
+  padding-bottom: 1.75rem;
 }
 
 .pb-8{
@@ -5921,6 +5970,11 @@ button{
   border-color: rgb(25 118 210 / var(--tw-border-opacity, 1));
 }
 
+.hover\:border-slate-400:hover{
+  --tw-border-opacity: 1;
+  border-color: rgb(148 163 184 / var(--tw-border-opacity, 1));
+}
+
 .hover\:bg-amber-700:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(180 83 9 / var(--tw-bg-opacity, 1));
@@ -5969,6 +6023,11 @@ button{
 .hover\:bg-bsbcs-navy:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(13 39 71 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-emerald-700:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(4 120 87 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-gray-100:hover{
@@ -6403,6 +6462,10 @@ button{
     width: 12rem;
   }
 
+  .sm\:w-auto{
+    width: auto;
+  }
+
   .sm\:grid-cols-12{
     grid-template-columns: repeat(12, minmax(0, 1fr));
   }
@@ -6775,8 +6838,20 @@ button{
     grid-template-columns: minmax(0,1.5fr) minmax(320px,.7fr);
   }
 
+  .lg\:grid-cols-\[minmax\(0\2c 1fr\)_360px\]{
+    grid-template-columns: minmax(0,1fr) 360px;
+  }
+
   .lg\:grid-cols-\[minmax\(0\2c 1fr\)_420px\]{
     grid-template-columns: minmax(0,1fr) 420px;
+  }
+
+  .lg\:grid-cols-\[minmax\(0\2c 1fr\)_440px\]{
+    grid-template-columns: minmax(0,1fr) 440px;
+  }
+
+  .lg\:grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_180px\]{
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) 180px;
   }
 
   .lg\:grid-cols-\[minmax\(0\2c 1fr\)_minmax\(340px\2c 0\.88fr\)\]{
@@ -6859,6 +6934,14 @@ button{
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
+  .xl\:grid-cols-8{
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  .xl\:grid-cols-\[360px_minmax\(0\2c 1fr\)\]{
+    grid-template-columns: 360px minmax(0,1fr);
+  }
+
   .xl\:grid-cols-\[minmax\(0\2c 0\.95fr\)_minmax\(0\2c 1\.35fr\)\]{
     grid-template-columns: minmax(0,0.95fr) minmax(0,1.35fr);
   }
@@ -6871,7 +6954,15 @@ button{
     grid-template-columns: minmax(0,1fr) 320px;
   }
 
+  .xl\:grid-cols-\[minmax\(0\2c 1fr\)_400px\]{
+    grid-template-columns: minmax(0,1fr) 400px;
+  }
+
   .xl\:grid-cols-\[minmax\(0\2c 1fr\)_440px\]{
     grid-template-columns: minmax(0,1fr) 440px;
+  }
+
+  .xl\:grid-cols-\[minmax\(0\2c 420px\)_minmax\(0\2c 1fr\)\]{
+    grid-template-columns: minmax(0,420px) minmax(0,1fr);
   }
 }

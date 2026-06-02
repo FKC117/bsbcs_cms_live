@@ -1442,13 +1442,135 @@ class FeedbackResponse(models.Model):
 from django.db import models
 
 class BulkEmail(models.Model):
+    STATUS_DRAFT = 'draft'
+    STATUS_RECIPIENTS_READY = 'recipients_ready'
+    STATUS_SENDING = 'sending'
+    STATUS_SENT = 'sent'
+    STATUS_PARTIAL = 'partial'
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_RECIPIENTS_READY, 'Recipients ready'),
+        (STATUS_SENDING, 'Sending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_PARTIAL, 'Partially sent'),
+    ]
+
+    AUDIENCE_MANUAL = 'manual'
+    AUDIENCE_ACTIVE_USERS = 'active_users'
+    AUDIENCE_EMAIL_GROUP = 'email_group'
+    AUDIENCE_EVENT_PARTICIPANTS = 'event_participants'
+    AUDIENCE_EVENT_UNPAID = 'event_unpaid'
+    AUDIENCE_ABSTRACT_SUBMITTERS = 'abstract_submitters'
+    AUDIENCE_CORPORATE_CONTACTS = 'corporate_contacts'
+
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_MANUAL, 'Manual recipients'),
+        (AUDIENCE_ACTIVE_USERS, 'Active website users'),
+        (AUDIENCE_EMAIL_GROUP, 'Email group'),
+        (AUDIENCE_EVENT_PARTICIPANTS, 'Event participants'),
+        (AUDIENCE_EVENT_UNPAID, 'Approved event participants with pending payment'),
+        (AUDIENCE_ABSTRACT_SUBMITTERS, 'Abstract submitters'),
+        (AUDIENCE_CORPORATE_CONTACTS, 'Corporate contacts'),
+    ]
+
     subject = models.CharField(max_length=255)
     body = models.TextField()
     attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
+    audience_type = models.CharField(max_length=40, choices=AUDIENCE_CHOICES, default=AUDIENCE_MANUAL)
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_emails')
+    email_group = models.ForeignKey('EmailGroup', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_emails')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='created_bulk_emails')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.subject
+
+    @property
+    def recipient_count(self):
+        return self.recipients.count()
+
+    @property
+    def sent_count(self):
+        return self.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).count()
+
+    @property
+    def failed_count(self):
+        return self.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED).count()
+
+    @property
+    def pending_count(self):
+        return self.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).count()
+
+
+class BulkEmailRecipient(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    SOURCE_MANUAL = 'manual'
+    SOURCE_USER = 'user'
+    SOURCE_EMAIL_GROUP = 'email_group'
+    SOURCE_PARTICIPANT = 'participant'
+    SOURCE_ABSTRACT = 'abstract'
+    SOURCE_CORPORATE = 'corporate'
+
+    SOURCE_CHOICES = [
+        (SOURCE_MANUAL, 'Manual'),
+        (SOURCE_USER, 'Website user'),
+        (SOURCE_EMAIL_GROUP, 'Email group'),
+        (SOURCE_PARTICIPANT, 'Participant'),
+        (SOURCE_ABSTRACT, 'Abstract submitter'),
+        (SOURCE_CORPORATE, 'Corporate'),
+    ]
+
+    bulk_email = models.ForeignKey(BulkEmail, on_delete=models.CASCADE, related_name='recipients')
+    email = models.EmailField()
+    name = models.CharField(max_length=180, blank=True, null=True)
+    source_type = models.CharField(max_length=30, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    user_profile = models.ForeignKey('UserProfile', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    participant = models.ForeignKey('Participant', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    abstract_submission = models.ForeignKey('AbstractSubmission', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    corporate_account = models.ForeignKey('CorporateAccount', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    corporate_request = models.ForeignKey('CorporateAccountRequest', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_recipients')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    error_message = models.TextField(blank=True, null=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.email} - {self.bulk_email.subject}"
+
+    class Meta:
+        ordering = ['email']
+        unique_together = ('bulk_email', 'email')
+
+
+class BulkEmailSendLog(models.Model):
+    bulk_email = models.ForeignKey(BulkEmail, on_delete=models.CASCADE, related_name='send_logs')
+    recipient = models.ForeignKey(BulkEmailRecipient, on_delete=models.SET_NULL, blank=True, null=True, related_name='send_logs')
+    email = models.EmailField()
+    status = models.CharField(max_length=20, choices=BulkEmailRecipient.STATUS_CHOICES)
+    message = models.TextField(blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_email_send_logs')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.bulk_email.subject} - {self.email} - {self.status}"
+
+    class Meta:
+        ordering = ['-created_at']
 
 
 class BulkEmailsReporting(models.Model):  # Tracking sent emails
@@ -1472,6 +1594,17 @@ class EmailGroup(models.Model):
 
     def __str__(self):
         return self.name
+
+    def parsed_emails(self):
+        seen = set()
+        emails = []
+        for raw_email in self.email_addresses.replace('\n', ',').split(','):
+            email = raw_email.strip()
+            email_key = email.lower()
+            if email and email_key not in seen:
+                emails.append(email)
+                seen.add(email_key)
+        return emails
 # Group Email Model Ends Here-----------------------------------------------------------------------------#
 
 # Pending Payment Reminder models starts here-------------------------------------------------------------#
