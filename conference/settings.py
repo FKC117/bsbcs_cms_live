@@ -1,10 +1,11 @@
 import django
 from pathlib import Path
 import os
-from decouple import config
+from decouple import Config, RepositoryEnv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+config = Config(RepositoryEnv(str(BASE_DIR / '.env')))
 
 
 def csv_config(name, default=''):
