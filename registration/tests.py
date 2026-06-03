@@ -10,6 +10,7 @@ from registration.models import (
     ProgramItemFaculty, AbstractSubmission
 )
 from registration.forms import ProgramSessionBuilderForm
+from website.models import MembershipPayment, MembershipType
 
 class ProgramSessionBuilderTests(TestCase):
 
@@ -406,6 +407,104 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(str(payment_status.amount), '500.00')
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('Approved', mail.outbox[0].subject)
+
+    def test_payment_center_requires_staff_and_renders_event_and_membership_payments(self):
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Payment Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='payment@example.com',
+            phone='01700000101',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=participant,
+            event=self.event,
+            merchant_invoice_number='REG-PAYMENT-CENTER',
+            amount='500.00',
+            status='unpaid',
+        )
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Member Payment Candidate',
+            email='memberpay@example.com',
+            phone='01700000102',
+            country='Bangladesh',
+        )
+        membership_type = MembershipType.objects.create(
+            name='Annual',
+            slug='annual-test',
+            amount='1000.00',
+            duration_years=1,
+            is_active=True,
+        )
+        MembershipPayment.objects.create(
+            user_profile=profile,
+            membership_type=membership_type,
+            merchant_invoice_number='MEM-PAYMENT-CENTER',
+            amount='1000.00',
+            status='pending',
+        )
+
+        response = self.client.get(reverse('dashboard_payment_center'))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_payment_center'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Payment center')
+        self.assertContains(response, 'Payment Candidate')
+        self.assertContains(response, 'Member Payment Candidate')
+
+    def test_payment_center_updates_event_payment_without_emailing_invoice(self):
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Manual Payment',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='manualpayment@example.com',
+            phone='01700000103',
+            country='Bangladesh',
+            approved=True,
+        )
+        payment = PaymentStatus.objects.create(
+            participant=participant,
+            event=self.event,
+            merchant_invoice_number='REG-MANUAL',
+            amount='500.00',
+            status='unpaid',
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_payment_center'), {
+            'payment_source': 'event',
+            'payment_id': payment.id,
+            'payment_action': 'update',
+            'manual_status': 'completed',
+            'manual_amount': '700.00',
+            'manual_invoice_number': 'REG-MANUAL-UPDATED',
+            'manual_transaction_id': 'PAY-123',
+            'manual_trx_id': 'TRX-123',
+            'source': 'event',
+            'status': 'open',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, 'completed')
+        self.assertEqual(str(payment.amount), '700.00')
+        self.assertEqual(payment.merchant_invoice_number, 'REG-MANUAL-UPDATED')
+        self.assertEqual(payment.transaction_id, 'PAY-123')
+        self.assertEqual(payment.trxID, 'TRX-123')
+        self.assertFalse(payment.email_sent)
 
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)

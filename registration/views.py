@@ -33,6 +33,8 @@ import json
 import logging
 import csv
 import io
+import os
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
@@ -2905,14 +2907,13 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         'approved__exact': '0',
         'denied__exact': '0',
     })
-    event_payment_pending_url = admin_changelist_url(PaymentStatus, {
-        **event_filter_query,
-        'status__in': UNPAID_PAYMENT_STATUSES,
-    })
+    payment_center_url = reverse('dashboard_payment_center')
+    payment_center_params = {}
+    if event_filter:
+        payment_center_params['event'] = event_filter
+    event_payment_pending_url = f"{payment_center_url}?{urlencode({**payment_center_params, 'source': 'event', 'status': 'open'})}"
     membership_pending_url = admin_changelist_url(Member, {'approval_status__exact': 'pending'})
-    membership_payment_pending_url = admin_changelist_url(MembershipPayment, {
-        'status__in': ['initiated', 'pending', 'failed'],
-    })
+    membership_payment_pending_url = f"{payment_center_url}?{urlencode({'source': 'membership', 'status': 'open'})}"
     corporate_access_pending_url = admin_changelist_url(CorporateAccountRequest, {'status__exact': 'pending'})
     corporate_attendee_pending_url = admin_changelist_url(CorporateEventAttendee, {
         'registration__event__id__exact': event_filter,
@@ -2936,11 +2937,8 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     if event_filter:
         abstract_center_params['event'] = event_filter
     abstract_center_url = f"{abstract_center_url}?{urlencode(abstract_center_params)}"
-    event_payment_completed_url = admin_changelist_url(PaymentStatus, {
-        **event_filter_query,
-        'status__in': PAID_PAYMENT_STATUSES,
-    })
-    membership_payment_completed_url = admin_changelist_url(MembershipPayment, {'status__exact': 'completed'})
+    event_payment_completed_url = f"{payment_center_url}?{urlencode({**payment_center_params, 'source': 'event', 'status': 'paid'})}"
+    membership_payment_completed_url = f"{payment_center_url}?{urlencode({'source': 'membership', 'status': 'paid'})}"
 
     workflow_groups = [
         {
@@ -3063,18 +3061,21 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'description': 'Track event registration payment status, bKash IDs, invoices, reminders, and completion status.',
             'primary_label': 'Open event payments',
             'primary_url': event_payment_pending_url,
+            'primary_internal': True,
             'steps': [
                 {
                     'label': 'Pending or failed',
                     'count': approved_unpaid_payments.count(),
                     'detail': 'Review unpaid, pending, initiated, or failed event payment rows. These are participant-linked event payments.',
                     'url': event_payment_pending_url,
+                    'internal': True,
                 },
                 {
                     'label': 'Completed event payments',
                     'count': completed_event_payments.count(),
                     'detail': 'Use this to audit paid/completed event payment records and invoice details.',
                     'url': event_payment_completed_url,
+                    'internal': True,
                 },
             ],
         },
@@ -3086,18 +3087,21 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'description': 'Track membership payment rows separately from event payments. Completed membership payments activate membership through the existing completion logic.',
             'primary_label': 'Open membership payments',
             'primary_url': membership_payment_pending_url,
+            'primary_internal': True,
             'steps': [
                 {
                     'label': 'Pending membership payment',
                     'count': pending_membership_payment_count,
                     'detail': 'Review initiated, pending, or failed membership payments and transaction details.',
                     'url': membership_payment_pending_url,
+                    'internal': True,
                 },
                 {
                     'label': 'Completed membership payment',
                     'count': completed_membership_payments.count(),
                     'detail': 'Audit completed membership payment records, invoice files, and membership activation results.',
                     'url': membership_payment_completed_url,
+                    'internal': True,
                 },
             ],
         },
@@ -3120,7 +3124,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'site_settings': admin_changelist_url(SiteSettings),
             'membership_benefits': admin_changelist_url(MembershipBenefitModal),
             'participants': admin_changelist_url(Participant),
-            'payments': admin_changelist_url(PaymentStatus),
+            'payments': payment_center_url,
             'corporate_registrations': admin_changelist_url(CorporateEventRegistration),
             'corporate_attendees': admin_changelist_url(CorporateEventAttendee),
             'corporate_payments': admin_changelist_url(CorporatePayment),
@@ -3762,6 +3766,314 @@ def dashboard_participant_center(request):
         ],
     }
     return render(request, 'dashboard_participant_center.html', context)
+
+
+def _generate_event_payment_invoice(payment_record):
+    from .pdf_utils import generate_invoice
+
+    invoice_path = generate_invoice(payment_record.participant, payment_record.event, payment_record)
+    payment_record.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
+    payment_record.save(update_fields=['invoice', 'updated_at'])
+    return invoice_path
+
+
+def _send_event_payment_invoice_email(payment_record):
+    from django.core.mail import EmailMessage
+
+    if not payment_record.invoice:
+        _generate_event_payment_invoice(payment_record)
+
+    subject = f"Invoice for {payment_record.event.name} {payment_record.event.year}"
+    message = (
+        f"Dear {payment_record.participant.name},\n\n"
+        f"Please find your invoice for {payment_record.event.name} {payment_record.event.year} attached.\n\n"
+        "Best regards,\nBSBCS Team"
+    )
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[payment_record.participant.email],
+    )
+    email.attach_file(payment_record.invoice.path)
+    email.send()
+    payment_record.email_sent = True
+    payment_record.save(update_fields=['email_sent', 'updated_at'])
+
+
+def _generate_membership_payment_invoice(payment_record):
+    from website.utils_membership import generate_membership_invoice
+
+    invoice_path = generate_membership_invoice(payment_record)
+    payment_record.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
+    payment_record.save(update_fields=['invoice', 'updated_at'])
+    return invoice_path
+
+
+def _activate_membership_for_completed_payment(payment_record):
+    from dateutil.relativedelta import relativedelta
+    from website.models import Member
+    from website.utils_membership import process_pending_event_intents
+
+    member, _ = Member.objects.get_or_create(user_profile=payment_record.user_profile)
+    if member.approval_status != 'approved':
+        return False
+
+    today = timezone.now().date()
+    if not member.subscription_start_date or not member.subscription_expiry_date or member.subscription_expiry_date < today:
+        member.subscription_start_date = today
+        current_expiry = today
+    else:
+        current_expiry = member.subscription_expiry_date
+
+    member.is_active_member = True
+    member.subscription_expiry_date = current_expiry + relativedelta(years=payment_record.duration_years)
+    member.membership_type = payment_record.membership_type
+    member.save()
+    process_pending_event_intents(member)
+    return True
+
+
+def _normalize_payment_amount(raw_amount, fallback):
+    if raw_amount in (None, ''):
+        return fallback
+    try:
+        return Decimal(str(raw_amount))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError('Enter a valid amount.')
+
+
+@staff_member_required
+def dashboard_payment_center(request):
+    from website.models import MembershipPayment, MembershipType, SiteSettings
+    from website.utils_membership import send_membership_invoice_email
+
+    site_settings = SiteSettings.objects.first()
+    source_filter = request.POST.get('source') if request.method == 'POST' else request.GET.get('source')
+    status_filter = request.POST.get('status') if request.method == 'POST' else request.GET.get('status')
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    source_filter = source_filter or 'all'
+    status_filter = status_filter or 'open'
+
+    query_params = {'source': source_filter, 'status': status_filter}
+    if event_filter:
+        query_params['event'] = event_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = f"{reverse('dashboard_payment_center')}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        payment_source = request.POST.get('payment_source')
+        payment_id = request.POST.get('payment_id')
+        payment_action = request.POST.get('payment_action')
+
+        try:
+            if payment_source == 'event':
+                payment_record = get_object_or_404(
+                    PaymentStatus.objects.select_related('participant', 'event'),
+                    pk=payment_id,
+                )
+                if payment_action == 'update':
+                    payment_record.status = request.POST.get('manual_status') or payment_record.status
+                    payment_record.amount = _normalize_payment_amount(request.POST.get('manual_amount'), payment_record.amount)
+                    payment_record.transaction_id = (request.POST.get('manual_transaction_id') or '').strip() or None
+                    payment_record.trxID = (request.POST.get('manual_trx_id') or '').strip() or None
+                    invoice_number = (request.POST.get('manual_invoice_number') or '').strip()
+                    if invoice_number:
+                        payment_record.merchant_invoice_number = invoice_number
+                    payment_record.save()
+                    messages.success(request, f'Event payment updated for {payment_record.participant.name}.')
+                elif payment_action == 'generate_invoice':
+                    if payment_record.invoice:
+                        messages.info(request, f'Invoice already exists for {payment_record.participant.name}. Use View invoice.')
+                    else:
+                        _generate_event_payment_invoice(payment_record)
+                        messages.success(request, f'Invoice generated for {payment_record.participant.name}.')
+                elif payment_action == 'email_invoice':
+                    if not payment_record.invoice:
+                        messages.error(request, 'Generate the invoice first, then email it.')
+                    else:
+                        _send_event_payment_invoice_email(payment_record)
+                        messages.success(request, f'Invoice email sent to {payment_record.participant.email}.')
+
+            elif payment_source == 'membership':
+                payment_record = get_object_or_404(
+                    MembershipPayment.objects.select_related('user_profile', 'membership_type'),
+                    pk=payment_id,
+                )
+                if payment_action == 'update':
+                    previous_status = payment_record.status
+                    payment_record.status = request.POST.get('manual_status') or payment_record.status
+                    payment_record.amount = _normalize_payment_amount(request.POST.get('manual_amount'), payment_record.amount)
+                    payment_record.transaction_id = (request.POST.get('manual_transaction_id') or '').strip() or None
+                    payment_record.trxID = (request.POST.get('manual_trx_id') or '').strip() or None
+                    invoice_number = (request.POST.get('manual_invoice_number') or '').strip()
+                    if invoice_number:
+                        payment_record.merchant_invoice_number = invoice_number
+                    payment_record.save()
+                    if payment_record.status == 'completed' and previous_status != 'completed':
+                        activated = _activate_membership_for_completed_payment(payment_record)
+                        if activated:
+                            messages.success(request, f'Membership payment updated and membership activated for {payment_record.user_profile.name}.')
+                        else:
+                            messages.warning(request, f'Payment updated, but membership is not approved yet for {payment_record.user_profile.name}.')
+                    else:
+                        messages.success(request, f'Membership payment updated for {payment_record.user_profile.name}.')
+                elif payment_action == 'generate_invoice':
+                    if payment_record.invoice:
+                        messages.info(request, f'Membership invoice already exists for {payment_record.user_profile.name}. Use View invoice.')
+                    else:
+                        _generate_membership_payment_invoice(payment_record)
+                        messages.success(request, f'Membership invoice generated for {payment_record.user_profile.name}.')
+                elif payment_action == 'email_invoice':
+                    if not payment_record.invoice:
+                        messages.error(request, 'Generate the membership invoice first, then email it.')
+                    elif send_membership_invoice_email(payment_record):
+                        messages.success(request, f'Membership invoice email sent to {payment_record.user_profile.email}.')
+                    else:
+                        messages.error(request, 'Could not send membership invoice email. Check invoice file and email settings.')
+            else:
+                messages.error(request, 'Choose a valid payment row.')
+        except Exception as exc:
+            logger.exception("Payment center action failed: %s", exc)
+            messages.error(request, str(exc))
+        return redirect(redirect_url)
+
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    event_payments = PaymentStatus.objects.select_related('participant', 'event').order_by('-updated_at')
+    membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').order_by('-updated_at')
+
+    if event_filter:
+        event_payments = event_payments.filter(event_id=event_filter)
+
+    if search_query:
+        event_payments = event_payments.filter(
+            Q(participant__name__icontains=search_query)
+            | Q(participant__email__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(merchant_invoice_number__icontains=search_query)
+            | Q(transaction_id__icontains=search_query)
+            | Q(trxID__icontains=search_query)
+        )
+        membership_payments = membership_payments.filter(
+            Q(user_profile__name__icontains=search_query)
+            | Q(user_profile__email__icontains=search_query)
+            | Q(merchant_invoice_number__icontains=search_query)
+            | Q(transaction_id__icontains=search_query)
+            | Q(trxID__icontains=search_query)
+        )
+
+    if status_filter == 'open':
+        event_payments = event_payments.filter(status__in=UNPAID_PAYMENT_STATUSES)
+        membership_payments = membership_payments.exclude(status='completed')
+    elif status_filter == 'paid':
+        event_payments = event_payments.filter(status__in=PAID_PAYMENT_STATUSES)
+        membership_payments = membership_payments.filter(status='completed')
+    elif status_filter != 'all':
+        event_payments = event_payments.filter(status=status_filter)
+        membership_payments = membership_payments.filter(status=status_filter)
+
+    event_rows = []
+    membership_rows = []
+    if source_filter in ('all', 'event'):
+        event_rows = [
+            {
+                'source': 'event',
+                'source_label': 'Event',
+                'id': payment.id,
+                'owner_name': payment.participant.name,
+                'owner_email': payment.participant.email,
+                'context': f'{payment.event.name} {payment.event.year}',
+                'amount': payment.amount or 0,
+                'status': payment.status,
+                'status_label': payment.get_status_display(),
+                'invoice_number': payment.merchant_invoice_number or '-',
+                'transaction_id': payment.transaction_id or '',
+                'trx_id': payment.trxID or '',
+                'invoice_url': payment.invoice.url if payment.invoice else '',
+                'invoice_ready': bool(payment.invoice),
+                'email_sent': payment.email_sent,
+                'email_trackable': True,
+                'email_sent_at': payment.updated_at if payment.email_sent else None,
+                'updated_at': payment.updated_at,
+                'status_choices': PaymentStatus.STATUS_CHOICES,
+            }
+            for payment in event_payments[:350]
+        ]
+    if source_filter in ('all', 'membership'):
+        membership_rows = [
+            {
+                'source': 'membership',
+                'source_label': 'Membership',
+                'id': payment.id,
+                'owner_name': payment.user_profile.name,
+                'owner_email': payment.user_profile.email,
+                'context': payment.membership_type.name if payment.membership_type else 'Membership',
+                'amount': payment.amount or 0,
+                'status': payment.status,
+                'status_label': payment.get_status_display(),
+                'invoice_number': payment.merchant_invoice_number or '-',
+                'transaction_id': payment.transaction_id or '',
+                'trx_id': payment.trxID or '',
+                'invoice_url': payment.invoice.url if payment.invoice else '',
+                'invoice_ready': bool(payment.invoice),
+                'email_sent': False,
+                'email_trackable': False,
+                'email_sent_at': None,
+                'updated_at': payment.updated_at,
+                'status_choices': MembershipPayment.STATUS_CHOICES,
+            }
+            for payment in membership_payments[:350]
+        ]
+
+    payment_rows = sorted(event_rows + membership_rows, key=lambda row: row['updated_at'] or timezone.now(), reverse=True)
+    page_obj = Paginator(payment_rows, 15).get_page(request.GET.get('page'))
+
+    totals = {
+        'event_open': PaymentStatus.objects.filter(status__in=UNPAID_PAYMENT_STATUSES).count(),
+        'event_paid': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).count(),
+        'membership_open': MembershipPayment.objects.exclude(status='completed').count(),
+        'membership_paid': MembershipPayment.objects.filter(status='completed').count(),
+        'event_revenue': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).aggregate(total=Sum('amount'))['total'] or 0,
+        'membership_revenue': MembershipPayment.objects.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0,
+        'missing_event_invoices': PaymentStatus.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
+        'missing_membership_invoices': MembershipPayment.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
+    }
+    totals['revenue'] = totals['event_revenue'] + totals['membership_revenue']
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'page_obj': page_obj,
+        'totals': totals,
+        'current_filters': {
+            'source': source_filter,
+            'status': status_filter,
+            'event': event_filter or '',
+            'q': search_query,
+        },
+        'query_string': urlencode(query_params),
+        'source_choices': [
+            ('all', 'All sources'),
+            ('event', 'Event payments'),
+            ('membership', 'Membership payments'),
+        ],
+        'status_choices': [
+            ('open', 'Needs payment / review'),
+            ('paid', 'Paid / completed'),
+            ('all', 'All statuses'),
+            ('initiated', 'Initiated'),
+            ('pending', 'Pending'),
+            ('unpaid', 'Unpaid'),
+            ('failed', 'Failed'),
+            ('cancelled', 'Cancelled'),
+            ('completed', 'Completed'),
+            ('refunded', 'Refunded'),
+        ],
+        'membership_types': MembershipType.objects.filter(is_active=True).order_by('order', 'name'),
+    }
+    return render(request, 'dashboard_payment_center.html', context)
 
 
 def _bulk_email_valid_email(email):

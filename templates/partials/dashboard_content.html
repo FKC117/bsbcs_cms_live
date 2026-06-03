@@ -40,6 +40,7 @@
       <a href="{% url 'dashboard_event_builder' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Create event</a>
       <a href="{% url 'dashboard_program_session_builder' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program builder</a>
       <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Participants</a>
+      <a href="{% url 'dashboard_payment_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Payments</a>
       <a href="{% url 'dashboard_bulk_email_center' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
       <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts</a>
       <a href="{{ operations.admin_links.membership_benefits }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Benefits</a>
@@ -228,7 +229,7 @@
         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event ledger</div>
         <h2 class="mt-1 text-xl font-black text-ink">Registration and revenue</h2>
       </div>
-      <a href="{{ operations.admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payments</a>
+      <a href="{{ operations.admin_links.payments }}" class="rounded-lg border border-line px-3 py-2 text-sm font-bold text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payments</a>
     </div>
     <div id="event-ledger-panel">
       {% include "partials/dashboard_event_ledger.html" %}

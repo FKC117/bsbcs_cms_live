@@ -1,0 +1,291 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payment Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Payment workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Participants</a>
+                <a href="{% url 'admin:registration_paymentstatus_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Event Admin</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Payment center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage event and membership payments separately.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Update payment records, generate invoice PDFs, and send invoice emails only when the admin chooses to send them.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_auto]">
+                    <div>
+                        <label class="compact-label" for="source">Source</label>
+                        <select id="source" name="source" class="workflow-select">
+                            {% for value, label in source_choices %}
+                                <option value="{{ value }}" {% if current_filters.source == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="status">Status</label>
+                        <select id="status" name="status" class="workflow-select">
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid content-end">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search name, email, invoice, payment ID, transaction ID">
+                    <a href="{% url 'dashboard_payment_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event open</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.event_open }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event paid</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.event_paid }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership open</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.membership_open }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership paid</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.membership_paid }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet md:col-span-2">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Revenue collected</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.revenue }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Missing invoices</div>
+                <div class="mt-1 text-2xl font-black text-slate-700">{{ totals.missing_event_invoices|add:totals.missing_membership_invoices }}</div>
+            </div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Payment records</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Manual payment, invoice, and email queue</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Manual update saves status and transaction details. Invoice generation and invoice email are intentionally separate buttons.</p>
+                </div>
+                <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} records</div>
+            </div>
+
+            <div class="space-y-2">
+                {% for row in page_obj %}
+                    <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                        <div class="grid gap-3 lg:grid-cols-[minmax(220px,1.15fr)_minmax(160px,0.65fr)_minmax(250px,0.9fr)_minmax(180px,0.65fr)] lg:items-center">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="rounded-full {% if row.source == 'membership' %}bg-teal-50 text-bsbcs-teal ring-teal-100{% else %}bg-blue-50 text-bsbcs-blue ring-blue-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.source_label }}</span>
+                                    <span class="rounded-full {% if row.status == 'completed' or row.status == 'paid' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.status == 'failed' or row.status == 'cancelled' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.status_label }}</span>
+                                </div>
+                                <h3 class="mt-2 truncate text-sm font-black text-ink">{{ row.owner_name }}</h3>
+                                <p class="truncate text-xs font-semibold text-slate-500">{{ row.owner_email }}</p>
+                                <p class="mt-1 truncate text-xs font-bold text-slate-600">{{ row.context }}</p>
+                            </div>
+
+                            <div class="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-line">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Amount</div>
+                                <div class="mt-0.5 text-base font-black text-ink">BDT {{ row.amount }}</div>
+                                <div class="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{{ row.invoice_number }}</div>
+                            </div>
+
+                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                {% if row.invoice_ready %}
+                                    <a href="{{ row.invoice_url }}" target="_blank" rel="noopener noreferrer" class="grid place-items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-bsbcs-blue hover:bg-blue-100">View invoice</a>
+                                {% else %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="source" value="{{ current_filters.source }}">
+                                        <input type="hidden" name="status" value="{{ current_filters.status }}">
+                                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="payment_source" value="{{ row.source }}">
+                                        <input type="hidden" name="payment_id" value="{{ row.id }}">
+                                        <input type="hidden" name="payment_action" value="generate_invoice">
+                                        <button class="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-bsbcs-blue hover:bg-blue-100">Generate invoice</button>
+                                    </form>
+                                {% endif %}
+
+                                {% if row.invoice_ready %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="source" value="{{ current_filters.source }}">
+                                        <input type="hidden" name="status" value="{{ current_filters.status }}">
+                                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="payment_source" value="{{ row.source }}">
+                                        <input type="hidden" name="payment_id" value="{{ row.id }}">
+                                        <input type="hidden" name="payment_action" value="email_invoice">
+                                        <button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">{% if row.email_sent %}Email again{% else %}Email invoice{% endif %}</button>
+                                    </form>
+                                {% else %}
+                                    <span class="grid place-items-center rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-400">Email locked</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="text-xs font-semibold text-slate-500">
+                                {% if row.email_sent and row.email_sent_at %}
+                                    <span class="block rounded-lg bg-green-50 px-3 py-2 font-black text-bsbcs-green ring-1 ring-green-100">Email sent {{ row.email_sent_at|date:"M d, Y h:i A" }}</span>
+                                {% elif row.email_trackable %}
+                                    <span class="block rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-line">Invoice email not sent yet</span>
+                                {% else %}
+                                    <span class="block rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-line">Membership email date is not tracked yet</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <details class="mt-2 rounded-lg border border-dashed border-line bg-slate-50 px-3 py-2">
+                            <summary class="cursor-pointer text-xs font-black text-bsbcs-blue">Update payment details</summary>
+                            <form method="post" class="mt-3">
+                                {% csrf_token %}
+                                <input type="hidden" name="source" value="{{ current_filters.source }}">
+                                <input type="hidden" name="status" value="{{ current_filters.status }}">
+                                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <input type="hidden" name="payment_source" value="{{ row.source }}">
+                                <input type="hidden" name="payment_id" value="{{ row.id }}">
+                                <input type="hidden" name="payment_action" value="update">
+                                <div class="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+                                    <div>
+                                        <label class="compact-label">Status</label>
+                                        <select name="manual_status" class="workflow-select">
+                                            {% for value, label in row.status_choices %}
+                                                <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="compact-label">Amount</label>
+                                        <input name="manual_amount" value="{{ row.amount }}" class="workflow-input" inputmode="decimal">
+                                    </div>
+                                    <div>
+                                        <label class="compact-label">Invoice number</label>
+                                        <input name="manual_invoice_number" value="{{ row.invoice_number }}" class="workflow-input">
+                                    </div>
+                                    <div>
+                                        <label class="compact-label">Payment ID</label>
+                                        <input name="manual_transaction_id" value="{{ row.transaction_id }}" class="workflow-input">
+                                    </div>
+                                    <div>
+                                        <label class="compact-label">Transaction ID</label>
+                                        <input name="manual_trx_id" value="{{ row.trx_id }}" class="workflow-input">
+                                    </div>
+                                    <div class="grid content-end">
+                                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </details>
+                    </article>
+                {% empty %}
+                    <div class="rounded-2xl border border-dashed border-line bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">No payment records match this filter.</div>
+                {% endfor %}
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-xs font-bold text-slate-500">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</div>
+                    <div class="flex flex-wrap gap-2">
+                        {% if page_obj.has_previous %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Previous</a>
+                        {% endif %}
+                        <span class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        {% if page_obj.has_next %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    <footer class="border-t border-line bg-white/80 py-4">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
+            <span>BSBCS Payment Center</span>
+            <span>Manual update, invoice generation, and invoice email are separate actions.</span>
+        </div>
+    </footer>
+</div>
+</body>
+</html>
