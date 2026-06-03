@@ -3631,7 +3631,7 @@ def dashboard_participant_center(request):
         action = request.POST.get('participant_action')
         selected_participants = Participant.objects.filter(pk__in=selected_ids).select_related('event', 'department')
 
-        if action in ('approve', 'deny', 'payment_unpaid', 'payment_completed', 'payment_failed') and not selected_ids:
+        if action in ('approve', 'deny') and not selected_ids:
             messages.error(request, 'Select at least one participant first.')
             return redirect(redirect_url)
 
@@ -3653,38 +3653,6 @@ def dashboard_participant_center(request):
         if action == 'deny':
             updated = selected_participants.update(approved=False, denied=True)
             messages.success(request, f'{updated} participant(s) denied.')
-            return redirect(redirect_url)
-
-        if action in ('payment_unpaid', 'payment_completed', 'payment_failed'):
-            status_map = {
-                'payment_unpaid': 'unpaid',
-                'payment_completed': 'completed',
-                'payment_failed': 'failed',
-            }
-            next_status = status_map[action]
-            updated = 0
-            skipped = 0
-            for participant in selected_participants:
-                if not participant.approved:
-                    skipped += 1
-                    continue
-                payable_amount = participant.get_payable_amount()
-                payment_status, _ = PaymentStatus.objects.get_or_create(
-                    participant=participant,
-                    event=participant.event,
-                    defaults={
-                        'merchant_invoice_number': f"REG-{participant.event_id}-{participant.id}-{int(time.time())}",
-                        'amount': payable_amount,
-                        'status': next_status,
-                    }
-                )
-                payment_status.amount = payable_amount
-                payment_status.status = next_status
-                payment_status.save()
-                updated += 1
-            messages.success(request, f'{updated} payment row(s) marked {next_status}.')
-            if skipped:
-                messages.warning(request, f'{skipped} participant(s) skipped because they are not approved yet.')
             return redirect(redirect_url)
 
     participants = Participant.objects.select_related('event', 'department', 'user', 'payment_statuses').order_by('-created_at')
