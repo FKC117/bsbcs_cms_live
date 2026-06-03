@@ -21,6 +21,8 @@ from .forms import (
     TimeSlotGeneratorForm,
     GeneratedTimeSlotPreviewFormSet,
     ProgramPersonQuickCreateForm,
+    DashboardEventForm,
+    DashboardAbstractSubmissionForm,
 )
 from .models import *
 from django.contrib.auth import login, logout
@@ -44,6 +46,7 @@ from .bulk_email_services import (
     upsert_bulk_email_recipient,
 )
 from .tasks import send_pending_bulk_email_campaign
+from .pdf_utils import generate_abstract_pdf
 
 
 # Payment logger (writes to payment.log via settings)
@@ -2921,6 +2924,11 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         'approved_for_presentation__exact': '0',
         'approved_for_poster__exact': '0',
     })
+    abstract_center_url = reverse('dashboard_abstract_center')
+    abstract_center_params = {'status': 'pending'}
+    if event_filter:
+        abstract_center_params['event'] = event_filter
+    abstract_center_url = f"{abstract_center_url}?{urlencode(abstract_center_params)}"
     event_payment_completed_url = admin_changelist_url(PaymentStatus, {
         **event_filter_query,
         'status__in': PAID_PAYMENT_STATUSES,
@@ -3016,13 +3024,15 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'status': 'needs decision',
             'description': 'Review submitted abstracts, approve for oral presentation or poster, and then schedule approved work in the program builder.',
             'primary_label': 'Open abstract review',
-            'primary_url': abstract_pending_url,
+            'primary_url': abstract_center_url,
+            'primary_internal': True,
             'steps': [
                 {
                     'label': 'Review abstracts',
                     'count': pending_abstracts.count(),
                     'detail': 'Use Approve for presentation or Approve for poster. Approval sends the abstract decision email.',
-                    'url': abstract_pending_url,
+                    'url': abstract_center_url,
+                    'internal': True,
                 },
                 {
                     'label': 'Schedule approved work',
@@ -3187,6 +3197,232 @@ def global_dashboard(request):
     if request.headers.get('HX-Request'):
         return render(request, 'partials/dashboard_content.html', context)
     return render(request, 'dashboard.html', context)
+
+
+@staff_member_required
+def dashboard_event_builder(request):
+    from website.models import SiteSettings
+
+    recent_events = Event.objects.order_by('-year', '-start_date', 'name')[:6]
+
+    if request.method == 'POST':
+        form = DashboardEventForm(request.POST, request.FILES)
+        if form.is_valid():
+            event = form.save()
+            messages.success(request, f'"{event}" was created. You can now add program details, registration content, and event assets.')
+            next_action = request.POST.get('next_action')
+            if next_action == 'program':
+                return redirect(f"{reverse('dashboard_program_session_builder')}?event={event.id}")
+            if next_action == 'admin':
+                return redirect(reverse('admin:registration_event_change', args=[event.id]))
+            return redirect(f"{reverse('dashboard_event_builder')}?created={event.id}")
+        messages.error(request, 'Please correct the highlighted event details.')
+    else:
+        form = DashboardEventForm(initial={
+            'year': timezone.now().year,
+            'event_status': 'upcoming',
+            'registration': 'Starting Soon',
+            'registration_audience': 'all',
+            'payment_required': True,
+        })
+
+    created_event = Event.objects.filter(pk=request.GET.get('created')).first()
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'form': form,
+        'recent_events': recent_events,
+        'created_event': created_event,
+        'event_status_choices': Event.EVENT_STATUS_CHOICES,
+        'registration_status_choices': Event.REGISTRATION_STATUS_CHOICES,
+        'registration_audience_choices': Event.REGISTRATION_AUDIENCE_CHOICES,
+    }
+    return render(request, 'dashboard_event_builder.html', context)
+
+
+def _send_abstract_approval_email(abstract, approval_type):
+    subject = f"Abstract Approved for {approval_type.capitalize()}"
+    context = {
+        'user': abstract.user,
+        'abstract': abstract,
+        'approval_type': approval_type,
+    }
+    html_content = render_to_string('abstract_approval_email.html', context)
+    text_content = strip_tags(html_content)
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER")
+    recipient_email = abstract.user.email if abstract.user_id else ''
+    if not recipient_email:
+        return False
+
+    email = EmailMultiAlternatives(subject, text_content, from_email, [recipient_email])
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+    return True
+
+
+def _abstract_status_label(abstract):
+    if abstract.approved_for_presentation:
+        return 'Presentation'
+    if abstract.approved_for_poster:
+        return 'Poster'
+    return 'Pending'
+
+
+@staff_member_required
+def dashboard_abstract_center(request):
+    from website.models import SiteSettings
+
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    status_filter = request.POST.get('status') if request.method == 'POST' else request.GET.get('status', 'pending')
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if status_filter:
+        query_params['status'] = status_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('dashboard_abstract_center')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
+    abstract_form = DashboardAbstractSubmissionForm(
+        selected_event=selected_event,
+        prefix='abstract',
+    )
+    selected_ids = request.POST.getlist('abstract_ids')
+    show_abstract_form = False
+    if request.method == 'POST':
+        action = request.POST.get('abstract_action')
+        if action == 'create_abstract':
+            abstract_form = DashboardAbstractSubmissionForm(
+                request.POST,
+                request.FILES,
+                selected_event=selected_event,
+                prefix='abstract',
+            )
+            show_abstract_form = True
+            if abstract_form.is_valid():
+                abstract = abstract_form.save()
+                messages.success(request, f'Abstract "{abstract.title}" added and kept pending for review.')
+                create_redirect = reverse('dashboard_abstract_center')
+                create_params = {
+                    'event': abstract.event_id,
+                    'status': 'pending',
+                    'q': abstract.title,
+                }
+                return redirect(f"{create_redirect}?{urlencode(create_params)}")
+            messages.error(request, 'Please correct the highlighted abstract form fields.')
+
+        selected_abstracts = AbstractSubmission.objects.filter(pk__in=selected_ids).select_related('event', 'user')
+
+        if action in ('approve_presentation', 'approve_poster') and not selected_ids:
+            messages.error(request, 'Select at least one abstract before approving.')
+            return redirect(redirect_url)
+
+        if action == 'approve_presentation':
+            sent_count = 0
+            for abstract in selected_abstracts:
+                abstract.approved_for_presentation = True
+                abstract.approved_for_poster = False
+                abstract.save(update_fields=['approved_for_presentation', 'approved_for_poster', 'updated_at'])
+                sent_count += int(_send_abstract_approval_email(abstract, 'Presentation'))
+            messages.success(request, f'{selected_abstracts.count()} abstract(s) approved for presentation. {sent_count} email(s) sent.')
+            return redirect(redirect_url)
+
+        if action == 'approve_poster':
+            sent_count = 0
+            for abstract in selected_abstracts:
+                abstract.approved_for_poster = True
+                abstract.approved_for_presentation = False
+                abstract.save(update_fields=['approved_for_poster', 'approved_for_presentation', 'updated_at'])
+                sent_count += int(_send_abstract_approval_email(abstract, 'Poster'))
+            messages.success(request, f'{selected_abstracts.count()} abstract(s) approved for poster. {sent_count} email(s) sent.')
+            return redirect(redirect_url)
+
+        if action == 'mark_pending':
+            if not selected_ids:
+                messages.error(request, 'Select at least one abstract before marking pending.')
+                return redirect(redirect_url)
+            updated = selected_abstracts.update(approved_for_presentation=False, approved_for_poster=False)
+            messages.success(request, f'{updated} abstract(s) moved back to pending review.')
+            return redirect(redirect_url)
+
+        if action == 'export_pdf':
+            if not selected_ids:
+                messages.error(request, 'Select abstracts before exporting.')
+                return redirect(redirect_url)
+            first_abstract = selected_abstracts.first()
+            if not first_abstract:
+                messages.error(request, 'Selected abstracts were not found.')
+                return redirect(redirect_url)
+            event = first_abstract.event
+            event_abstracts = selected_abstracts.filter(event=event).order_by('title')
+            buffer = generate_abstract_pdf(event, event_abstracts)
+            response = HttpResponse(buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="abstracts-{event.id}.pdf"'
+            return response
+
+    abstracts = AbstractSubmission.objects.select_related('event', 'user').order_by('-updated_at')
+    if event_filter:
+        abstracts = abstracts.filter(event_id=event_filter)
+    if status_filter == 'pending':
+        abstracts = abstracts.filter(approved_for_presentation=False, approved_for_poster=False)
+    elif status_filter == 'presentation':
+        abstracts = abstracts.filter(approved_for_presentation=True)
+    elif status_filter == 'poster':
+        abstracts = abstracts.filter(approved_for_poster=True)
+    elif status_filter == 'approved':
+        abstracts = abstracts.filter(Q(approved_for_presentation=True) | Q(approved_for_poster=True))
+    if search_query:
+        abstracts = abstracts.filter(
+            Q(title__icontains=search_query)
+            | Q(authors__icontains=search_query)
+            | Q(institution__icontains=search_query)
+            | Q(user__email__icontains=search_query)
+            | Q(user__username__icontains=search_query)
+        )
+
+    event_scope = {'event_id': event_filter} if event_filter else {}
+    totals = {
+        'all': AbstractSubmission.objects.filter(**event_scope).count(),
+        'pending': AbstractSubmission.objects.filter(
+            **event_scope,
+            approved_for_presentation=False,
+            approved_for_poster=False,
+        ).count(),
+        'presentation': AbstractSubmission.objects.filter(**event_scope, approved_for_presentation=True).count(),
+        'poster': AbstractSubmission.objects.filter(**event_scope, approved_for_poster=True).count(),
+        'with_files': AbstractSubmission.objects.filter(**event_scope).exclude(presentation_file='').count(),
+    }
+
+    page_obj = Paginator(abstracts, 12).get_page(request.GET.get('page'))
+    for abstract in page_obj.object_list:
+        abstract.dashboard_status_label = _abstract_status_label(abstract)
+
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'events': Event.objects.order_by('-year', 'name'),
+        'page_obj': page_obj,
+        'totals': totals,
+        'current_filters': {
+            'event': str(event_filter or ''),
+            'status': status_filter or '',
+            'q': search_query,
+        },
+        'abstract_form': abstract_form,
+        'show_abstract_form': show_abstract_form,
+        'query_string': urlencode(query_params),
+        'status_choices': [
+            ('pending', 'Pending review'),
+            ('approved', 'Approved'),
+            ('presentation', 'Presentation'),
+            ('poster', 'Poster'),
+            ('all', 'All abstracts'),
+        ],
+    }
+    return render(request, 'dashboard_abstract_center.html', context)
 
 
 def _bulk_email_valid_email(email):

@@ -64,6 +64,92 @@ class CorporateAccountRequestForm(forms.ModelForm):
 
 
 
+class DashboardEventForm(forms.ModelForm):
+    class Meta:
+        model = Event
+        fields = [
+            'name',
+            'slogan',
+            'year',
+            'start_date',
+            'end_date',
+            'location',
+            'event_status',
+            'registration',
+            'registration_audience',
+            'payment_required',
+            'amount',
+            'member_registration_enabled',
+            'member_registration_fee',
+            'show_publication_tab',
+            'event_logo',
+            'event_hero_image',
+            'modal_image',
+            'description',
+            'keywords',
+            'author',
+            'og_image',
+            'email_subject',
+            'email_body',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Event name'}),
+            'slogan': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Short public tagline'}),
+            'year': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 2020}),
+            'start_date': forms.DateInput(attrs={'class': 'workflow-input', 'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'class': 'workflow-input', 'type': 'date'}),
+            'location': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Venue or city'}),
+            'event_status': forms.Select(attrs={'class': 'workflow-input'}),
+            'registration': forms.Select(attrs={'class': 'workflow-input'}),
+            'registration_audience': forms.Select(attrs={'class': 'workflow-input'}),
+            'amount': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': '0.00'}),
+            'member_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
+            'event_logo': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
+            'event_hero_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
+            'modal_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
+            'description': forms.Textarea(attrs={'class': 'workflow-input', 'rows': 4, 'placeholder': 'Short event overview for the event page'}),
+            'keywords': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Comma separated SEO keywords'}),
+            'author': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Author or organizer'}),
+            'og_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
+            'email_subject': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional thank-you email subject'}),
+            'email_body': forms.Textarea(attrs={'class': 'workflow-input', 'rows': 4, 'placeholder': 'Optional thank-you email body'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ('payment_required', 'member_registration_enabled', 'show_publication_tab'):
+            self.fields[field_name].widget.attrs.setdefault(
+                'class',
+                'h-5 w-5 rounded border-line text-bsbcs-blue focus:ring-bsbcs-blue/20',
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('start_date')
+        end_date = cleaned_data.get('end_date')
+        payment_required = cleaned_data.get('payment_required')
+        amount = cleaned_data.get('amount')
+        member_registration_enabled = cleaned_data.get('member_registration_enabled')
+        member_registration_fee = cleaned_data.get('member_registration_fee')
+
+        if start_date and end_date and end_date < start_date:
+            self.add_error('end_date', 'End date cannot be before the start date.')
+
+        if payment_required and amount in (None, ''):
+            self.add_error('amount', 'Add the regular registration fee, or turn payment required off.')
+
+        if amount is not None and amount < 0:
+            self.add_error('amount', 'Regular registration fee cannot be negative.')
+
+        if member_registration_fee is not None and member_registration_fee < 0:
+            self.add_error('member_registration_fee', 'Member registration fee cannot be negative.')
+
+        if not member_registration_enabled:
+            cleaned_data['member_registration_fee'] = None
+
+        return cleaned_data
+
+
 # Participant Reregistration form START------------------------------------------------------------------------------------#
 
 from django import forms
@@ -154,6 +240,60 @@ class AbstractSubmissionForm(forms.ModelForm):
         return cleaned_data
 
 # Abstract Submission form END------------------------------------------------------------------------------------
+
+
+class UserChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        profile_name = getattr(getattr(obj, 'userprofile', None), 'name', '') or obj.get_full_name()
+        email = obj.email or obj.username
+        if profile_name:
+            return f"{profile_name} - {email}"
+        return email
+
+
+class DashboardAbstractSubmissionForm(AbstractSubmissionForm):
+    event = forms.ModelChoiceField(
+        queryset=Event.objects.none(),
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    user = UserChoiceField(
+        label='Submitter',
+        queryset=User.objects.none(),
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+        help_text='Select the existing website user who owns this abstract.',
+    )
+
+    class Meta(AbstractSubmissionForm.Meta):
+        model = AbstractSubmission
+        fields = (
+            'event',
+            'user',
+            'title',
+            'authors',
+            'institution',
+            'introduction',
+            'methods',
+            'results',
+            'conclusion',
+            'image',
+            'presentation_file',
+        )
+        widgets = {
+            **AbstractSubmissionForm.Meta.widgets,
+            'presentation_file': forms.ClearableFileInput(attrs={'class': 'workflow-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        selected_event = kwargs.pop('selected_event', None)
+        super().__init__(*args, **kwargs)
+        self.fields['event'].queryset = Event.objects.order_by('-year', 'name')
+        self.fields['user'].queryset = User.objects.select_related('userprofile').order_by('email', 'username')
+        for field_name, field in self.fields.items():
+            existing_class = field.widget.attrs.get('class', '')
+            if 'workflow-input' not in existing_class:
+                field.widget.attrs['class'] = f"{existing_class} workflow-input".strip()
+        if selected_event:
+            self.fields['event'].initial = selected_event
 
 
 # Program Schedule form START------------------------------------------------------------------------------------#

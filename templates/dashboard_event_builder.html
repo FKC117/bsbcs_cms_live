@@ -1,0 +1,371 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create Event Workspace</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-file {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-file {
+            padding: 0.55rem 0.7rem;
+        }
+        .workflow-input:focus,
+        .workflow-file:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Event workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_program_session_builder' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Program Builder</a>
+                <a href="{% url 'admin:registration_event_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Event builder</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Create the event shell before opening registration.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Set dates, venue, registration rules, member pricing, and public assets in one guided workspace. Program sessions can be added after the event exists.</p>
+            </div>
+            <div class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-xl bg-blue-50 px-3 py-3 ring-1 ring-blue-100">
+                        <div class="text-[10px] font-black uppercase tracking-wide text-slate-500">Step 1</div>
+                        <div class="mt-1 text-sm font-black text-bsbcs-blue">Basics</div>
+                    </div>
+                    <div class="rounded-xl bg-emerald-50 px-3 py-3 ring-1 ring-emerald-100">
+                        <div class="text-[10px] font-black uppercase tracking-wide text-slate-500">Step 2</div>
+                        <div class="mt-1 text-sm font-black text-bsbcs-green">Rules</div>
+                    </div>
+                    <div class="rounded-xl bg-amber-50 px-3 py-3 ring-1 ring-amber-100">
+                        <div class="text-[10px] font-black uppercase tracking-wide text-slate-500">Step 3</div>
+                        <div class="mt-1 text-sm font-black text-bsbcs-amber">Assets</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        {% if created_event %}
+            <section class="mb-3 rounded-2xl border border-green-100 bg-green-50 p-4 shadow-quiet">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-green">Event created</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">{{ created_event.name }} {{ created_event.year }}</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Now add program days, rooms, slots, and sessions when you are ready.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{% url 'dashboard_program_session_builder' %}?event={{ created_event.id }}" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Open Program Builder</a>
+                        <a href="{% url 'admin:registration_event_change' created_event.id %}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Admin Details</a>
+                    </div>
+                </div>
+            </section>
+        {% endif %}
+
+        <section class="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="mb-4 rounded-xl bg-pink-50 px-4 py-3 text-sm font-bold text-bsbcs-pink">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">New event</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Build the event record</h2>
+                        <p class="mt-1 max-w-3xl text-sm font-semibold leading-5 text-slate-600">Keep it upcoming or starting soon until the team is ready to publish and accept registrations.</p>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase text-bsbcs-blue ring-1 ring-blue-100">Staff only</span>
+                </div>
+
+                <section class="rounded-2xl border border-line bg-slate-50/70 p-4">
+                    <div class="mb-4 flex items-center gap-2">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">1</span>
+                        <div>
+                            <h3 class="text-lg font-black text-ink">Event basics</h3>
+                            <p class="text-xs font-semibold text-slate-500">Public title, dates, venue, and short description.</p>
+                        </div>
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <div class="lg:col-span-2">
+                            <label class="compact-label" for="{{ form.name.id_for_label }}">Event name</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.slogan.id_for_label }}">Slogan</label>
+                            {{ form.slogan }}
+                            {% if form.slogan.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.slogan.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.year.id_for_label }}">Year</label>
+                            {{ form.year }}
+                            {% if form.year.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.year.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.start_date.id_for_label }}">Start date</label>
+                            {{ form.start_date }}
+                            {% if form.start_date.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.start_date.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.end_date.id_for_label }}">End date</label>
+                            {{ form.end_date }}
+                            {% if form.end_date.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.end_date.errors }}</div>{% endif %}
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label class="compact-label" for="{{ form.location.id_for_label }}">Venue / location</label>
+                            {{ form.location }}
+                            {% if form.location.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.location.errors }}</div>{% endif %}
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label class="compact-label" for="{{ form.description.id_for_label }}">Event description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mt-4 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+                    <div class="mb-4 flex items-center gap-2">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-white text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">2</span>
+                        <div>
+                            <h3 class="text-lg font-black text-ink">Status and registration rules</h3>
+                            <p class="text-xs font-semibold text-slate-500">Control visibility, registration state, payment, and member benefits.</p>
+                        </div>
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-3">
+                        <div>
+                            <label class="compact-label" for="{{ form.event_status.id_for_label }}">Event status</label>
+                            {{ form.event_status }}
+                            {% if form.event_status.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.event_status.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.registration.id_for_label }}">Registration state</label>
+                            {{ form.registration }}
+                            {% if form.registration.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.registration.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.registration_audience.id_for_label }}">Who can register</label>
+                            {{ form.registration_audience }}
+                            {% if form.registration_audience.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.registration_audience.errors }}</div>{% endif %}
+                        </div>
+                        <div class="rounded-xl border border-line bg-white p-3">
+                            <label class="flex items-start gap-3 text-sm font-bold text-ink">
+                                {{ form.payment_required }}
+                                <span>
+                                    Payment required
+                                    <span class="mt-1 block text-xs font-semibold leading-5 text-slate-500">Turn off for fully free events.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.amount.id_for_label }}">Regular fee</label>
+                            {{ form.amount }}
+                            {% if form.amount.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.amount.errors }}</div>{% endif %}
+                        </div>
+                        <div class="rounded-xl border border-line bg-white p-3">
+                            <label class="flex items-start gap-3 text-sm font-bold text-ink">
+                                {{ form.show_publication_tab }}
+                                <span>
+                                    Show publication tab
+                                    <span class="mt-1 block text-xs font-semibold leading-5 text-slate-500">Enable when publications should appear on the event page.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 lg:col-span-2">
+                            <label class="flex items-start gap-3 text-sm font-bold text-ink">
+                                {{ form.member_registration_enabled }}
+                                <span>
+                                    Enable member registration benefits
+                                    <span class="mt-1 block text-xs font-semibold leading-5 text-slate-600">Members can use member pricing or complimentary registration when this is enabled.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.member_registration_fee.id_for_label }}">Member fee</label>
+                            {{ form.member_registration_fee }}
+                            {% if form.member_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.member_registration_fee.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="mt-4 rounded-2xl border border-line bg-white p-4">
+                    <div class="mb-4 flex items-center gap-2">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-amber-50 text-sm font-black text-bsbcs-amber ring-1 ring-amber-100">3</span>
+                        <div>
+                            <h3 class="text-lg font-black text-ink">Images and page assets</h3>
+                            <p class="text-xs font-semibold text-slate-500">Logo, hero image, popup image, and social preview image.</p>
+                        </div>
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <div>
+                            <label class="compact-label" for="{{ form.event_logo.id_for_label }}">Event logo</label>
+                            {{ form.event_logo }}
+                            {% if form.event_logo.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.event_logo.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.event_hero_image.id_for_label }}">Hero image</label>
+                            {{ form.event_hero_image }}
+                            {% if form.event_hero_image.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.event_hero_image.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.modal_image.id_for_label }}">Modal image</label>
+                            {{ form.modal_image }}
+                            {% if form.modal_image.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.modal_image.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.og_image.id_for_label }}">Social preview image</label>
+                            {{ form.og_image }}
+                            {% if form.og_image.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.og_image.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </section>
+
+                <details class="mt-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50/30 p-4">
+                    <summary class="cursor-pointer text-sm font-black text-bsbcs-blue">Optional SEO and thank-you email text</summary>
+                    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div>
+                            <label class="compact-label" for="{{ form.keywords.id_for_label }}">Keywords</label>
+                            {{ form.keywords }}
+                            {% if form.keywords.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.keywords.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.author.id_for_label }}">Author</label>
+                            {{ form.author }}
+                            {% if form.author.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.author.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.email_subject.id_for_label }}">Thank-you email subject</label>
+                            {{ form.email_subject }}
+                            {% if form.email_subject.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_subject.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.email_body.id_for_label }}">Thank-you email body</label>
+                            {{ form.email_body }}
+                            {% if form.email_body.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_body.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </details>
+
+                <div class="sticky bottom-0 -mx-5 mt-5 border-t border-line bg-white/95 px-5 py-4 backdrop-blur">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <a href="{% url 'global_dashboard' %}" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel</a>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="submit" name="next_action" value="stay" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Save Event</button>
+                            <button type="submit" name="next_action" value="admin" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Save and Open Admin</button>
+                            <button type="submit" name="next_action" value="program" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save and Build Program</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <aside class="space-y-3">
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Creation checklist</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Recommended order</h2>
+                    <div class="mt-4 space-y-2">
+                        <div class="rounded-xl bg-blue-50 px-3 py-3 ring-1 ring-blue-100">
+                            <div class="text-sm font-black text-ink">1. Create event shell</div>
+                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Save basic event, date, venue, and registration controls.</p>
+                        </div>
+                        <div class="rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-line">
+                            <div class="text-sm font-black text-ink">2. Add program structure</div>
+                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Add program days, halls, slots, faculty, and sessions from the Program Builder.</p>
+                        </div>
+                        <div class="rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-line">
+                            <div class="text-sm font-black text-ink">3. Open registration</div>
+                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Switch event status and registration state when content is ready.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Recent events</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Already created</h2>
+                        </div>
+                        <a href="{% url 'admin:registration_event_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue">All</a>
+                    </div>
+                    <div class="mt-3 space-y-2">
+                        {% for event in recent_events %}
+                            <div class="rounded-xl border border-line bg-slate-50/70 px-3 py-3">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="truncate text-sm font-black text-ink">{{ event.name }} {{ event.year }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ event.start_date|date:"M d, Y" }}{% if event.location %} - {{ event.location }}{% endif %}</div>
+                                    </div>
+                                    <span class="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase text-bsbcs-blue ring-1 ring-line">{{ event.event_status }}</span>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="rounded-xl border border-dashed border-line px-3 py-5 text-center text-sm font-semibold text-slate-500">No event created yet.</div>
+                        {% endfor %}
+                    </div>
+                </section>
+            </aside>
+        </section>
+    </main>
+
+    <footer class="border-t border-line bg-white/80 py-4">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
+            <span>BSBCS Event Workflow</span>
+            <span>Create here. Refine deeper details in admin only when needed.</span>
+        </div>
+    </footer>
+</div>
+</body>
+</html>

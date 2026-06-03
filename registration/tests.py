@@ -136,6 +136,163 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Review recipient rows")
         self.assertContains(response, "Send and audit")
 
+    def test_event_builder_requires_staff_and_renders_workflow(self):
+        url = reverse('dashboard_event_builder')
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/admin/login/', response.url)
+
+        self.client.force_login(self.user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Create the event shell')
+        self.assertContains(response, 'Status and registration rules')
+        self.assertContains(response, 'Save and Build Program')
+
+    def test_event_builder_creates_event_and_can_continue_to_program_builder(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_event_builder'), {
+            'name': 'Focused Oncology Summit',
+            'slogan': 'Focused learning',
+            'year': 2026,
+            'start_date': '2026-08-01',
+            'end_date': '2026-08-02',
+            'location': 'Dhaka',
+            'event_status': 'upcoming',
+            'registration': 'Starting Soon',
+            'registration_audience': 'members_only',
+            'payment_required': 'on',
+            'amount': '1500.00',
+            'member_registration_enabled': 'on',
+            'member_registration_fee': '500.00',
+            'description': 'A focused oncology event.',
+            'next_action': 'program',
+        })
+
+        event = Event.objects.get(name='Focused Oncology Summit')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f"{reverse('dashboard_program_session_builder')}?event={event.id}")
+        self.assertEqual(event.registration_audience, 'members_only')
+        self.assertTrue(event.payment_required)
+        self.assertTrue(event.member_registration_enabled)
+        self.assertEqual(str(event.amount), '1500.00')
+        self.assertEqual(str(event.member_registration_fee), '500.00')
+
+    def test_event_builder_rejects_end_date_before_start_date(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_event_builder'), {
+            'name': 'Invalid Date Event',
+            'slogan': 'Invalid',
+            'year': 2026,
+            'start_date': '2026-08-02',
+            'end_date': '2026-08-01',
+            'location': 'Dhaka',
+            'event_status': 'upcoming',
+            'registration': 'Starting Soon',
+            'registration_audience': 'all',
+            'payment_required': 'on',
+            'amount': '100.00',
+            'next_action': 'stay',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'End date cannot be before the start date.')
+        self.assertFalse(Event.objects.filter(name='Invalid Date Event').exists())
+
+    def test_abstract_center_requires_staff_and_renders_review_queue(self):
+        self.abstract.approved_for_presentation = False
+        self.abstract.save(update_fields=['approved_for_presentation', 'updated_at'])
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_abstract_center'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Abstract center')
+        self.assertContains(response, 'Submitted abstracts')
+        self.assertContains(response, self.abstract.title)
+        self.assertContains(response, 'Approve Presentation')
+
+    def test_abstract_center_filters_by_event_and_search(self):
+        self.abstract.approved_for_presentation = False
+        self.abstract.save(update_fields=['approved_for_presentation', 'updated_at'])
+        self.client.force_login(self.staff_user)
+        other_event = Event.objects.create(
+            name='Other Abstract Event',
+            slogan='Other',
+            year=2026,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 1),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        AbstractSubmission.objects.create(
+            user=self.user,
+            event=other_event,
+            title='Different Abstract',
+            authors='Other Author',
+            institution='Other Institute',
+            introduction='Intro',
+            methods='Methods',
+            results='Results',
+            conclusion='Conclusion',
+        )
+
+        response = self.client.get(reverse('dashboard_abstract_center'), {
+            'event': self.event.id,
+            'q': 'Biomarkers',
+            'status': 'pending',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.abstract.title)
+        self.assertNotContains(response, 'Different Abstract')
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_abstract_center_approves_presentation_and_sends_email(self):
+        self.abstract.approved_for_presentation = False
+        self.abstract.save(update_fields=['approved_for_presentation', 'updated_at'])
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_abstract_center'), {
+            'abstract_action': 'approve_presentation',
+            'abstract_ids': [self.abstract.id],
+            'event': self.event.id,
+            'status': 'pending',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.abstract.refresh_from_db()
+        self.assertTrue(self.abstract.approved_for_presentation)
+        self.assertFalse(self.abstract.approved_for_poster)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Abstract Approved for Presentation', mail.outbox[0].subject)
+
+    def test_abstract_center_admin_can_create_abstract(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_abstract_center'), {
+            'abstract_action': 'create_abstract',
+            'abstract-event': self.event.id,
+            'abstract-user': self.user.id,
+            'abstract-title': 'Admin Entered Abstract',
+            'abstract-authors': 'Admin Author',
+            'abstract-institution': 'Admin Institute',
+            'abstract-introduction': 'Introduction',
+            'abstract-methods': 'Methods',
+            'abstract-results': 'Results',
+            'abstract-conclusion': 'Conclusion',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        abstract = AbstractSubmission.objects.get(title='Admin Entered Abstract')
+        self.assertEqual(abstract.event, self.event)
+        self.assertEqual(abstract.user, self.user)
+        self.assertFalse(abstract.approved_for_presentation)
+        self.assertFalse(abstract.approved_for_poster)
+
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)
         url = reverse('dashboard_program_session_builder')

@@ -1,0 +1,368 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Abstract Review Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Scientific workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_program_session_builder' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Program Builder</a>
+                <a href="{% url 'admin:registration_abstractsubmission_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_480px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Abstract center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Review abstracts and send decisions from one place.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Filter by event, read the submission, approve as presentation or poster, export selected abstracts, then schedule accepted work in the program builder.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px]">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-input">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="status">Status</label>
+                        <select id="status" name="status" class="workflow-input">
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="compact-label" for="q">Search</label>
+                        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                            <input id="q" class="workflow-input" type="search" name="q" value="{{ current_filters.q }}" placeholder="Title, author, institution, or submitter email">
+                            <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                            <a href="{% url 'dashboard_abstract_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">All abstracts</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.all }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Presentation</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.presentation }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Poster</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.poster }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">With files</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.with_files }}</div>
+            </div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Admin entry</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Add an abstract manually</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this when an abstract was received outside the website. It will be saved as pending review.</p>
+                </div>
+                <button type="button" data-toggle-abstract-form class="rounded-xl bg-bsbcs-navy px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-blue">
+                    Add Abstract
+                </button>
+            </div>
+
+            <form id="abstract-create-form" method="post" enctype="multipart/form-data" class="mt-4 {% if not show_abstract_form %}hidden{% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="abstract_action" value="create_abstract">
+
+                {% if abstract_form.non_field_errors %}
+                    <div class="mb-3 rounded-xl bg-pink-50 px-4 py-3 text-sm font-bold text-bsbcs-pink">
+                        {{ abstract_form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="grid gap-3 lg:grid-cols-2">
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.event.id_for_label }}">Event</label>
+                        {{ abstract_form.event }}
+                        {% for error in abstract_form.event.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.user.id_for_label }}">Submitter</label>
+                        {{ abstract_form.user }}
+                        {% for error in abstract_form.user.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label class="compact-label" for="{{ abstract_form.title.id_for_label }}">Title</label>
+                        {{ abstract_form.title }}
+                        {% for error in abstract_form.title.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.authors.id_for_label }}">Authors</label>
+                        {{ abstract_form.authors }}
+                        {% for error in abstract_form.authors.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.institution.id_for_label }}">Institution</label>
+                        {{ abstract_form.institution }}
+                        {% for error in abstract_form.institution.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.introduction.id_for_label }}">Introduction</label>
+                        {{ abstract_form.introduction }}
+                        {% for error in abstract_form.introduction.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.methods.id_for_label }}">Methods</label>
+                        {{ abstract_form.methods }}
+                        {% for error in abstract_form.methods.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.results.id_for_label }}">Results</label>
+                        {{ abstract_form.results }}
+                        {% for error in abstract_form.results.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.conclusion.id_for_label }}">Conclusion</label>
+                        {{ abstract_form.conclusion }}
+                        {% for error in abstract_form.conclusion.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.image.id_for_label }}">Optional image</label>
+                        {{ abstract_form.image }}
+                        {% for error in abstract_form.image.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label class="compact-label" for="{{ abstract_form.presentation_file.id_for_label }}">Optional presentation file</label>
+                        {{ abstract_form.presentation_file }}
+                        {% for error in abstract_form.presentation_file.errors %}<p class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</p>{% endfor %}
+                    </div>
+                </div>
+
+                <div class="mt-4 flex flex-wrap justify-end gap-2">
+                    <button type="button" data-toggle-abstract-form class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel</button>
+                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save Abstract</button>
+                </div>
+            </form>
+        </section>
+
+        <form method="post" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            {% csrf_token %}
+            <input type="hidden" name="event" value="{{ current_filters.event }}">
+            <input type="hidden" name="status" value="{{ current_filters.status }}">
+            <input type="hidden" name="q" value="{{ current_filters.q }}">
+
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Review queue</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Submitted abstracts</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Select rows, then approve as oral presentation or poster. Decision emails are sent immediately.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" name="abstract_action" value="approve_presentation" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Approve Presentation</button>
+                    <button type="submit" name="abstract_action" value="approve_poster" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700">Approve Poster</button>
+                    <button type="submit" name="abstract_action" value="mark_pending" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Mark Pending</button>
+                    <button type="submit" name="abstract_action" value="export_pdf" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export PDF</button>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-2xl border border-line">
+                <div class="overflow-x-auto">
+                    <table class="min-w-[1120px] w-full divide-y divide-line text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="w-12 px-4 py-3"><input type="checkbox" data-select-all class="h-4 w-4 rounded border-line text-bsbcs-blue"></th>
+                                <th class="px-4 py-3">Abstract</th>
+                                <th class="px-4 py-3">Submitter</th>
+                                <th class="px-4 py-3">Event</th>
+                                <th class="px-4 py-3">Status</th>
+                                <th class="px-4 py-3">Updated</th>
+                                <th class="px-4 py-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line bg-white">
+                            {% for abstract in page_obj %}
+                                <tr class="align-top hover:bg-blue-50/30">
+                                    <td class="px-4 py-4">
+                                        <input type="checkbox" name="abstract_ids" value="{{ abstract.id }}" class="h-4 w-4 rounded border-line text-bsbcs-blue">
+                                    </td>
+                                    <td class="max-w-xl px-4 py-4">
+                                        <div class="font-black leading-5 text-ink">{{ abstract.title }}</div>
+                                        <div class="mt-1 text-xs font-semibold leading-5 text-slate-600">{{ abstract.authors }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ abstract.institution }}</div>
+                                        <details class="mt-2 rounded-xl border border-line bg-slate-50 px-3 py-2">
+                                            <summary class="cursor-pointer text-xs font-black text-bsbcs-blue">Read abstract body</summary>
+                                            <div class="mt-3 grid gap-3 text-xs leading-5 text-slate-600 md:grid-cols-2">
+                                                <div><strong class="block text-ink">Introduction</strong>{{ abstract.introduction|linebreaksbr }}</div>
+                                                <div><strong class="block text-ink">Methods</strong>{{ abstract.methods|linebreaksbr }}</div>
+                                                <div><strong class="block text-ink">Results</strong>{{ abstract.results|linebreaksbr }}</div>
+                                                <div><strong class="block text-ink">Conclusion</strong>{{ abstract.conclusion|linebreaksbr }}</div>
+                                            </div>
+                                        </details>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="font-bold text-ink">{{ abstract.user.get_full_name|default:abstract.user.username }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ abstract.user.email }}</div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="font-bold text-ink">{{ abstract.event.name }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ abstract.event.year }}</div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if abstract.dashboard_status_label == 'Pending' %}
+                                            <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">Pending</span>
+                                        {% elif abstract.dashboard_status_label == 'Presentation' %}
+                                            <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">Presentation</span>
+                                        {% else %}
+                                            <span class="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Poster</span>
+                                        {% endif %}
+                                        <div class="mt-2 flex flex-wrap gap-1">
+                                            {% if abstract.image %}
+                                                <a href="{{ abstract.image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">Image</a>
+                                            {% endif %}
+                                            {% if abstract.presentation_file %}
+                                                <a href="{{ abstract.presentation_file.url }}" target="_blank" rel="noopener noreferrer" class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">File</a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4 text-xs font-semibold text-slate-500">{{ abstract.updated_at|date:"M d, Y h:i A" }}</td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex flex-col gap-2">
+                                            <a href="{% url 'admin:registration_abstractsubmission_change' abstract.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Admin Edit</a>
+                                            {% if current_filters.event %}
+                                                <a href="{% url 'dashboard_program_session_builder' %}?event={{ current_filters.event }}" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Schedule</a>
+                                            {% else %}
+                                                <a href="{% url 'dashboard_program_session_builder' %}?event={{ abstract.event_id }}" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Schedule</a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="7" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">No abstracts match this filter.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-xs font-bold text-slate-500">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</div>
+                    <div class="flex flex-wrap gap-2">
+                        {% if page_obj.has_previous %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Previous</a>
+                        {% endif %}
+                        <span class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        {% if page_obj.has_next %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </form>
+    </main>
+
+    <footer class="border-t border-line bg-white/80 py-4">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
+            <span>BSBCS Abstract Review Center</span>
+            <span>Approve decisions here. Build session placement in Program Builder.</span>
+        </div>
+    </footer>
+</div>
+
+<script>
+    (function () {
+        const selectAll = document.querySelector('[data-select-all]');
+        if (selectAll) {
+            selectAll.addEventListener('change', function () {
+                document.querySelectorAll('input[name="abstract_ids"]').forEach(function (checkbox) {
+                    checkbox.checked = selectAll.checked;
+                });
+            });
+        }
+
+        const abstractForm = document.getElementById('abstract-create-form');
+        document.querySelectorAll('[data-toggle-abstract-form]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                if (!abstractForm) return;
+                abstractForm.classList.toggle('hidden');
+                if (!abstractForm.classList.contains('hidden')) {
+                    const firstInput = abstractForm.querySelector('select, input, textarea');
+                    if (firstInput) firstInput.focus();
+                }
+            });
+        });
+    })();
+</script>
+</body>
+</html>
