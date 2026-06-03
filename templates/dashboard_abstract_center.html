@@ -30,6 +30,13 @@
             text-transform: uppercase;
             color: #64748b;
         }
+        .native-search-select {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="min-h-screen font-sans text-ink antialiased">
@@ -139,7 +146,7 @@
                 </button>
             </div>
 
-            <form id="abstract-create-form" method="post" enctype="multipart/form-data" class="mt-4 {% if not show_abstract_form %}hidden{% endif %}">
+            <form id="abstract-create-form" method="post" enctype="multipart/form-data" novalidate class="mt-4 {% if not show_abstract_form %}hidden{% endif %}">
                 {% csrf_token %}
                 <input type="hidden" name="abstract_action" value="create_abstract">
 
@@ -362,6 +369,91 @@
                 }
             });
         });
+
+        function initSearchableSelect(select) {
+            if (!select || select.dataset.searchableReady === 'true') return;
+            select.dataset.searchableReady = 'true';
+            select.classList.add('native-search-select');
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative';
+            select.parentNode.insertBefore(wrapper, select);
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.autocomplete = 'off';
+            input.className = 'workflow-input pr-10';
+            input.placeholder = select.dataset.searchPlaceholder || 'Type to search';
+            wrapper.appendChild(input);
+            wrapper.appendChild(select);
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'absolute z-50 left-0 right-0 mt-1 hidden max-h-64 overflow-y-auto rounded-xl border border-line bg-white shadow-lift';
+            wrapper.appendChild(dropdown);
+
+            const selected = select.options[select.selectedIndex];
+            if (selected && selected.value) {
+                input.value = selected.textContent.trim();
+            }
+
+            function optionList() {
+                return Array.from(select.options).filter(function (option) {
+                    return option.value;
+                });
+            }
+
+            function renderOptions(term) {
+                const normalizedTerm = term.trim().toLowerCase();
+                const matches = optionList().filter(function (option) {
+                    return option.textContent.toLowerCase().includes(normalizedTerm);
+                }).slice(0, 40);
+                dropdown.innerHTML = '';
+
+                if (!matches.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'px-3 py-3 text-sm font-semibold text-slate-500';
+                    empty.textContent = 'No match found';
+                    dropdown.appendChild(empty);
+                    dropdown.classList.remove('hidden');
+                    return;
+                }
+
+                matches.forEach(function (option) {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'block w-full px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-blue-50';
+                    item.textContent = option.textContent.trim();
+                    item.addEventListener('click', function () {
+                        select.value = option.value;
+                        input.value = option.textContent.trim();
+                        dropdown.classList.add('hidden');
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                    dropdown.appendChild(item);
+                });
+                dropdown.classList.remove('hidden');
+            }
+
+            input.addEventListener('focus', function () {
+                renderOptions(input.value);
+            });
+            input.addEventListener('input', function () {
+                select.value = '';
+                renderOptions(input.value);
+            });
+            input.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    dropdown.classList.add('hidden');
+                }
+            });
+            document.addEventListener('click', function (event) {
+                if (!wrapper.contains(event.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+        }
+
+        document.querySelectorAll('[data-searchable-select]').forEach(initSearchableSelect);
     })();
 </script>
 </body>

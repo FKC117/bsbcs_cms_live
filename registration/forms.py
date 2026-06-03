@@ -254,12 +254,20 @@ class UserChoiceField(forms.ModelChoiceField):
 class DashboardAbstractSubmissionForm(AbstractSubmissionForm):
     event = forms.ModelChoiceField(
         queryset=Event.objects.none(),
-        widget=forms.Select(attrs={'class': 'workflow-input'}),
+        widget=forms.Select(attrs={
+            'class': 'workflow-input',
+            'data-searchable-select': '',
+            'data-search-placeholder': 'Search event name or year',
+        }),
     )
     user = UserChoiceField(
         label='Submitter',
         queryset=User.objects.none(),
-        widget=forms.Select(attrs={'class': 'workflow-input'}),
+        widget=forms.Select(attrs={
+            'class': 'workflow-input',
+            'data-searchable-select': '',
+            'data-search-placeholder': 'Search submitter name or email',
+        }),
         help_text='Select the existing website user who owns this abstract.',
     )
 
