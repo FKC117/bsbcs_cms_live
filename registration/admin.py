@@ -2,7 +2,7 @@ from django.db.models import Q
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -780,7 +780,44 @@ from django.core.mail import EmailMultiAlternatives, send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
+def queue_participant_approval_email(request, participant, email_type, password=None, include_password=False, payment_url=None):
+    email_log = None
+    if participant_email_log_table_ready():
+        email_log = ParticipantEmailLog.objects.create(
+            participant=participant,
+            event=participant.event,
+            email=participant.email,
+            email_type=email_type,
+            status=ParticipantEmailLog.STATUS_QUEUED,
+            sent_by=request.user if request.user.is_authenticated else None,
+            message='Queued from participant admin action.',
+        )
+
+    try:
+        task = send_participant_approval_email.delay(
+            participant.id,
+            email_type,
+            log_id=email_log.id if email_log else None,
+            sent_by_user_id=request.user.id if request.user.is_authenticated else None,
+            password=password,
+            include_password=include_password,
+            payment_url=payment_url,
+        )
+    except Exception as exc:
+        if email_log:
+            email_log.status = ParticipantEmailLog.STATUS_FAILED
+            email_log.message = f'Could not queue email task: {exc}'
+            email_log.save(update_fields=['status', 'message', 'updated_at'])
+        return False
+    if email_log:
+        email_log.task_id = getattr(task, 'id', '') or ''
+        email_log.save(update_fields=['task_id', 'updated_at'])
+    return True
+
+
 def approve_participants(modeladmin, request, queryset):
+    approved_count = 0
+    queued_count = 0
     for participant in queryset:
         event = participant.event
         payable_amount = participant.get_payable_amount()
@@ -814,12 +851,32 @@ def approve_participants(modeladmin, request, queryset):
         if payable_amount:
             payment_status.status = payment_status.status if payment_status.status in ['completed', 'paid'] else 'unpaid'
             payment_status.save()
-            send_consolidated_email(request, participant, password, include_password)
+            payment_url = request.build_absolute_uri(reverse('registration:payment', kwargs={
+                'event_id': event.id,
+                'participant_id': participant.id,
+            }))
+            email_queued = queue_participant_approval_email(
+                request,
+                participant,
+                ParticipantEmailLog.TYPE_APPROVAL_PAYMENT,
+                password=password,
+                include_password=include_password,
+                payment_url=payment_url,
+            )
         else:
             payment_status.merchant_invoice_number = f"FREE-{event.id}-{participant.id}-{int(time.time())}"
             payment_status.status = 'completed'
             payment_status.save()
-            send_free_event_confirmation_email(participant, event, password, include_password)
+            email_queued = queue_participant_approval_email(
+                request,
+                participant,
+                ParticipantEmailLog.TYPE_FREE_CONFIRMATION,
+                password=password,
+                include_password=include_password,
+            )
+        approved_count += 1
+        queued_count += int(bool(email_queued))
+    modeladmin.message_user(request, f'{approved_count} participant(s) approved. {queued_count} approval email(s) queued.', messages.SUCCESS)
 
 def deny_participants(modeladmin, request, queryset):
     queryset.update(denied=True, approved=False)
@@ -836,6 +893,30 @@ class ParticipantAdmin(ImportExportModelAdmin):
     actions = [approve_participants, deny_participants]
 
 admin.site.register(Participant, ParticipantAdmin)
+
+
+@admin.register(ParticipantEmailLog)
+class ParticipantEmailLogAdmin(admin.ModelAdmin):
+    list_display = ('participant', 'event', 'email', 'email_type', 'status', 'sent_by', 'sent_at', 'created_at')
+    list_filter = ('status', 'email_type', 'event', 'created_at')
+    search_fields = ('participant__name', 'participant__email', 'email', 'event__name', 'message', 'task_id')
+    readonly_fields = (
+        'participant',
+        'event',
+        'email',
+        'email_type',
+        'status',
+        'task_id',
+        'message',
+        'sent_by',
+        'sent_at',
+        'created_at',
+        'updated_at',
+    )
+    list_per_page = 25
+
+    def has_add_permission(self, request):
+        return False
 
 
 from import_export.admin import ImportExportModelAdmin
@@ -1532,7 +1613,7 @@ from django.core.mail import EmailMessage
 from django.core.validators import validate_email
 from django.contrib.auth import get_user_model
 from django.shortcuts import render
-from .tasks import send_pending_bulk_email_campaign
+from .tasks import participant_email_log_table_ready, send_participant_approval_email, send_pending_bulk_email_campaign
 
 User = get_user_model()  # Fetch the user model
 

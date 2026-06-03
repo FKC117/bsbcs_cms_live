@@ -437,6 +437,44 @@ class PaymentStatus(models.Model):
 # Creating Payment Status Models End --------------------------------------------------------------------#
 
 
+class ParticipantEmailLog(models.Model):
+    TYPE_APPROVAL_PAYMENT = 'approval_payment'
+    TYPE_FREE_CONFIRMATION = 'free_confirmation'
+    TYPE_CHOICES = [
+        (TYPE_APPROVAL_PAYMENT, 'Approval with payment link'),
+        (TYPE_FREE_CONFIRMATION, 'Free event confirmation'),
+    ]
+
+    STATUS_QUEUED = 'queued'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    participant = models.ForeignKey(Participant, on_delete=models.CASCADE, related_name='email_logs')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='participant_email_logs')
+    email = models.EmailField()
+    email_type = models.CharField(max_length=40, choices=TYPE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_QUEUED)
+    task_id = models.CharField(max_length=255, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='participant_email_logs')
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.participant.name} - {self.email_type} - {self.status}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
 # Hall room Model START---------------------------------------------------------------------------------#
 class HallRoom(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)

@@ -3368,6 +3368,10 @@ button{
   min-width: 1120px;
 }
 
+.min-w-\[1180px\]{
+  min-width: 1180px;
+}
+
 .min-w-\[260px\]{
   min-width: 260px;
 }
@@ -4066,6 +4070,11 @@ button{
 .border-pink-100{
   --tw-border-opacity: 1;
   border-color: rgb(252 231 243 / var(--tw-border-opacity, 1));
+}
+
+.border-pink-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(251 207 232 / var(--tw-border-opacity, 1));
 }
 
 .border-pink-500{
@@ -5987,6 +5996,11 @@ button{
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
+.hover\:border-amber-300:hover{
+  --tw-border-opacity: 1;
+  border-color: rgb(252 211 77 / var(--tw-border-opacity, 1));
+}
+
 .hover\:border-blue-300:hover{
   --tw-border-opacity: 1;
   border-color: rgb(147 197 253 / var(--tw-border-opacity, 1));
@@ -6006,6 +6020,11 @@ button{
   border-color: rgb(17 24 39 / var(--tw-border-opacity, 1));
 }
 
+.hover\:border-green-300:hover{
+  --tw-border-opacity: 1;
+  border-color: rgb(134 239 172 / var(--tw-border-opacity, 1));
+}
+
 .hover\:border-primary:hover{
   --tw-border-opacity: 1;
   border-color: rgb(25 118 210 / var(--tw-border-opacity, 1));
@@ -6014,6 +6033,11 @@ button{
 .hover\:border-slate-400:hover{
   --tw-border-opacity: 1;
   border-color: rgb(148 163 184 / var(--tw-border-opacity, 1));
+}
+
+.hover\:bg-amber-50:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-amber-700:hover{
@@ -6088,6 +6112,11 @@ button{
 .hover\:bg-gray-50:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(249 250 251 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-green-50:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(240 253 244 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-green-800:hover{
@@ -6819,6 +6848,10 @@ button{
     grid-column: span 2 / span 2;
   }
 
+  .lg\:col-span-3{
+    grid-column: span 3 / span 3;
+  }
+
   .lg\:col-span-4{
     grid-column: span 4 / span 4;
   }
@@ -6899,6 +6932,10 @@ button{
     grid-template-columns: minmax(0,1.5fr) minmax(320px,.7fr);
   }
 
+  .lg\:grid-cols-\[minmax\(0\2c 1fr\)_190px_190px\]{
+    grid-template-columns: minmax(0,1fr) 190px 190px;
+  }
+
   .lg\:grid-cols-\[minmax\(0\2c 1fr\)_360px\]{
     grid-template-columns: minmax(0,1fr) 360px;
   }
@@ -6913,6 +6950,10 @@ button{
 
   .lg\:grid-cols-\[minmax\(0\2c 1fr\)_480px\]{
     grid-template-columns: minmax(0,1fr) 480px;
+  }
+
+  .lg\:grid-cols-\[minmax\(0\2c 1fr\)_560px\]{
+    grid-template-columns: minmax(0,1fr) 560px;
   }
 
   .lg\:grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_180px\]{
@@ -6985,6 +7026,10 @@ button{
 @media (min-width: 1280px){
   .xl\:col-span-2{
     grid-column: span 2 / span 2;
+  }
+
+  .xl\:grid-cols-10{
+    grid-template-columns: repeat(10, minmax(0, 1fr));
   }
 
   .xl\:grid-cols-2{

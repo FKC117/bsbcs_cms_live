@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core import mail
 from registration.models import (
-    Event, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
+    Event, Department, Participant, PaymentStatus, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission
 )
@@ -40,6 +40,10 @@ class ProgramSessionBuilderTests(TestCase):
             event=self.event,
             name="Main Auditorium",
             location="Ground Floor"
+        )
+        self.department = Department.objects.create(
+            event=self.event,
+            name="General"
         )
         self.time_slot = TimeSlot.objects.create(
             event=self.event,
@@ -292,6 +296,116 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(abstract.user, self.user)
         self.assertFalse(abstract.approved_for_presentation)
         self.assertFalse(abstract.approved_for_poster)
+
+    def test_participant_center_requires_staff_and_renders_queue(self):
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Pending Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='pending@example.com',
+            phone='01700000001',
+            country='Bangladesh',
+        )
+
+        response = self.client.get(reverse('dashboard_participant_center'))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_participant_center'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Participant center')
+        self.assertContains(response, participant.name)
+        self.assertContains(response, 'Approved unpaid')
+
+    def test_participant_center_filters_approved_unpaid(self):
+        unpaid_participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Approved Unpaid',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='approvedunpaid@example.com',
+            phone='01700000002',
+            country='Bangladesh',
+            approved=True,
+        )
+        paid_participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Paid Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='paid@example.com',
+            phone='01700000003',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=unpaid_participant,
+            event=self.event,
+            merchant_invoice_number='REG-UNPAID',
+            amount='500.00',
+            status='unpaid',
+        )
+        PaymentStatus.objects.create(
+            participant=paid_participant,
+            event=self.event,
+            merchant_invoice_number='REG-PAID',
+            amount='500.00',
+            status='completed',
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_participant_center'), {'status': 'approved_unpaid'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, unpaid_participant.name)
+        self.assertNotContains(response, paid_participant.name)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        CELERY_TASK_ALWAYS_EAGER=True,
+    )
+    def test_participant_center_approves_and_creates_payment_status(self):
+        self.event.payment_required = True
+        self.event.amount = '500.00'
+        self.event.save(update_fields=['payment_required', 'amount'])
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Approval Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='candidate@example.com',
+            phone='01700000004',
+            country='Bangladesh',
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_participant_center'), {
+            'participant_action': 'approve',
+            'participant_ids': [participant.id],
+            'status': 'pending',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        participant.refresh_from_db()
+        self.assertTrue(participant.approved)
+        self.assertFalse(participant.denied)
+        payment_status = PaymentStatus.objects.get(participant=participant, event=self.event)
+        self.assertEqual(payment_status.status, 'unpaid')
+        self.assertEqual(str(payment_status.amount), '500.00')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Approved', mail.outbox[0].subject)
 
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)

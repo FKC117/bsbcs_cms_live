@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.models import User
+from django.utils.crypto import get_random_string
 from django.urls import reverse
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -45,7 +46,11 @@ from .bulk_email_services import (
     prepare_bulk_email_recipients,
     upsert_bulk_email_recipient,
 )
-from .tasks import send_pending_bulk_email_campaign
+from .tasks import (
+    participant_email_log_table_ready,
+    send_participant_approval_email,
+    send_pending_bulk_email_campaign,
+)
 from .pdf_utils import generate_abstract_pdf
 
 
@@ -2835,27 +2840,29 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'admin_url': admin_change_url(event),
         })
 
+    participant_center_url = reverse('dashboard_participant_center')
+    participant_center_params = {}
+    if event_filter:
+        participant_center_params['event'] = event_filter
+    participant_pending_url = f"{participant_center_url}?{urlencode({**participant_center_params, 'status': 'pending'})}"
+    participant_unpaid_url = f"{participant_center_url}?{urlencode({**participant_center_params, 'status': 'approved_unpaid'})}"
+
     action_cards = [
         {
             'label': 'Participant approvals',
             'count': pending_participants.count(),
             'tone': 'warning',
             'description': 'Individual event registrations waiting for admin approval.',
-            'url': admin_changelist_url(Participant, {
-                **event_filter_query,
-                'approved__exact': '0',
-                'denied__exact': '0',
-            }),
+            'url': participant_pending_url,
+            'internal': True,
         },
         {
             'label': 'Approved but unpaid',
             'count': approved_unpaid_payments.count(),
             'tone': 'danger',
             'description': 'Approved participants who still need payment completion.',
-            'url': admin_changelist_url(PaymentStatus, {
-                **event_filter_query,
-                'status__in': UNPAID_PAYMENT_STATUSES,
-            }),
+            'url': participant_unpaid_url,
+            'internal': True,
         },
         {
             'label': 'Corporate review',
@@ -2942,20 +2949,23 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'count': pending_participants.count(),
             'status': 'needs review',
             'description': 'Approve or deny individual event registrations. Approval creates or updates the event payment record and sends the right email.',
-            'primary_label': 'Open participant approvals',
-            'primary_url': participant_approval_url,
+            'primary_label': 'Manage participants',
+            'primary_url': participant_pending_url,
+            'primary_internal': True,
             'steps': [
                 {
                     'label': 'Review pending rows',
                     'count': pending_participants.count(),
-                    'detail': 'Open the filtered participant list, select rows, then use Approve selected participants or Deny selected participants.',
-                    'url': participant_approval_url,
+                    'detail': 'Select pending registrations, then approve or deny from the participant center.',
+                    'url': participant_pending_url,
+                    'internal': True,
                 },
                 {
                     'label': 'Payment follow-up',
                     'count': approved_unpaid_payments.count(),
-                    'detail': 'After approval, paid events move here until payment is completed. Free registrations are marked completed.',
-                    'url': event_payment_pending_url,
+                    'detail': 'Approved paid-event registrations stay here until payment is completed.',
+                    'url': participant_unpaid_url,
+                    'internal': True,
                 },
             ],
         },
@@ -3267,6 +3277,160 @@ def _abstract_status_label(abstract):
     return 'Pending'
 
 
+def _send_dashboard_participant_payment_email(request, participant, password=None, include_password=False):
+    event = participant.event
+    payment_url = reverse('registration:payment', kwargs={
+        'event_id': event.id,
+        'participant_id': participant.id,
+    })
+    context = {
+        'participant': participant,
+        'event': event,
+        'payment_url': request.build_absolute_uri(payment_url),
+    }
+    if include_password and password:
+        context['password'] = password
+
+    html_content = render_to_string('consolidated_email.html', context)
+    text_content = strip_tags(html_content)
+    email = EmailMultiAlternatives(
+        f'Your Registration for {event.name} {event.year} is Approved!',
+        text_content,
+        os.getenv("EMAIL_HOST_USER"),
+        [participant.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+
+
+def _send_dashboard_free_event_confirmation(participant, password=None, include_password=False):
+    event = participant.event
+    context = {
+        'participant': participant,
+        'event': event,
+    }
+    if include_password and password:
+        context['password'] = password
+
+    html_content = render_to_string('free_event_confirmation_email.html', context)
+    text_content = strip_tags(html_content)
+    email = EmailMultiAlternatives(
+        f'Registration Confirmed for {event.name} {event.year}',
+        text_content,
+        os.getenv("EMAIL_HOST_USER"),
+        [participant.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+
+
+def _queue_dashboard_participant_email(request, participant, email_type, password=None, include_password=False, payment_url=None):
+    email_log = None
+    if participant_email_log_table_ready():
+        email_log = ParticipantEmailLog.objects.create(
+            participant=participant,
+            event=participant.event,
+            email=participant.email,
+            email_type=email_type,
+            status=ParticipantEmailLog.STATUS_QUEUED,
+            sent_by=request.user if request.user.is_authenticated else None,
+            message='Queued from participant center.',
+        )
+
+    try:
+        task = send_participant_approval_email.delay(
+            participant.id,
+            email_type,
+            log_id=email_log.id if email_log else None,
+            sent_by_user_id=request.user.id if request.user.is_authenticated else None,
+            password=password,
+            include_password=include_password,
+            payment_url=payment_url,
+        )
+    except Exception as exc:
+        if email_log:
+            email_log.status = ParticipantEmailLog.STATUS_FAILED
+            email_log.message = f'Could not queue email task: {exc}'
+            email_log.save(update_fields=['status', 'message', 'updated_at'])
+        logger.exception("Could not queue participant approval email for %s: %s", participant.id, exc)
+        return False
+
+    if email_log:
+        email_log.task_id = getattr(task, 'id', '') or ''
+        email_log.save(update_fields=['task_id', 'updated_at'])
+    return True
+
+
+def _approve_dashboard_participant(request, participant):
+    event = participant.event
+    payable_amount = participant.get_payable_amount()
+    password = None
+    include_password = False
+
+    if not User.objects.filter(email=participant.email).exists():
+        password = get_random_string(length=12)
+        User.objects.create_user(username=participant.email, email=participant.email, password=password)
+        include_password = True
+
+    participant.approved = True
+    participant.denied = False
+    participant.save(update_fields=['approved', 'denied'])
+
+    payment_status, _ = PaymentStatus.objects.get_or_create(
+        participant=participant,
+        event=event,
+        defaults={
+            'merchant_invoice_number': f"REG-{event.id}-{participant.id}-{int(time.time())}",
+            'amount': payable_amount,
+            'status': 'unpaid' if payable_amount else 'completed',
+        }
+    )
+    payment_status.amount = payable_amount
+
+    if payable_amount:
+        if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+            payment_status.status = 'unpaid'
+        payment_status.save()
+        payment_url = request.build_absolute_uri(reverse('registration:payment', kwargs={
+            'event_id': event.id,
+            'participant_id': participant.id,
+        }))
+        email_queued = _queue_dashboard_participant_email(
+            request,
+            participant,
+            ParticipantEmailLog.TYPE_APPROVAL_PAYMENT,
+            password=password,
+            include_password=include_password,
+            payment_url=payment_url,
+        )
+    else:
+        payment_status.merchant_invoice_number = f"FREE-{event.id}-{participant.id}-{int(time.time())}"
+        payment_status.status = 'completed'
+        payment_status.save()
+        email_queued = _queue_dashboard_participant_email(
+            request,
+            participant,
+            ParticipantEmailLog.TYPE_FREE_CONFIRMATION,
+            password=password,
+            include_password=include_password,
+        )
+
+    return payment_status, email_queued
+
+
+def _participant_dashboard_status(participant):
+    if participant.denied:
+        return 'Denied'
+    if not participant.approved:
+        return 'Pending approval'
+    payment_status = getattr(participant, 'payment_statuses', None)
+    if not payment_status:
+        return 'Approved - no payment row'
+    if payment_status.status in SUCCESS_PAYMENT_STATUSES:
+        return 'Approved and paid'
+    return 'Approved but unpaid'
+
+
 @staff_member_required
 def dashboard_abstract_center(request):
     from website.models import SiteSettings
@@ -3423,6 +3587,213 @@ def dashboard_abstract_center(request):
         ],
     }
     return render(request, 'dashboard_abstract_center.html', context)
+
+
+@staff_member_required
+def dashboard_participant_center(request):
+    from website.models import SiteSettings
+
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    legacy_status_filter = request.POST.get('status') if request.method == 'POST' else request.GET.get('status')
+    approval_status = request.POST.get('approval_status') if request.method == 'POST' else request.GET.get('approval_status')
+    payment_status_filter = request.POST.get('payment_status') if request.method == 'POST' else request.GET.get('payment_status')
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+
+    legacy_filter_map = {
+        'pending': ('pending', 'all'),
+        'approved_unpaid': ('approved', 'unpaid_group'),
+        'approved_paid': ('approved', 'paid_group'),
+        'approved': ('approved', 'all'),
+        'denied': ('denied', 'all'),
+        'missing_payment': ('approved', 'missing'),
+        'all': ('all', 'all'),
+    }
+    if not approval_status and legacy_status_filter in legacy_filter_map:
+        approval_status, payment_status_filter = legacy_filter_map[legacy_status_filter]
+    approval_status = approval_status or 'pending'
+    payment_status_filter = payment_status_filter or 'all'
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if approval_status:
+        query_params['approval_status'] = approval_status
+    if payment_status_filter:
+        query_params['payment_status'] = payment_status_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('dashboard_participant_center')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    selected_ids = request.POST.getlist('participant_ids')
+    if request.method == 'POST':
+        action = request.POST.get('participant_action')
+        selected_participants = Participant.objects.filter(pk__in=selected_ids).select_related('event', 'department')
+
+        if action in ('approve', 'deny', 'payment_unpaid', 'payment_completed', 'payment_failed') and not selected_ids:
+            messages.error(request, 'Select at least one participant first.')
+            return redirect(redirect_url)
+
+        if action == 'approve':
+            approved_count = 0
+            queued_count = 0
+            for participant in selected_participants:
+                try:
+                    _, email_queued = _approve_dashboard_participant(request, participant)
+                    approved_count += 1
+                    queued_count += int(bool(email_queued))
+                except Exception as exc:
+                    logger.exception("Participant center approval failed for %s: %s", participant.id, exc)
+                    messages.error(request, f'Could not approve {participant.name}: {exc}')
+            if approved_count:
+                messages.success(request, f'{approved_count} participant(s) approved. {queued_count} approval email(s) queued.')
+            return redirect(redirect_url)
+
+        if action == 'deny':
+            updated = selected_participants.update(approved=False, denied=True)
+            messages.success(request, f'{updated} participant(s) denied.')
+            return redirect(redirect_url)
+
+        if action in ('payment_unpaid', 'payment_completed', 'payment_failed'):
+            status_map = {
+                'payment_unpaid': 'unpaid',
+                'payment_completed': 'completed',
+                'payment_failed': 'failed',
+            }
+            next_status = status_map[action]
+            updated = 0
+            skipped = 0
+            for participant in selected_participants:
+                if not participant.approved:
+                    skipped += 1
+                    continue
+                payable_amount = participant.get_payable_amount()
+                payment_status, _ = PaymentStatus.objects.get_or_create(
+                    participant=participant,
+                    event=participant.event,
+                    defaults={
+                        'merchant_invoice_number': f"REG-{participant.event_id}-{participant.id}-{int(time.time())}",
+                        'amount': payable_amount,
+                        'status': next_status,
+                    }
+                )
+                payment_status.amount = payable_amount
+                payment_status.status = next_status
+                payment_status.save()
+                updated += 1
+            messages.success(request, f'{updated} payment row(s) marked {next_status}.')
+            if skipped:
+                messages.warning(request, f'{skipped} participant(s) skipped because they are not approved yet.')
+            return redirect(redirect_url)
+
+    participants = Participant.objects.select_related('event', 'department', 'user', 'payment_statuses').order_by('-created_at')
+    if event_filter:
+        participants = participants.filter(event_id=event_filter)
+
+    if approval_status == 'pending':
+        participants = participants.filter(approved=False, denied=False)
+    elif approval_status == 'approved':
+        participants = participants.filter(approved=True)
+    elif approval_status == 'denied':
+        participants = participants.filter(denied=True)
+
+    if payment_status_filter == 'unpaid_group':
+        participants = participants.filter(payment_statuses__status__in=UNPAID_PAYMENT_STATUSES)
+    elif payment_status_filter == 'paid_group':
+        participants = participants.filter(payment_statuses__status__in=PAID_PAYMENT_STATUSES)
+    elif payment_status_filter in ('unpaid', 'pending', 'initiated', 'failed', 'paid', 'completed', 'cancelled', 'refunded'):
+        participants = participants.filter(payment_statuses__status=payment_status_filter)
+    elif payment_status_filter == 'missing':
+        participants = participants.filter(payment_statuses__isnull=True)
+    elif payment_status_filter == 'not_required':
+        participants = participants.filter(payment_statuses__status__in=PAID_PAYMENT_STATUSES, payment_statuses__amount=0)
+
+    if search_query:
+        participants = participants.filter(
+            Q(name__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(organization__icontains=search_query)
+            | Q(BMDC_registration_number__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+
+    event_scope = {'event_id': event_filter} if event_filter else {}
+    payment_event_scope = {'event_id': event_filter} if event_filter else {}
+    totals = {
+        'all': Participant.objects.filter(**event_scope).count(),
+        'pending': Participant.objects.filter(**event_scope, approved=False, denied=False).count(),
+        'approved': Participant.objects.filter(**event_scope, approved=True).count(),
+        'denied': Participant.objects.filter(**event_scope, denied=True).count(),
+        'approved_unpaid': PaymentStatus.objects.filter(
+            **payment_event_scope,
+            participant__approved=True,
+            status__in=UNPAID_PAYMENT_STATUSES,
+        ).count(),
+        'approved_paid': PaymentStatus.objects.filter(
+            **payment_event_scope,
+            participant__approved=True,
+            status__in=PAID_PAYMENT_STATUSES,
+        ).count(),
+        'missing_payment': Participant.objects.filter(**event_scope, approved=True, payment_statuses__isnull=True).count(),
+    }
+    if participant_email_log_table_ready():
+        email_log_scope = {'event_id': event_filter} if event_filter else {}
+        totals.update({
+            'email_queued': ParticipantEmailLog.objects.filter(**email_log_scope, status=ParticipantEmailLog.STATUS_QUEUED).count(),
+            'email_sent': ParticipantEmailLog.objects.filter(**email_log_scope, status=ParticipantEmailLog.STATUS_SENT).count(),
+            'email_failed': ParticipantEmailLog.objects.filter(**email_log_scope, status=ParticipantEmailLog.STATUS_FAILED).count(),
+        })
+    else:
+        totals.update({'email_queued': 0, 'email_sent': 0, 'email_failed': 0})
+
+    page_obj = Paginator(participants, 15).get_page(request.GET.get('page'))
+    for participant in page_obj.object_list:
+        participant.dashboard_status_label = _participant_dashboard_status(participant)
+        participant.latest_email_log = None
+    if participant_email_log_table_ready() and page_obj.object_list:
+        participant_ids = [participant.id for participant in page_obj.object_list]
+        latest_logs = {}
+        for email_log in ParticipantEmailLog.objects.filter(participant_id__in=participant_ids).select_related('sent_by').order_by('participant_id', '-created_at'):
+            latest_logs.setdefault(email_log.participant_id, email_log)
+        for participant in page_obj.object_list:
+            participant.latest_email_log = latest_logs.get(participant.id)
+
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'events': Event.objects.order_by('-year', 'name'),
+        'page_obj': page_obj,
+        'totals': totals,
+        'current_filters': {
+            'event': str(event_filter or ''),
+            'status': legacy_status_filter or '',
+            'approval_status': approval_status,
+            'payment_status': payment_status_filter,
+            'q': search_query,
+        },
+        'query_string': urlencode(query_params),
+        'approval_status_choices': [
+            ('pending', 'Pending approval'),
+            ('approved', 'Approved'),
+            ('denied', 'Denied'),
+            ('all', 'All participants'),
+        ],
+        'payment_status_choices': [
+            ('all', 'All payment statuses'),
+            ('unpaid_group', 'Needs payment'),
+            ('paid_group', 'Paid or completed'),
+            ('unpaid', 'Unpaid'),
+            ('pending', 'Pending'),
+            ('initiated', 'Initiated'),
+            ('failed', 'Failed'),
+            ('paid', 'Paid'),
+            ('completed', 'Completed'),
+            ('missing', 'No payment row'),
+            ('not_required', 'No fee required'),
+        ],
+    }
+    return render(request, 'dashboard_participant_center.html', context)
 
 
 def _bulk_email_valid_email(email):

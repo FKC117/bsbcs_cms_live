@@ -12,7 +12,7 @@
 
     <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {% for card in operations.action_cards %}
-        <a href="{{ card.url }}" target="_blank" rel="noopener noreferrer" class="group block rounded-2xl border border-line bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:border-bsbcs-blue hover:bg-white hover:shadow-quiet">
+        <a href="{{ card.url }}" {% if not card.internal %}target="_blank" rel="noopener noreferrer"{% endif %} class="group block rounded-2xl border border-line bg-slate-50/70 p-3 transition hover:-translate-y-0.5 hover:border-bsbcs-blue hover:bg-white hover:shadow-quiet">
           <div class="flex items-start justify-between gap-3">
             <div>
               <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">{{ card.label }}</div>
@@ -39,6 +39,7 @@
     <div class="grid grid-cols-2 gap-2">
       <a href="{% url 'dashboard_event_builder' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Create event</a>
       <a href="{% url 'dashboard_program_session_builder' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program builder</a>
+      <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Participants</a>
       <a href="{% url 'dashboard_bulk_email_center' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
       <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts</a>
       <a href="{{ operations.admin_links.membership_benefits }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Benefits</a>

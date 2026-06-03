@@ -1,0 +1,307 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Participant Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Registration workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Abstracts</a>
+                <a href="{% url 'admin:registration_participant_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_560px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Participant center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Approve participants and track event payments in one place.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Review pending registrations, approve or deny rows, and follow approved-but-unpaid participants without jumping between admin models.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 lg:grid-cols-[minmax(0,1fr)_190px_190px]">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-input">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="approval_status">Approval</label>
+                        <select id="approval_status" name="approval_status" class="workflow-input">
+                            {% for value, label in approval_status_choices %}
+                                <option value="{{ value }}" {% if current_filters.approval_status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="payment_status">Payment</label>
+                        <select id="payment_status" name="payment_status" class="workflow-input">
+                            {% for value, label in payment_status_choices %}
+                                <option value="{{ value }}" {% if current_filters.payment_status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="lg:col-span-3">
+                        <label class="compact-label" for="q">Search</label>
+                        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                            <input id="q" class="workflow-input" type="search" name="q" value="{{ current_filters.q }}" placeholder="Name, email, phone, organization, BMDC, or event">
+                            <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                            <a href="{% url 'dashboard_participant_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10">
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=all&payment_status=all" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">All</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.all }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=pending&payment_status=all" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=approved&payment_status=all" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Approved</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.approved }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=approved&payment_status=unpaid_group" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Approved unpaid</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.approved_unpaid }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=approved&payment_status=paid_group" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Paid</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.approved_paid }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=approved&payment_status=missing" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">No payment row</div>
+                <div class="mt-1 text-2xl font-black text-slate-700">{{ totals.missing_payment }}</div>
+            </a>
+            <a href="?{% if current_filters.event %}event={{ current_filters.event }}&{% endif %}approval_status=denied&payment_status=all" class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet hover:border-bsbcs-blue">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Denied</div>
+                <div class="mt-1 text-2xl font-black text-slate-700">{{ totals.denied }}</div>
+            </a>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Email queued</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.email_queued }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Email sent</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.email_sent }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Email failed</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.email_failed }}</div>
+            </div>
+        </section>
+
+        <form method="post" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            {% csrf_token %}
+            <input type="hidden" name="event" value="{{ current_filters.event }}">
+            <input type="hidden" name="approval_status" value="{{ current_filters.approval_status }}">
+            <input type="hidden" name="payment_status" value="{{ current_filters.payment_status }}">
+            <input type="hidden" name="q" value="{{ current_filters.q }}">
+
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Manage participants</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Registration and payment queue</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Approval sends the existing approval/payment/free confirmation email. Payment status actions only update the payment record.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" name="participant_action" value="approve" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Approve</button>
+                    <button type="submit" name="participant_action" value="deny" class="rounded-xl border border-pink-200 bg-pink-50 px-4 py-2.5 text-sm font-black text-bsbcs-pink hover:bg-pink-100">Deny</button>
+                    <button type="submit" name="participant_action" value="payment_unpaid" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-amber hover:border-amber-300 hover:bg-amber-50">Mark Unpaid</button>
+                    <button type="submit" name="participant_action" value="payment_completed" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-green hover:border-green-300 hover:bg-green-50">Mark Paid</button>
+                    <button type="submit" name="participant_action" value="payment_failed" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-slate-400 hover:bg-slate-50">Mark Failed</button>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-2xl border border-line">
+                <div class="overflow-x-auto">
+                    <table class="min-w-[1180px] w-full divide-y divide-line text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="w-12 px-4 py-3"><input type="checkbox" data-select-all class="h-4 w-4 rounded border-line text-bsbcs-blue"></th>
+                                <th class="px-4 py-3">Participant</th>
+                                <th class="px-4 py-3">Event</th>
+                                <th class="px-4 py-3">Registration</th>
+                                <th class="px-4 py-3">Payment</th>
+                                <th class="px-4 py-3">Status</th>
+                                <th class="px-4 py-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line bg-white">
+                            {% for participant in page_obj %}
+                                <tr class="align-top hover:bg-blue-50/30">
+                                    <td class="px-4 py-4">
+                                        <input type="checkbox" name="participant_ids" value="{{ participant.id }}" class="h-4 w-4 rounded border-line text-bsbcs-blue">
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="font-black text-ink">{{ participant.name }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ participant.email }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ participant.phone }}</div>
+                                        {% if participant.organization %}
+                                            <div class="mt-1 text-xs font-semibold text-slate-600">{{ participant.organization }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="font-bold text-ink">{{ participant.event.name }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-slate-500">{{ participant.event.year }}{% if participant.department %} - {{ participant.department.name }}{% endif %}</div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ participant.get_registration_type_display }}</span>
+                                        <div class="mt-2 text-xs font-semibold text-slate-500">Fee: BDT {{ participant.get_payable_amount }}</div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if participant.payment_statuses %}
+                                            <div class="font-black text-ink">BDT {{ participant.payment_statuses.amount|default:"0.00" }}</div>
+                                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ participant.payment_statuses.merchant_invoice_number }}</div>
+                                            {% if participant.payment_statuses.trxID %}
+                                                <div class="mt-1 text-xs font-semibold text-slate-500">Trx: {{ participant.payment_statuses.trxID }}</div>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">No payment row</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if participant.dashboard_status_label == 'Pending approval' %}
+                                            <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">Pending approval</span>
+                                        {% elif participant.dashboard_status_label == 'Approved but unpaid' %}
+                                            <span class="rounded-full bg-pink-50 px-3 py-1 text-xs font-black text-bsbcs-pink ring-1 ring-pink-100">Approved but unpaid</span>
+                                        {% elif participant.dashboard_status_label == 'Approved and paid' %}
+                                            <span class="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Paid</span>
+                                        {% elif participant.dashboard_status_label == 'Denied' %}
+                                            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 ring-1 ring-line">Denied</span>
+                                        {% else %}
+                                            <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ participant.dashboard_status_label }}</span>
+                                        {% endif %}
+                                        {% if participant.payment_statuses %}
+                                            <div class="mt-2 text-xs font-bold text-slate-500">Payment: {{ participant.payment_statuses.get_status_display }}</div>
+                                        {% endif %}
+                                        {% if participant.latest_email_log %}
+                                            <div class="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-line">
+                                                Email: {{ participant.latest_email_log.get_status_display }}
+                                                {% if participant.latest_email_log.sent_at %}
+                                                    <span class="block">{{ participant.latest_email_log.sent_at|date:"M d, Y h:i A" }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex flex-col gap-2">
+                                            <a href="{% url 'admin:registration_participant_change' participant.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Admin Edit</a>
+                                            {% if participant.payment_statuses %}
+                                                <a href="{% url 'admin:registration_paymentstatus_change' participant.payment_statuses.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payment Row</a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="7" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">No participants match this filter.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-xs font-bold text-slate-500">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</div>
+                    <div class="flex flex-wrap gap-2">
+                        {% if page_obj.has_previous %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Previous</a>
+                        {% endif %}
+                        <span class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        {% if page_obj.has_next %}
+                            <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </form>
+    </main>
+
+    <footer class="border-t border-line bg-white/80 py-4">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
+            <span>BSBCS Participant Center</span>
+            <span>Approval sends emails. Payment status changes update records only.</span>
+        </div>
+    </footer>
+</div>
+
+<script>
+    (function () {
+        const selectAll = document.querySelector('[data-select-all]');
+        if (!selectAll) return;
+        selectAll.addEventListener('change', function () {
+            document.querySelectorAll('input[name="participant_ids"]').forEach(function (checkbox) {
+                checkbox.checked = selectAll.checked;
+            });
+        });
+    })();
+</script>
+</body>
+</html>
