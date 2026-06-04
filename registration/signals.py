@@ -4,8 +4,8 @@ from .models import PaymentStatus, RegistrationKit
 
 @receiver(post_save, sender=PaymentStatus)
 def create_registration_kit(sender, instance, created, **kwargs):
-    # Ensure the payment status is 'paid'
-    if instance.status == 'paid':
+    # Completed is the successful payment state used by the current payment flow.
+    if instance.status == 'completed':
         RegistrationKit.objects.get_or_create(
             event=instance.event,  # Link to the event
             payment_status=instance,

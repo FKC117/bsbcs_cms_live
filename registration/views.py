@@ -2490,7 +2490,7 @@ from collections import Counter, defaultdict
 
 
 UNPAID_PAYMENT_STATUSES = ['unpaid', 'pending', 'failed', 'initiated']
-PAID_PAYMENT_STATUSES = ['paid', 'completed']
+PAID_PAYMENT_STATUSES = ['completed']
 
 
 def admin_changelist_url(model, query_params=None):
@@ -4074,6 +4074,171 @@ def dashboard_payment_center(request):
         'membership_types': MembershipType.objects.filter(is_active=True).order_by('order', 'name'),
     }
     return render(request, 'dashboard_payment_center.html', context)
+
+
+def _issue_registration_kit(payment_record):
+    kit, _ = RegistrationKit.objects.get_or_create(
+        event=payment_record.event,
+        payment_status=payment_record,
+        defaults={'status': 'not_issued'},
+    )
+    if kit.status == 'issued':
+        return kit, False
+
+    kit.status = 'issued'
+    kit.issued_at = timezone.now()
+    kit.save(update_fields=['status', 'issued_at'])
+    return kit, True
+
+
+@staff_member_required
+def dashboard_registration_kit_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    default_event = events.filter(event_status='active').first() or events.first()
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    if not event_filter and default_event:
+        event_filter = str(default_event.id)
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    kit_status_filter = request.POST.get('kit_status') if request.method == 'POST' else request.GET.get('kit_status')
+    kit_status_filter = kit_status_filter or 'pending'
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if search_query:
+        query_params['q'] = search_query
+    if kit_status_filter:
+        query_params['kit_status'] = kit_status_filter
+    redirect_url = f"{reverse('dashboard_registration_kit_center')}?{urlencode(query_params)}"
+
+    eligible_payments = PaymentStatus.objects.select_related('participant', 'event').filter(
+        status='completed',
+        participant__approved=True,
+        participant__denied=False,
+    )
+    if event_filter:
+        eligible_payments = eligible_payments.filter(event_id=event_filter)
+
+    if request.method == 'POST':
+        kit_action = request.POST.get('kit_action')
+        try:
+            if kit_action == 'issue':
+                payment_record = get_object_or_404(eligible_payments, pk=request.POST.get('payment_id'))
+                kit, issued_now = _issue_registration_kit(payment_record)
+                if issued_now:
+                    messages.success(request, f'Registration kit issued to {payment_record.participant.name} at {kit.issued_at:%b %d, %Y %I:%M %p}.')
+                else:
+                    messages.info(request, f'Registration kit was already issued to {payment_record.participant.name}.')
+            elif kit_action == 'scan_issue':
+                scan_code = (request.POST.get('scan_code') or '').strip()
+                if not event_filter:
+                    messages.error(request, 'Choose an event before scanning.')
+                elif not scan_code:
+                    messages.error(request, 'Enter or scan a code first.')
+                else:
+                    scan_filter = (
+                        Q(merchant_invoice_number__iexact=scan_code)
+                        | Q(participant__email__iexact=scan_code)
+                        | Q(participant__phone__iexact=scan_code)
+                    )
+                    if scan_code.isdigit():
+                        scan_filter |= Q(pk=int(scan_code)) | Q(participant_id=int(scan_code))
+                    matches = list(eligible_payments.filter(scan_filter)[:2])
+                    if not matches:
+                        messages.error(request, 'No completed approved participant matched this scan for the selected event.')
+                    elif len(matches) > 1:
+                        messages.error(request, 'More than one participant matched this scan. Search manually and issue from the exact row.')
+                    else:
+                        payment_record = matches[0]
+                        kit, issued_now = _issue_registration_kit(payment_record)
+                        if issued_now:
+                            messages.success(request, f'Scanned and issued kit to {payment_record.participant.name} at {kit.issued_at:%b %d, %Y %I:%M %p}.')
+                        else:
+                            messages.info(request, f'{payment_record.participant.name} already received a kit at {kit.issued_at:%b %d, %Y %I:%M %p}.')
+            else:
+                messages.error(request, 'Choose a valid kit action.')
+        except Exception as exc:
+            logger.exception("Registration kit center action failed: %s", exc)
+            messages.error(request, str(exc))
+        return redirect(redirect_url)
+
+    if search_query:
+        eligible_payments = eligible_payments.filter(
+            Q(participant__name__icontains=search_query)
+            | Q(participant__email__icontains=search_query)
+            | Q(participant__phone__icontains=search_query)
+            | Q(participant__organization__icontains=search_query)
+            | Q(participant__BMDC_registration_number__icontains=search_query)
+            | Q(merchant_invoice_number__icontains=search_query)
+            | Q(transaction_id__icontains=search_query)
+            | Q(trxID__icontains=search_query)
+        )
+
+    issued_kit_ids = RegistrationKit.objects.filter(
+        status='issued',
+        payment_status__status='completed',
+        payment_status__participant__approved=True,
+        payment_status__participant__denied=False,
+    )
+    if event_filter:
+        issued_kit_ids = issued_kit_ids.filter(event_id=event_filter)
+    issued_payment_ids = issued_kit_ids.values_list('payment_status_id', flat=True)
+
+    if kit_status_filter == 'issued':
+        eligible_payments = eligible_payments.filter(pk__in=issued_payment_ids)
+    elif kit_status_filter == 'pending':
+        eligible_payments = eligible_payments.exclude(pk__in=issued_payment_ids)
+
+    eligible_payments = eligible_payments.order_by('participant__name', 'participant__email')
+    page_obj = Paginator(eligible_payments, 18).get_page(request.GET.get('page'))
+    for payment in page_obj.object_list:
+        try:
+            kit = payment.registration_kit
+        except RegistrationKit.DoesNotExist:
+            kit = None
+        payment.kit_status = kit.status if kit else 'not_issued'
+        payment.kit_issued_at = kit.issued_at if kit else None
+        payment.kit_id = kit.id if kit else None
+
+    totals_scope = PaymentStatus.objects.filter(
+        status='completed',
+        participant__approved=True,
+        participant__denied=False,
+    )
+    if event_filter:
+        totals_scope = totals_scope.filter(event_id=event_filter)
+    total_eligible = totals_scope.count()
+    total_issued = RegistrationKit.objects.filter(
+        event_id=event_filter,
+        status='issued',
+        payment_status__in=totals_scope,
+    ).count() if event_filter else RegistrationKit.objects.filter(status='issued', payment_status__in=totals_scope).count()
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'page_obj': page_obj,
+        'totals': {
+            'eligible': total_eligible,
+            'issued': total_issued,
+            'pending': max(total_eligible - total_issued, 0),
+        },
+        'current_filters': {
+            'event': event_filter or '',
+            'q': search_query,
+            'kit_status': kit_status_filter,
+        },
+        'query_string': urlencode(query_params),
+        'kit_status_choices': [
+            ('pending', 'Not issued'),
+            ('issued', 'Issued'),
+            ('all', 'All eligible'),
+        ],
+    }
+    return render(request, 'dashboard_registration_kit_center.html', context)
 
 
 def _bulk_email_valid_email(email):

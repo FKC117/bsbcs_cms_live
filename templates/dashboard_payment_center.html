@@ -157,7 +157,7 @@
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="rounded-full {% if row.source == 'membership' %}bg-teal-50 text-bsbcs-teal ring-teal-100{% else %}bg-blue-50 text-bsbcs-blue ring-blue-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.source_label }}</span>
-                                    <span class="rounded-full {% if row.status == 'completed' or row.status == 'paid' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.status == 'failed' or row.status == 'cancelled' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.status_label }}</span>
+                                    <span class="rounded-full {% if row.status == 'completed' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.status == 'failed' or row.status == 'cancelled' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.status_label }}</span>
                                 </div>
                                 <h3 class="mt-2 truncate text-sm font-black text-ink">{{ row.owner_name }}</h3>
                                 <p class="truncate text-xs font-semibold text-slate-500">{{ row.owner_email }}</p>

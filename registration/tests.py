@@ -7,7 +7,7 @@ from django.core import mail
 from registration.models import (
     Event, Department, Participant, PaymentStatus, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
-    ProgramItemFaculty, AbstractSubmission
+    ProgramItemFaculty, AbstractSubmission, RegistrationKit
 )
 from registration.forms import ProgramSessionBuilderForm
 from website.models import MembershipPayment, MembershipType
@@ -505,6 +505,104 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(payment.transaction_id, 'PAY-123')
         self.assertEqual(payment.trxID, 'TRX-123')
         self.assertFalse(payment.email_sent)
+
+    def test_registration_kit_center_issues_only_completed_approved_participants(self):
+        completed_participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Completed Kit Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='kitcompleted@example.com',
+            phone='01700000104',
+            country='Bangladesh',
+            approved=True,
+        )
+        completed_payment = PaymentStatus.objects.create(
+            participant=completed_participant,
+            event=self.event,
+            merchant_invoice_number='KIT-COMPLETED',
+            amount='500.00',
+            status='completed',
+        )
+        unpaid_participant = Participant.objects.create(
+            user=self.staff_user,
+            event=self.event,
+            name='Unpaid Kit Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='kitunpaid@example.com',
+            phone='01700000105',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=unpaid_participant,
+            event=self.event,
+            merchant_invoice_number='KIT-UNPAID',
+            amount='500.00',
+            status='unpaid',
+        )
+        legacy_paid_participant = Participant.objects.create(
+            user=self.staff_user,
+            event=self.event,
+            name='Legacy Paid Kit Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='kitpaidlegacy@example.com',
+            phone='01700000106',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=legacy_paid_participant,
+            event=self.event,
+            merchant_invoice_number='KIT-LEGACY-PAID',
+            amount='500.00',
+            status='paid',
+        )
+
+        response = self.client.get(reverse('dashboard_registration_kit_center'))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_registration_kit_center'), {'event': self.event.id, 'kit_status': 'all'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Completed Kit Candidate')
+        self.assertNotContains(response, 'Unpaid Kit Candidate')
+        self.assertNotContains(response, 'Legacy Paid Kit Candidate')
+        self.assertContains(response, 'Scan QR')
+
+        response = self.client.post(reverse('dashboard_registration_kit_center'), {
+            'event': self.event.id,
+            'kit_status': 'all',
+            'payment_id': completed_payment.id,
+            'kit_action': 'issue',
+        })
+        self.assertEqual(response.status_code, 302)
+        kit = RegistrationKit.objects.get(payment_status=completed_payment)
+        self.assertEqual(kit.status, 'issued')
+        self.assertIsNotNone(kit.issued_at)
+
+        kit.status = 'not_issued'
+        kit.issued_at = None
+        kit.save(update_fields=['status', 'issued_at'])
+        response = self.client.post(reverse('dashboard_registration_kit_center'), {
+            'event': self.event.id,
+            'kit_status': 'all',
+            'scan_code': completed_payment.merchant_invoice_number,
+            'kit_action': 'scan_issue',
+        })
+        self.assertEqual(response.status_code, 302)
+        kit.refresh_from_db()
+        self.assertEqual(kit.status, 'issued')
+        self.assertIsNotNone(kit.issued_at)
 
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)

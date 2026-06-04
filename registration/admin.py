@@ -1356,7 +1356,7 @@ class RegistrationKitAdmin(ImportExportModelAdmin):
             )
         self.message_user(request, "Registration Kits populated for participants with completed payments.")
 
-    populate_registration_kits.short_description = "Populate Registration Kits for paid participants"
+    populate_registration_kits.short_description = "Populate Registration Kits for completed payments"
 
     def issue_registration_kits(self, request, queryset):
         updated_count = queryset.update(status='issued', issued_at=now())

@@ -6,6 +6,7 @@
   "dependencies": {
     "@dhiwise/component-tagger": "^1.0.10",
     "@tailwindcss/forms": "^0.5.7",
+    "html5-qrcode": "^2.3.8",
     "tailwindcss-animate": "^1.0.7",
     "tailwindcss-elevation": "^2.0.0",
     "tailwindcss-fluid-type": "^2.0.7"
@@ -18,10 +19,10 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "tailwindcss": "^3.4.17",
     "@tailwindcss/aspect-ratio": "^0.4.2",
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/line-clamp": "^0.1.0",
-    "@tailwindcss/typography": "^0.5.16"
+    "@tailwindcss/typography": "^0.5.16",
+    "tailwindcss": "^3.4.17"
   }
 }

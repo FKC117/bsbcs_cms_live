@@ -3011,6 +3011,10 @@ button{
   display: grid;
 }
 
+.inline-grid{
+  display: inline-grid;
+}
+
 .contents{
   display: contents;
 }
@@ -3209,6 +3213,10 @@ button{
 
 .min-h-10{
   min-height: 2.5rem;
+}
+
+.min-h-72{
+  min-height: 18rem;
 }
 
 .min-h-80{
@@ -4497,8 +4505,17 @@ button{
   background-color: rgb(248 250 252 / 0.7);
 }
 
+.bg-slate-950{
+  --tw-bg-opacity: 1;
+  background-color: rgb(2 6 23 / var(--tw-bg-opacity, 1));
+}
+
 .bg-slate-950\/55{
   background-color: rgb(2 6 23 / 0.55);
+}
+
+.bg-slate-950\/70{
+  background-color: rgb(2 6 23 / 0.7);
 }
 
 .bg-success-light{
@@ -6762,6 +6779,10 @@ button{
     grid-template-columns: 150px 180px minmax(0,1fr) auto;
   }
 
+  .md\:grid-cols-\[minmax\(0\2c 1fr\)_160px_auto\]{
+    grid-template-columns: minmax(0,1fr) 160px auto;
+  }
+
   .md\:grid-cols-\[minmax\(0\2c 1fr\)_auto\]{
     grid-template-columns: minmax(0,1fr) auto;
   }
@@ -6980,6 +7001,10 @@ button{
 
   .lg\:grid-cols-\[minmax\(220px\2c 1\.15fr\)_minmax\(160px\2c 0\.65fr\)_minmax\(250px\2c 0\.9fr\)_minmax\(180px\2c 0\.65fr\)\]{
     grid-template-columns: minmax(220px,1.15fr) minmax(160px,0.65fr) minmax(250px,0.9fr) minmax(180px,0.65fr);
+  }
+
+  .lg\:grid-cols-\[minmax\(320px\2c 0\.7fr\)_minmax\(0\2c 1fr\)\]{
+    grid-template-columns: minmax(320px,0.7fr) minmax(0,1fr);
   }
 
   .lg\:flex-row{
