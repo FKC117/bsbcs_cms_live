@@ -2692,6 +2692,10 @@ button{
   top: -10%;
 }
 
+.top-full{
+  top: 100%;
+}
+
 .-z-10{
   z-index: -10;
 }
@@ -3241,6 +3245,10 @@ button{
 
 .min-h-\[500px\]{
   min-height: 500px;
+}
+
+.min-h-full{
+  min-height: 100%;
 }
 
 .min-h-screen{
@@ -4159,6 +4167,11 @@ button{
   border-color: rgb(255 255 255 / var(--tw-border-opacity, 1));
 }
 
+.border-teal-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(153 246 228 / var(--tw-border-opacity, 1));
+}
+
 .border-transparent{
   border-color: transparent;
 }
@@ -4514,6 +4527,10 @@ button{
   background-color: rgb(2 6 23 / 0.55);
 }
 
+.bg-slate-950\/60{
+  background-color: rgb(2 6 23 / 0.6);
+}
+
 .bg-slate-950\/70{
   background-color: rgb(2 6 23 / 0.7);
 }
@@ -4726,6 +4743,11 @@ button{
 .via-\[\#124C85\]{
   --tw-gradient-to: rgb(18 76 133 / 0)  var(--tw-gradient-to-position);
   --tw-gradient-stops: var(--tw-gradient-from), #124C85 var(--tw-gradient-via-position), var(--tw-gradient-to);
+}
+
+.via-\[\#155A96\]{
+  --tw-gradient-to: rgb(21 90 150 / 0)  var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), #155A96 var(--tw-gradient-via-position), var(--tw-gradient-to);
 }
 
 .via-accent-50{
@@ -6207,6 +6229,11 @@ button{
   background-color: rgb(248 250 252 / 0.4);
 }
 
+.hover\:bg-teal-100:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(204 251 241 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-white:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
@@ -6424,8 +6451,17 @@ button{
   cursor: not-allowed;
 }
 
+.disabled\:bg-slate-300:disabled{
+  --tw-bg-opacity: 1;
+  background-color: rgb(203 213 225 / var(--tw-bg-opacity, 1));
+}
+
 .disabled\:opacity-50:disabled{
   opacity: 0.5;
+}
+
+.disabled\:opacity-55:disabled{
+  opacity: 0.55;
 }
 
 .group:hover .group-hover\:scale-105{
@@ -6634,6 +6670,10 @@ button{
     padding: 1.25rem;
   }
 
+  .sm\:p-6{
+    padding: 1.5rem;
+  }
+
   .sm\:p-8{
     padding: 2rem;
   }
@@ -6777,6 +6817,10 @@ button{
 
   .md\:grid-cols-\[150px_180px_minmax\(0\2c 1fr\)_auto\]{
     grid-template-columns: 150px 180px minmax(0,1fr) auto;
+  }
+
+  .md\:grid-cols-\[minmax\(0\2c 0\.8fr\)_minmax\(0\2c 1\.2fr\)_auto\]{
+    grid-template-columns: minmax(0,0.8fr) minmax(0,1.2fr) auto;
   }
 
   .md\:grid-cols-\[minmax\(0\2c 1fr\)_160px_auto\]{

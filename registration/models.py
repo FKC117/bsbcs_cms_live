@@ -413,6 +413,8 @@ class PaymentStatus(models.Model):
     trxID = models.CharField(max_length=255, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     invoice = models.FileField(upload_to='media/invoices/', blank=True, null=True)
+    qr_token = models.UUIDField(unique=True, editable=False, blank=True, null=True)
+    qr_code = models.ImageField(upload_to='registration_qr_codes/', blank=True, null=True)
     email_sent = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):

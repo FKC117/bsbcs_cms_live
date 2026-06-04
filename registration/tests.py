@@ -1,4 +1,6 @@
 from datetime import date, time
+import os
+import tempfile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
@@ -10,6 +12,8 @@ from registration.models import (
     ProgramItemFaculty, AbstractSubmission, RegistrationKit
 )
 from registration.forms import ProgramSessionBuilderForm
+from registration.pdf_utils import generate_invoice
+from registration.qr_utils import registration_qr_payload
 from website.models import MembershipPayment, MembershipType
 
 class ProgramSessionBuilderTests(TestCase):
@@ -374,6 +378,211 @@ class ProgramSessionBuilderTests(TestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         CELERY_TASK_ALWAYS_EAGER=True,
     )
+    def test_participant_center_staff_can_add_pending_participant(self):
+        self.client.force_login(self.staff_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse('dashboard_participant_center'), {
+                'participant_action': 'create_participant',
+                'participant_lookup_completed': '1',
+                'participant_lookup_email': 'manual.request@example.com',
+                'participant-event': self.event.id,
+                'participant-registration_type': 'regular',
+                'participant-name': 'Manual Request',
+                'participant-email': 'manual.request@example.com',
+                'participant-phone': '01700000011',
+                'participant-degree': 'MBBS',
+                'participant-year_of_graduation': 2021,
+                'participant-department_name': 'Clinical Oncology',
+                'participant-organization': 'Request Hospital',
+                'participant-country': 'Bangladesh',
+                'participant-BMDC_registration_number': 'A-12345',
+                'participant-approval_state': 'pending',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        participant = Participant.objects.get(email='manual.request@example.com', event=self.event)
+        self.assertFalse(participant.approved)
+        self.assertFalse(participant.denied)
+        self.assertTrue(participant.user.has_usable_password())
+        profile = UserProfile.objects.get(user=participant.user)
+        self.assertEqual(profile.name, participant.name)
+        self.assertEqual(profile.phone, participant.phone)
+        self.assertFalse(PaymentStatus.objects.filter(participant=participant).exists())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('profile and login account', mail.outbox[0].subject)
+
+    def test_participant_center_email_lookup_loads_existing_profile(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Existing Website User',
+            email=self.user.email,
+            phone='01700000014',
+            country='Bangladesh',
+        )
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_participant_lookup'), {
+            'email': profile.email,
+            'event': self.event.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['account_found'])
+        self.assertTrue(payload['profile_found'])
+        self.assertFalse(payload['already_registered'])
+        self.assertEqual(payload['profile']['name'], profile.name)
+        self.assertEqual(payload['profile']['phone'], profile.phone)
+
+    def test_participant_center_live_lookup_matches_partial_name_or_email(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Dynamic Search Person',
+            email=self.user.email,
+            phone='01700000016',
+            country='Bangladesh',
+        )
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_participant_lookup'), {
+            'q': 'dynamic sea',
+            'event': self.event.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()['results']
+        self.assertEqual(results[0]['email'], profile.email)
+        self.assertEqual(results[0]['profile']['name'], profile.name)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        CELERY_TASK_ALWAYS_EAGER=True,
+    )
+    def test_participant_center_staff_can_add_with_only_essential_details(self):
+        self.client.force_login(self.staff_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse('dashboard_participant_center'), {
+                'participant_action': 'create_participant',
+                'participant_lookup_completed': '1',
+                'participant_lookup_email': 'essentials.only@example.com',
+                'participant-event': self.event.id,
+                'participant-registration_type': 'regular',
+                'participant-name': 'Essentials Only',
+                'participant-email': 'essentials.only@example.com',
+                'participant-phone': '01700000017',
+                'participant-degree': '',
+                'participant-year_of_graduation': '',
+                'participant-department_name': '',
+                'participant-organization': '',
+                'participant-country': 'Bangladesh',
+                'participant-BMDC_registration_number': '',
+                'participant-approval_state': 'pending',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        participant = Participant.objects.get(email='essentials.only@example.com')
+        self.assertEqual(participant.degree, 'Not provided')
+        self.assertEqual(participant.year_of_graduation, 0)
+        self.assertEqual(participant.organization, 'Not provided')
+        self.assertEqual(participant.department.name, 'Not specified')
+
+    def test_participant_center_rejects_manual_creation_without_email_lookup(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(reverse('dashboard_participant_center'), {
+            'participant_action': 'create_participant',
+            'participant-event': self.event.id,
+            'participant-registration_type': 'regular',
+            'participant-name': 'Unchecked Email',
+            'participant-email': 'unchecked@example.com',
+            'participant-phone': '01700000015',
+            'participant-degree': 'MBBS',
+            'participant-year_of_graduation': 2021,
+            'participant-department_name': 'Clinical Oncology',
+            'participant-organization': 'Request Hospital',
+            'participant-country': 'Bangladesh',
+            'participant-BMDC_registration_number': '',
+            'participant-approval_state': 'pending',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Check this email address before adding the participant.')
+        self.assertFalse(Participant.objects.filter(email='unchecked@example.com').exists())
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        CELERY_TASK_ALWAYS_EAGER=True,
+    )
+    def test_participant_center_repairs_existing_user_without_profile(self):
+        existing_user = User.objects.create_user(
+            username='existing.profileless@example.com',
+            email='existing.profileless@example.com',
+            password='existing-password',
+        )
+        self.client.force_login(self.staff_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse('dashboard_participant_center'), {
+                'participant_action': 'create_participant',
+                'participant_lookup_completed': '1',
+                'participant_lookup_email': existing_user.email,
+                'participant-event': self.event.id,
+                'participant-registration_type': 'regular',
+                'participant-name': 'Existing Profileless User',
+                'participant-email': existing_user.email,
+                'participant-phone': '01700000013',
+                'participant-degree': 'MBBS',
+                'participant-year_of_graduation': 2022,
+                'participant-department_name': 'Medical Oncology',
+                'participant-organization': 'Existing Hospital',
+                'participant-country': 'Bangladesh',
+                'participant-BMDC_registration_number': '',
+                'participant-approval_state': 'pending',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        participant = Participant.objects.get(email=existing_user.email, event=self.event)
+        self.assertEqual(participant.user, existing_user)
+        self.assertTrue(UserProfile.objects.filter(user=existing_user).exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        CELERY_TASK_ALWAYS_EAGER=True,
+    )
+    def test_participant_center_staff_can_add_and_approve_participant(self):
+        self.event.amount = '500.00'
+        self.event.save(update_fields=['amount'])
+        self.client.force_login(self.staff_user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse('dashboard_participant_center'), {
+                'participant_action': 'create_participant',
+                'participant_lookup_completed': '1',
+                'participant_lookup_email': 'immediate.approval@example.com',
+                'participant-event': self.event.id,
+                'participant-registration_type': 'regular',
+                'participant-name': 'Immediate Approval',
+                'participant-email': 'immediate.approval@example.com',
+                'participant-phone': '01700000012',
+                'participant-degree': 'MBBS',
+                'participant-year_of_graduation': 2021,
+                'participant-department_name': 'Clinical Oncology',
+                'participant-organization': 'Request Hospital',
+                'participant-country': 'Bangladesh',
+                'participant-BMDC_registration_number': '',
+                'participant-approval_state': 'approved',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        participant = Participant.objects.get(email='immediate.approval@example.com', event=self.event)
+        self.assertTrue(participant.approved)
+        self.assertTrue(participant.user.has_usable_password())
+        payment_status = PaymentStatus.objects.get(participant=participant)
+        self.assertEqual(payment_status.status, 'unpaid')
+        self.assertEqual(str(payment_status.amount), '500.00')
+        self.assertTrue(UserProfile.objects.filter(user=participant.user).exists())
+        self.assertEqual(len(mail.outbox), 2)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        CELERY_TASK_ALWAYS_EAGER=True,
+    )
     def test_participant_center_approves_and_creates_payment_status(self):
         self.event.payment_required = True
         self.event.amount = '500.00'
@@ -593,16 +802,26 @@ class ProgramSessionBuilderTests(TestCase):
         kit.status = 'not_issued'
         kit.issued_at = None
         kit.save(update_fields=['status', 'issued_at'])
-        response = self.client.post(reverse('dashboard_registration_kit_center'), {
-            'event': self.event.id,
-            'kit_status': 'all',
-            'scan_code': completed_payment.merchant_invoice_number,
-            'kit_action': 'scan_issue',
-        })
-        self.assertEqual(response.status_code, 302)
-        kit.refresh_from_db()
-        self.assertEqual(kit.status, 'issued')
-        self.assertIsNotNone(kit.issued_at)
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root, SITE_URL='https://beta.bsbcs.info'):
+                invoice_path = generate_invoice(completed_participant, self.event, completed_payment)
+                completed_payment.refresh_from_db()
+                self.assertTrue(os.path.exists(invoice_path))
+                self.assertTrue(os.path.exists(completed_payment.qr_code.path))
+                self.assertIn('completed-kit-candidate', completed_payment.qr_code.name)
+                self.assertIn('kitcompleted-at-example-com', completed_payment.qr_code.name)
+                self.assertIn(str(completed_payment.qr_token), registration_qr_payload(completed_payment))
+
+                response = self.client.post(reverse('dashboard_registration_kit_center'), {
+                    'event': self.event.id,
+                    'kit_status': 'all',
+                    'scan_code': registration_qr_payload(completed_payment),
+                    'kit_action': 'scan_issue',
+                })
+                self.assertEqual(response.status_code, 302)
+                kit.refresh_from_db()
+                self.assertEqual(kit.status, 'issued')
+                self.assertIsNotNone(kit.issued_at)
 
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)

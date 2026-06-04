@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<body style="margin:0;background:#f3f7fb;font-family:Arial,sans-serif;color:#10213b;">
+    <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+        <div style="background:#ffffff;border:1px solid #dbe6f0;border-radius:12px;overflow:hidden;">
+            <div style="background:#123e69;padding:22px 28px;color:#ffffff;">
+                <div style="font-size:13px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#bdebf0;">BSBCS profile</div>
+                <h1 style="margin:8px 0 0;font-size:24px;color:#ffffff;">Your website account is ready</h1>
+            </div>
+            <div style="padding:28px;">
+                <p>Dear {{ participant.name }},</p>
+                <p>BSBCS received a registration request for <strong>{{ event.name }} {{ event.year }}</strong>. A website profile and login account have been created for you so you can access your registration and future BSBCS services.</p>
+                <div style="margin:24px 0;padding:18px;border-radius:10px;background:#f3f7fb;border:1px solid #dbe6f0;">
+                    <p style="margin:0 0 8px;"><strong>Username:</strong> {{ username }}</p>
+                    <p style="margin:0;"><strong>Temporary password:</strong> {{ password }}</p>
+                </div>
+                <p>Please change your password after signing in.</p>
+                <p style="margin:24px 0;">
+                    <a href="{{ login_url }}" style="display:inline-block;border-radius:8px;background:#1769c2;padding:12px 20px;color:#ffffff;text-decoration:none;font-weight:bold;">Sign in to BSBCS</a>
+                </p>
+                <p>Your event registration may still require BSBCS approval and payment. You will receive a separate message when its status changes.</p>
+                <p style="margin-bottom:0;">Regards,<br>BSBCS Team</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

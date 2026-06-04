@@ -24,6 +24,7 @@ from .forms import (
     ProgramPersonQuickCreateForm,
     DashboardEventForm,
     DashboardAbstractSubmissionForm,
+    DashboardParticipantCreateForm,
 )
 from .models import *
 from django.contrib.auth import login, logout
@@ -50,6 +51,7 @@ from .bulk_email_services import (
 )
 from .tasks import (
     participant_email_log_table_ready,
+    send_manual_participant_account_email,
     send_participant_approval_email,
     send_pending_bulk_email_campaign,
 )
@@ -2053,14 +2055,27 @@ def complete_corporate_payment(corporate_payment, execute_response):
     for attendee in corporate_payment.attendees.select_related('participant').all():
         if not attendee.participant:
             continue
-        PaymentStatus.objects.filter(
+        participant_payment = PaymentStatus.objects.filter(
             participant=attendee.participant,
             event=corporate_payment.event,
-        ).update(
-            status='completed',
-            transaction_id=corporate_payment.transaction_id,
-            trxID=corporate_payment.trxID,
-        )
+        ).first()
+        if not participant_payment:
+            continue
+        participant_payment.status = 'completed'
+        participant_payment.transaction_id = corporate_payment.transaction_id
+        participant_payment.trxID = corporate_payment.trxID
+        participant_payment.save(update_fields=['status', 'transaction_id', 'trxID', 'updated_at'])
+        invoice_path = generate_invoice(attendee.participant, corporate_payment.event, participant_payment)
+        participant_payment.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
+        participant_payment.save(update_fields=['invoice', 'updated_at'])
+        if not participant_payment.email_sent:
+            send_corporate_participant_invoice_email(
+                attendee.participant,
+                corporate_payment.event,
+                participant_payment,
+                invoice_path,
+                corporate_payment.corporate_account,
+            )
 
 
 @login_required
@@ -2212,11 +2227,37 @@ def send_invoice_email(participant, event, payment_status, invoice_path):
     try:
         email.send()
         payment_status.email_sent = True
-        payment_status.invoice = invoice_path
+        payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
         payment_status.save()
         logger.info("Email sent to %s", recipient)
     except Exception as e:
         logger.exception("Error sending email: %s", e)
+
+
+def send_corporate_participant_invoice_email(participant, event, payment_status, invoice_path, corporate_account):
+    subject = f"Corporate-sponsored registration confirmed for {event.name}"
+    message = (
+        f"Dear {participant.name},\n\n"
+        f"{corporate_account.company_name} has completed the corporate registration payment for "
+        f"your attendance at {event.name} {event.year}.\n\n"
+        "Your individual registration invoice is attached. It includes your secure QR code for "
+        "verification at the registration desk.\n\n"
+        "Best regards,\n"
+        "BSBCS Team"
+    )
+    email = EmailMessage(subject, message, to=[participant.email])
+    email.attach_file(invoice_path)
+
+    try:
+        email.send()
+        payment_status.email_sent = True
+        payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
+        payment_status.save(update_fields=['email_sent', 'invoice', 'updated_at'])
+        logger.info("Corporate participant invoice sent to %s", participant.email)
+        return True
+    except Exception as exc:
+        logger.exception("Could not send corporate participant invoice to %s: %s", participant.email, exc)
+        return False
 
 
 
@@ -3371,9 +3412,13 @@ def _approve_dashboard_participant(request, participant):
     password = None
     include_password = False
 
-    if not User.objects.filter(email=participant.email).exists():
+    participant_user = participant.user
+    if not participant_user.has_usable_password():
         password = get_random_string(length=12)
-        User.objects.create_user(username=participant.email, email=participant.email, password=password)
+        participant_user.set_password(password)
+        if not participant_user.email:
+            participant_user.email = participant.email
+        participant_user.save(update_fields=['password', 'email'])
         include_password = True
 
     participant.approved = True
@@ -3433,6 +3478,82 @@ def _participant_dashboard_status(participant):
     if payment_status.status in SUCCESS_PAYMENT_STATUSES:
         return 'Approved and paid'
     return 'Approved but unpaid'
+
+
+@staff_member_required
+def dashboard_participant_lookup(request):
+    query = (request.GET.get('q') or request.GET.get('email') or '').strip().lower()
+    event_id = request.GET.get('event')
+    if not query:
+        return JsonResponse({'ok': True, 'results': []})
+
+    profiles = list(
+        UserProfile.objects.filter(
+            Q(email__icontains=query) | Q(name__icontains=query)
+        ).select_related('user').order_by('name')[:8]
+    )
+    profile_user_ids = {profile.user_id for profile in profiles}
+    users = list(
+        User.objects.filter(
+            Q(email__icontains=query)
+            | Q(username__icontains=query)
+            | Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+        ).exclude(pk__in=profile_user_ids).order_by('email')[:8]
+    )
+
+    results = []
+    seen_emails = set()
+    candidates = [(profile.user, profile) for profile in profiles] + [(user, None) for user in users]
+    for user, profile in candidates:
+        email = ((profile.email if profile else user.email or user.username) or '').strip().lower()
+        if not email or email in seen_emails:
+            continue
+        seen_emails.add(email)
+        participant_scope = Participant.objects.filter(email__iexact=email).select_related('department').order_by('-created_at')
+        previous_participant = participant_scope.first()
+        already_registered = bool(event_id and participant_scope.filter(event_id=event_id).exists())
+        results.append({
+            'email': email,
+            'account_found': True,
+            'profile_found': bool(profile),
+            'already_registered': already_registered,
+            'message': (
+                'Already registered for this event.'
+                if already_registered
+                else 'Website profile found.'
+                if profile
+                else 'Login account found. A profile will be created.'
+            ),
+            'profile': {
+                'name': profile.name if profile else user.get_full_name(),
+                'email': email,
+                'phone': profile.phone if profile else '',
+                'country': profile.country if profile else 'Bangladesh',
+                'degree': previous_participant.degree if previous_participant else '',
+                'year_of_graduation': previous_participant.year_of_graduation if previous_participant else '',
+                'department_name': previous_participant.department.name if previous_participant and previous_participant.department_id else '',
+                'organization': previous_participant.organization if previous_participant else '',
+                'BMDC_registration_number': previous_participant.BMDC_registration_number if previous_participant else '',
+            },
+        })
+        if len(results) >= 8:
+            break
+
+    data = {'ok': True, 'results': results}
+    exact_result = next((result for result in results if result['email'] == query), None)
+    if request.GET.get('email') and exact_result:
+        data.update(exact_result)
+    elif request.GET.get('email') and '@' in query:
+        data.update({
+            'email': query,
+            'account_found': False,
+            'profile_found': False,
+            'already_registered': False,
+            'message': 'No account found. Complete the essentials to create the account and profile.',
+            'profile': {'email': query, 'country': 'Bangladesh'},
+        })
+    return JsonResponse(data)
 
 
 @staff_member_required
@@ -3630,9 +3751,107 @@ def dashboard_participant_center(request):
     if query_params:
         redirect_url = f"{redirect_url}?{urlencode(query_params)}"
 
+    selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
+    participant_form = DashboardParticipantCreateForm(
+        selected_event=selected_event,
+        prefix='participant',
+    )
+    show_participant_form = False
+    participant_lookup_email = ''
+    participant_lookup_completed = False
     selected_ids = request.POST.getlist('participant_ids')
     if request.method == 'POST':
         action = request.POST.get('participant_action')
+        if action == 'create_participant':
+            participant_lookup_email = (request.POST.get('participant_lookup_email') or '').strip().lower()
+            participant_lookup_completed = request.POST.get('participant_lookup_completed') == '1'
+            participant_form = DashboardParticipantCreateForm(
+                request.POST,
+                selected_event=selected_event,
+                prefix='participant',
+            )
+            show_participant_form = True
+            participant_form_is_valid = participant_form.is_valid()
+            submitted_email = (request.POST.get('participant-email') or '').strip().lower()
+            if not participant_lookup_completed or participant_lookup_email != submitted_email:
+                participant_form.add_error('email', 'Check this email address before adding the participant.')
+                participant_form_is_valid = False
+            if participant_form_is_valid:
+                try:
+                    with transaction.atomic():
+                        participant = participant_form.save(commit=False)
+                        normalized_email = participant.email.strip().lower()
+                        participant.email = normalized_email
+                        participant_user = User.objects.filter(email__iexact=normalized_email).first()
+                        if participant_user is None:
+                            participant_user = User.objects.filter(username__iexact=normalized_email).first()
+                        if participant_user is None:
+                            participant_user = User(username=normalized_email, email=normalized_email)
+                            account_password = get_random_string(length=12)
+                            participant_user.set_password(account_password)
+                            participant_user.save()
+                        elif not participant_user.has_usable_password():
+                            account_password = get_random_string(length=12)
+                            participant_user.set_password(account_password)
+                            if not participant_user.email:
+                                participant_user.email = normalized_email
+                            participant_user.save(update_fields=['password', 'email'])
+                        else:
+                            account_password = None
+
+                        UserProfile.objects.get_or_create(
+                            user=participant_user,
+                            defaults={
+                                'name': participant.name,
+                                'email': normalized_email,
+                                'phone': participant.phone,
+                                'country': participant.country,
+                            },
+                        )
+                        participant.user = participant_user
+                        participant.approved = False
+                        participant.denied = False
+                        participant.save()
+
+                        if account_password:
+                            transaction.on_commit(
+                                lambda participant_id=participant.id, password=account_password: (
+                                    send_manual_participant_account_email.delay(participant_id, password)
+                                )
+                            )
+
+                        if participant_form.cleaned_data['approval_state'] == 'approved':
+                            _, email_queued = _approve_dashboard_participant(request, participant)
+                            messages.success(
+                                request,
+                                f'{participant.name} was added and approved. '
+                                f'Approval email {"queued" if email_queued else "could not be queued"}.'
+                                f'{" Login credentials were also queued." if account_password else ""}',
+                            )
+                            create_approval_filter = 'approved'
+                        else:
+                            messages.success(
+                                request,
+                                f'{participant.name} was added and is waiting for approval.'
+                                f'{" Login credentials were queued." if account_password else ""}',
+                            )
+                            create_approval_filter = 'pending'
+
+                    create_params = {
+                        'event': participant.event_id,
+                        'approval_status': create_approval_filter,
+                        'payment_status': 'all',
+                        'q': participant.email,
+                    }
+                    return redirect(f"{reverse('dashboard_participant_center')}?{urlencode(create_params)}")
+                except IntegrityError:
+                    logger.exception("Manual participant creation failed because of a duplicate row.")
+                    participant_form.add_error(None, 'A participant with this email or phone already exists for the selected event.')
+                except Exception as exc:
+                    logger.exception("Manual participant creation failed: %s", exc)
+                    participant_form.add_error(None, f'Could not add participant: {exc}')
+            messages.error(request, 'Please correct the highlighted participant details.')
+
         selected_participants = Participant.objects.filter(pk__in=selected_ids).select_related('event', 'department')
 
         if action in ('approve', 'deny') and not selected_ids:
@@ -3764,6 +3983,10 @@ def dashboard_participant_center(request):
             ('missing', 'No payment row'),
             ('not_required', 'No fee required'),
         ],
+        'participant_form': participant_form,
+        'show_participant_form': show_participant_form,
+        'participant_lookup_email': participant_lookup_email,
+        'participant_lookup_completed': participant_lookup_completed,
     }
     return render(request, 'dashboard_participant_center.html', context)
 
@@ -3890,6 +4113,9 @@ def dashboard_payment_center(request):
                     else:
                         _generate_event_payment_invoice(payment_record)
                         messages.success(request, f'Invoice generated for {payment_record.participant.name}.')
+                elif payment_action == 'refresh_invoice_qr':
+                    _generate_event_payment_invoice(payment_record)
+                    messages.success(request, f'QR code created and invoice refreshed for {payment_record.participant.name}.')
                 elif payment_action == 'email_invoice':
                     if not payment_record.invoice:
                         messages.error(request, 'Generate the invoice first, then email it.')
@@ -3993,6 +4219,8 @@ def dashboard_payment_center(request):
                 'trx_id': payment.trxID or '',
                 'invoice_url': payment.invoice.url if payment.invoice else '',
                 'invoice_ready': bool(payment.invoice),
+                'qr_url': payment.qr_code.url if payment.qr_code else '',
+                'qr_ready': bool(payment.qr_code),
                 'email_sent': payment.email_sent,
                 'email_trackable': True,
                 'email_sent_at': payment.updated_at if payment.email_sent else None,
@@ -4018,6 +4246,8 @@ def dashboard_payment_center(request):
                 'trx_id': payment.trxID or '',
                 'invoice_url': payment.invoice.url if payment.invoice else '',
                 'invoice_ready': bool(payment.invoice),
+                'qr_url': '',
+                'qr_ready': False,
                 'email_sent': False,
                 'email_trackable': False,
                 'email_sent_at': None,
@@ -4139,11 +4369,17 @@ def dashboard_registration_kit_center(request):
                 elif not scan_code:
                     messages.error(request, 'Enter or scan a code first.')
                 else:
+                    token_candidate = scan_code.rstrip('/').rsplit('/', 1)[-1]
                     scan_filter = (
                         Q(merchant_invoice_number__iexact=scan_code)
                         | Q(participant__email__iexact=scan_code)
                         | Q(participant__phone__iexact=scan_code)
                     )
+                    try:
+                        from uuid import UUID
+                        scan_filter |= Q(qr_token=UUID(token_candidate))
+                    except (TypeError, ValueError, AttributeError):
+                        pass
                     if scan_code.isdigit():
                         scan_filter |= Q(pk=int(scan_code)) | Q(participant_id=int(scan_code))
                     matches = list(eligible_payments.filter(scan_filter)[:2])
@@ -4239,6 +4475,20 @@ def dashboard_registration_kit_center(request):
         ],
     }
     return render(request, 'dashboard_registration_kit_center.html', context)
+
+
+@staff_member_required
+def registration_qr_checkin(request, token):
+    payment_record = get_object_or_404(
+        PaymentStatus.objects.select_related('participant', 'event'),
+        qr_token=token,
+    )
+    query = urlencode({
+        'event': payment_record.event_id,
+        'q': payment_record.merchant_invoice_number,
+        'kit_status': 'all',
+    })
+    return redirect(f"{reverse('dashboard_registration_kit_center')}?{query}")
 
 
 def _bulk_email_valid_email(email):

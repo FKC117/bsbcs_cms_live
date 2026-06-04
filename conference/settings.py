@@ -228,7 +228,7 @@ CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cas
 
 # Site Configuration
 SITE_NAME = 'BSBCS'
-SITE_URL = 'https://bsbcs.info'
+SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000' if DEBUG else 'https://bsbcs.info')
 CONTACT_EMAIL = config('CONTACT_EMAIL', default='info.bsbcs@gmail.com')
 
 # HTTPS Settings

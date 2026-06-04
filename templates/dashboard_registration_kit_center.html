@@ -117,7 +117,7 @@
                 <input type="hidden" name="kit_action" value="scan_issue">
                 <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Scan desk</div>
                 <h2 class="mt-1 text-xl font-black text-ink">Scan and issue immediately</h2>
-                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use invoice number, participant email, phone, or future QR payload for the selected event.</p>
+                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Scan the secure QR printed on the participant invoice, or use invoice number, email, or phone for the selected event.</p>
                 <label class="compact-label mt-4" for="scan_code">Scan / code</label>
                 <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                     <input id="scan_code" name="scan_code" class="workflow-input" placeholder="Focus here before scanning" autocomplete="off" autofocus>
@@ -247,6 +247,12 @@
             </div>
             <div class="p-4">
                 <div id="qr-scanner-status" class="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-bsbcs-blue ring-1 ring-blue-100">Preparing camera...</div>
+                <div class="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <select id="qr-camera-select" class="workflow-select" aria-label="Choose camera">
+                        <option value="">Detecting cameras...</option>
+                    </select>
+                    <button type="button" id="restart-qr-camera" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Restart camera</button>
+                </div>
                 <div id="kit-qr-reader" class="min-h-72 overflow-hidden rounded-xl border border-line bg-slate-950"></div>
                 <div class="mt-3 grid gap-2 sm:grid-cols-2">
                     <label class="grid cursor-pointer place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">
@@ -272,9 +278,13 @@
         const scanInput = document.getElementById('scan_code');
         const scanForm = document.getElementById('kit-scan-form');
         const imageInput = document.getElementById('qr-image-input');
+        const cameraSelect = document.getElementById('qr-camera-select');
+        const restartCameraButton = document.getElementById('restart-qr-camera');
         let scanner = null;
         let scannerRunning = false;
         let submitting = false;
+        let cameraDevices = [];
+        let scanHelpTimer = null;
 
         const setStatus = (message, tone = 'blue') => {
             status.textContent = message;
@@ -291,6 +301,7 @@
         const submitDecodedCode = async (decodedText) => {
             if (submitting || !decodedText) return;
             submitting = true;
+            clearTimeout(scanHelpTimer);
             scanInput.value = decodedText.trim();
             setStatus('QR matched. Issuing registration kit...', 'green');
             if (scannerRunning && scanner) {
@@ -304,7 +315,8 @@
             scanForm.submit();
         };
 
-        const stopScanner = async () => {
+        const stopScanner = async (hideModal = true) => {
+            clearTimeout(scanHelpTimer);
             if (scannerRunning && scanner) {
                 try {
                     await scanner.stop();
@@ -313,8 +325,60 @@
                 }
             }
             scannerRunning = false;
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            if (hideModal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        const waitForLayout = () => new Promise((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
+
+        const loadCameras = async () => {
+            cameraDevices = await Html5Qrcode.getCameras();
+            cameraSelect.innerHTML = '';
+            if (!cameraDevices.length) {
+                cameraSelect.innerHTML = '<option value="">No camera found</option>';
+                return null;
+            }
+            cameraDevices.forEach((camera) => {
+                const option = document.createElement('option');
+                option.value = camera.id;
+                option.textContent = camera.label || `Camera ${cameraSelect.options.length + 1}`;
+                cameraSelect.appendChild(option);
+            });
+            const preferred = cameraDevices.find((camera) => /back|rear|environment/i.test(camera.label))
+                || cameraDevices.find((camera) => /front|integrated|webcam/i.test(camera.label))
+                || cameraDevices[0];
+            cameraSelect.value = preferred.id;
+            return preferred.id;
+        };
+
+        const verifyLivePreview = async () => {
+            await new Promise((resolve) => setTimeout(resolve, 900));
+            const video = document.querySelector('#kit-qr-reader video');
+            if (!video) {
+                setStatus('Camera permission opened, but no live preview was created. Choose a camera and press Restart camera.', 'pink');
+                return false;
+            }
+            try {
+                await video.play();
+            } catch (error) {
+                console.debug('Camera preview play request was blocked:', error);
+            }
+            if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
+                setStatus('The selected camera is open but is not supplying video frames. Try another camera or check the laptop camera privacy shutter.', 'pink');
+                return false;
+            }
+            setStatus('Live camera ready. Hold the complete QR code steady inside the frame.', 'green');
+            clearTimeout(scanHelpTimer);
+            scanHelpTimer = setTimeout(() => {
+                if (scannerRunning && !submitting) {
+                    setStatus('No QR detected yet. Move the code closer, remove glare, and keep all four corners inside the frame.');
+                }
+            }, 8000);
+            return true;
         };
 
         const startScanner = async () => {
@@ -326,22 +390,35 @@
                 setStatus('Camera scanning requires HTTPS or localhost. Use saved-image scan or manual entry.', 'pink');
                 return;
             }
-            if (!scanner) {
-                scanner = new Html5Qrcode('kit-qr-reader', {
-                    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-                    verbose: false,
-                });
-            }
-            setStatus('Allow camera access, then place the QR code inside the frame.');
+            await stopScanner(false);
+            await waitForLayout();
+            if (!scanner) scanner = new Html5Qrcode('kit-qr-reader', {
+                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                verbose: false,
+            });
+            setStatus('Detecting available cameras...');
             try {
+                const selectedCameraId = cameraSelect.value || await loadCameras();
+                if (!selectedCameraId) {
+                    setStatus('No camera was found. Check Windows camera permission or scan a saved QR image.', 'pink');
+                    return;
+                }
+                setStatus('Starting the selected camera...');
                 await scanner.start(
-                    { facingMode: 'environment' },
-                    { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+                    selectedCameraId,
+                    {
+                        fps: 15,
+                        qrbox: (width, height) => {
+                            const size = Math.max(180, Math.min(width, height, 300) * 0.78);
+                            return {width: size, height: size};
+                        },
+                        disableFlip: false,
+                    },
                     submitDecodedCode,
                     () => {}
                 );
                 scannerRunning = true;
-                setStatus('Camera ready. Hold the QR code steady.');
+                await verifyLivePreview();
             } catch (error) {
                 setStatus('Camera could not start. Check permission or scan a saved QR image.', 'pink');
                 console.error(error);
@@ -352,8 +429,11 @@
             submitting = false;
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            await waitForLayout();
             await startScanner();
         });
+        cameraSelect.addEventListener('change', startScanner);
+        restartCameraButton.addEventListener('click', startScanner);
         closeButtons.forEach((button) => button.addEventListener('click', stopScanner));
         modal.addEventListener('click', (event) => {
             if (event.target === modal) stopScanner();

@@ -210,6 +210,101 @@ class RegistrationForm(forms.ModelForm):
 # Participant Reregistration form END------------------------------------------------------------------------------------#
 
 
+class DashboardParticipantCreateForm(forms.ModelForm):
+    event = forms.ModelChoiceField(
+        queryset=Event.objects.none(),
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+    )
+    department_name = forms.CharField(
+        label='Department',
+        max_length=50,
+        required=False,
+        help_text='Optional for staff-added registrations.',
+        widget=forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Department or specialty'}),
+    )
+    approval_state = forms.ChoiceField(
+        label='Starting status',
+        choices=[
+            ('pending', 'Pending approval'),
+            ('approved', 'Approve now'),
+        ],
+        initial='pending',
+        widget=forms.Select(attrs={'class': 'workflow-input'}),
+        help_text='Approve now creates the payment row and queues the appropriate confirmation email.',
+    )
+
+    class Meta:
+        model = Participant
+        fields = (
+            'event',
+            'registration_type',
+            'name',
+            'email',
+            'phone',
+            'degree',
+            'year_of_graduation',
+            'department_name',
+            'organization',
+            'country',
+            'BMDC_registration_number',
+        )
+        widgets = {
+            'registration_type': forms.Select(attrs={'class': 'workflow-input'}),
+            'name': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Participant name'}),
+            'email': forms.EmailInput(attrs={'class': 'workflow-input', 'placeholder': 'Email address'}),
+            'phone': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Phone number'}),
+            'degree': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Degree / qualification'}),
+            'year_of_graduation': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'placeholder': 'Year'}),
+            'organization': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Institution / organization'}),
+            'country': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Country'}),
+            'BMDC_registration_number': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional BMDC number'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        selected_event = kwargs.pop('selected_event', None)
+        super().__init__(*args, **kwargs)
+        self.fields['event'].queryset = Event.objects.order_by('-year', 'name')
+        optional_fields = ('degree', 'year_of_graduation', 'organization', 'BMDC_registration_number')
+        for field_name in optional_fields:
+            self.fields[field_name].required = False
+            self.fields[field_name].help_text = 'Optional for staff-added registrations.'
+        if selected_event:
+            self.fields['event'].initial = selected_event
+
+    def clean(self):
+        cleaned_data = super().clean()
+        event = cleaned_data.get('event')
+        email = (cleaned_data.get('email') or '').strip()
+        phone = (cleaned_data.get('phone') or '').strip()
+        if event and email and Participant.objects.filter(event=event, email__iexact=email).exists():
+            self.add_error('email', 'This email is already registered for the selected event.')
+        if event and phone and Participant.objects.filter(event=event, phone=phone).exists():
+            self.add_error('phone', 'This phone number is already registered for the selected event.')
+        matched_user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first() if email else None
+        if email and UserProfile.objects.filter(email__iexact=email).exclude(user=matched_user).exists():
+            self.add_error('email', 'This email is already linked to another website profile.')
+        if phone and UserProfile.objects.filter(phone=phone).exclude(user=matched_user).exists():
+            self.add_error('phone', 'This phone number is already linked to another website profile.')
+        return cleaned_data
+
+    def save(self, commit=True):
+        participant = super().save(commit=False)
+        event = self.cleaned_data['event']
+        participant.degree = (self.cleaned_data.get('degree') or 'Not provided').strip()
+        participant.year_of_graduation = self.cleaned_data.get('year_of_graduation') or 0
+        participant.organization = (self.cleaned_data.get('organization') or 'Not provided').strip()
+        department_name = (self.cleaned_data.get('department_name') or 'Not specified').strip()[:50]
+        department, _ = Department.objects.get_or_create(
+            event=event,
+            name=department_name,
+        )
+        participant.event = event
+        participant.department = department
+        if commit:
+            participant.save()
+        return participant
+
+
 # Abstract Submission form START------------------------------------------------------------------------------------#
 class AbstractSubmissionForm(forms.ModelForm):
     class Meta:

@@ -141,7 +141,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.enums import TA_RIGHT
 
 def generate_invoice(participant, event, payment_status):
+    from .qr_utils import ensure_registration_qr
+
     invoice_amount = payment_status.amount or 0
+    qr_path = ensure_registration_qr(payment_status)
     # Generate the filename based on payment status ID
     file_name = f"invoice_{payment_status.id}.pdf"
     
@@ -198,6 +201,18 @@ def generate_invoice(participant, event, payment_status):
     
     for i, detail in enumerate(details):
         c.drawString(margin, content_top - 30 - (i * section_height), detail)
+
+    if qr_path and os.path.exists(qr_path):
+        qr_size = 1.25 * inch
+        qr_x = letter[0] - margin - qr_size
+        participant_name_y = content_top - 30
+        qr_top = participant_name_y + 8
+        qr_y = qr_top - qr_size
+        c.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, preserveAspectRatio=True, mask='auto')
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 10, "SCAN AT REGISTRATION DESK")
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 20, f"{participant.name[:32]}")
     
     # Add a bottom border for the section
     c.line(margin, content_top - 60 - (i * section_height), letter[0] - margin, content_top - 60 - (i * section_height))

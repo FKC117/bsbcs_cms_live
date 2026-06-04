@@ -22,6 +22,30 @@ def send_pending_bulk_email_campaign(self, bulk_email_id, sent_by_user_id=None):
     )
 
 
+@shared_task(bind=True)
+def send_manual_participant_account_email(self, participant_id, password):
+    participant = Participant.objects.select_related('event', 'user').get(pk=participant_id)
+    login_url = f"{settings.SITE_URL.rstrip('/')}{reverse('login')}"
+    context = {
+        'participant': participant,
+        'event': participant.event,
+        'username': participant.user.username,
+        'password': password,
+        'login_url': login_url,
+    }
+    html_content = render_to_string('emails/manual_participant_account_created.html', context)
+    text_content = strip_tags(html_content)
+    email = EmailMultiAlternatives(
+        'Your BSBCS profile and login account',
+        text_content,
+        settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
+        [participant.email],
+    )
+    email.attach_alternative(html_content, 'text/html')
+    email.send()
+    return {'participant_id': participant.id, 'email': participant.email, 'status': 'sent'}
+
+
 def participant_email_log_table_ready():
     try:
         return ParticipantEmailLog._meta.db_table in connection.introspection.table_names()

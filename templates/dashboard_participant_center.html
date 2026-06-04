@@ -162,12 +162,15 @@
             <input type="hidden" name="payment_status" value="{{ current_filters.payment_status }}">
             <input type="hidden" name="q" value="{{ current_filters.q }}">
 
-            <div class="mb-4">
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Manage participants</div>
                     <h2 class="mt-1 text-xl font-black text-ink">Participant approval queue</h2>
                     <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Select one or more participants to approve or deny. Payment status is shown here for context and handled in the payment workflow.</p>
                 </div>
+                <button type="button" data-open-participant-modal class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-bsbcs-navy">
+                    + Add Participant
+                </button>
             </div>
 
             <div data-selected-actions class="mb-3 hidden rounded-2xl border border-blue-100 bg-blue-50/80 p-3 shadow-quiet">
@@ -290,6 +293,94 @@
         </form>
     </main>
 
+    <div data-participant-modal class="{% if not show_participant_form %}hidden {% endif %}fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-labelledby="participant-modal-title">
+        <div class="mx-auto flex min-h-full max-w-4xl items-center justify-center">
+            <section class="w-full overflow-hidden rounded-2xl border border-white/20 bg-white shadow-lift">
+                <div class="flex items-start justify-between gap-4 bg-gradient-to-r from-bsbcs-navy via-[#155A96] to-bsbcs-teal px-5 py-4 text-white">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Manual registration</div>
+                        <h2 id="participant-modal-title" class="mt-1 text-2xl font-black !text-white">Add a participant on request</h2>
+                        <p class="mt-1 text-sm font-semibold !text-white/75">Link an existing profile, or create a website profile and send login credentials automatically.</p>
+                    </div>
+                    <button type="button" data-close-participant-modal aria-label="Close add participant form" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/25 bg-white/10 text-xl font-black text-white hover:bg-white/20">&times;</button>
+                </div>
+
+                <form method="post" class="p-5" data-participant-create-form>
+                    {% csrf_token %}
+                    <input type="hidden" name="participant_action" value="create_participant">
+                    <input type="hidden" name="approval_status" value="{{ current_filters.approval_status }}">
+                    <input type="hidden" name="payment_status" value="{{ current_filters.payment_status }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <input type="hidden" name="participant_lookup_completed" value="{% if participant_lookup_completed %}1{% else %}0{% endif %}" data-participant-lookup-completed>
+                    <input type="hidden" name="participant_lookup_email" value="{{ participant_lookup_email }}" data-participant-lookup-email>
+
+                    {% if participant_form.non_field_errors %}
+                        <div class="mb-4 rounded-xl bg-pink-50 px-4 py-3 text-sm font-bold text-bsbcs-pink">
+                            {{ participant_form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Step 1 · Check website account</div>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Choose an event, then type a name or email. Matching profiles appear immediately.</p>
+                        <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] md:items-end">
+                            <div>
+                                <label for="{{ participant_form.event.id_for_label }}" class="compact-label">{{ participant_form.event.label }}</label>
+                                {{ participant_form.event }}
+                                {% for error in participant_form.event.errors %}
+                                    <div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="relative">
+                                <label for="{{ participant_form.email.id_for_label }}" class="compact-label">{{ participant_form.email.label }}</label>
+                                {{ participant_form.email }}
+                                <div data-participant-lookup-results data-lookup-url="{% url 'dashboard_participant_lookup' %}" class="hidden absolute left-0 right-0 top-full z-20 mt-2 max-h-64 overflow-y-auto rounded-xl border border-line bg-white p-2 shadow-lift"></div>
+                                {% for error in participant_form.email.errors %}
+                                    <div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <button type="button" data-change-participant-email class="{% if not participant_lookup_completed %}hidden {% endif %}rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Change</button>
+                        </div>
+                        <div data-participant-lookup-status class="{% if not participant_lookup_completed %}hidden {% endif %}mt-3 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-bold text-slate-600">
+                            {% if participant_lookup_completed %}Email checked. Review the details below before saving.{% endif %}
+                        </div>
+                    </div>
+
+                    <div data-participant-details class="{% if not participant_lookup_completed %}hidden {% endif %}mt-5">
+                        <div class="mb-3">
+                            <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Step 2 · Registration details</div>
+                            <p class="mt-1 text-sm font-semibold text-slate-600">Name, phone, and country are essential. Professional details are optional for a staff-added request.</p>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                        {% for field in participant_form %}
+                            {% if field.name != 'event' and field.name != 'email' %}
+                                <div class="{% if field.name == 'name' or field.name == 'organization' %}md:col-span-2{% endif %}">
+                                    <label for="{{ field.id_for_label }}" class="compact-label">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <div class="mt-1 text-xs font-semibold leading-5 text-slate-500">{{ field.help_text }}</div>
+                                    {% endif %}
+                                    {% for error in field.errors %}
+                                        <div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                        <p class="max-w-xl text-xs font-semibold leading-5 text-slate-500">New users receive their website credentials immediately. Pending rows do not receive an event approval email until staff approves them.</p>
+                        <div class="flex gap-2">
+                            <button type="button" data-close-participant-modal class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel</button>
+                            <button type="submit" data-add-participant-submit {% if not participant_lookup_completed %}disabled{% endif %} class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy disabled:cursor-not-allowed disabled:bg-slate-300">Add Participant</button>
+                        </div>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </div>
+
     <footer class="border-t border-line bg-white/80 py-4">
         <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
             <span>BSBCS Participant Center</span>
@@ -300,6 +391,221 @@
 
 <script>
     (function () {
+        const participantModal = document.querySelector('[data-participant-modal]');
+        const openParticipantButtons = document.querySelectorAll('[data-open-participant-modal]');
+        const closeParticipantButtons = document.querySelectorAll('[data-close-participant-modal]');
+        const participantEmail = document.getElementById('id_participant-email');
+        const participantEvent = document.getElementById('id_participant-event');
+        const participantDetails = document.querySelector('[data-participant-details]');
+        const participantLookupStatus = document.querySelector('[data-participant-lookup-status]');
+        const participantLookupCompleted = document.querySelector('[data-participant-lookup-completed]');
+        const participantLookupEmail = document.querySelector('[data-participant-lookup-email]');
+        const participantLookupResults = document.querySelector('[data-participant-lookup-results]');
+        const participantChangeEmailButton = document.querySelector('[data-change-participant-email]');
+        const participantSubmitButton = document.querySelector('[data-add-participant-submit]');
+        const participantCreateForm = document.querySelector('[data-participant-create-form]');
+        let participantLookupTimer = null;
+        let participantLookupRequest = null;
+
+        function setLookupStatus(message, tone) {
+            if (!participantLookupStatus) {
+                return;
+            }
+            participantLookupStatus.textContent = message;
+            participantLookupStatus.className = 'mt-3 rounded-xl border px-3 py-2 text-sm font-bold';
+            if (tone === 'error') {
+                participantLookupStatus.classList.add('border-pink-100', 'bg-pink-50', 'text-bsbcs-pink');
+            } else if (tone === 'success') {
+                participantLookupStatus.classList.add('border-green-100', 'bg-green-50', 'text-bsbcs-green');
+            } else {
+                participantLookupStatus.classList.add('border-blue-100', 'bg-white', 'text-slate-600');
+            }
+        }
+
+        function invalidateParticipantLookup() {
+            if (participantLookupCompleted) participantLookupCompleted.value = '0';
+            if (participantLookupEmail) participantLookupEmail.value = '';
+            if (participantDetails) participantDetails.classList.add('hidden');
+            if (participantLookupStatus) participantLookupStatus.classList.add('hidden');
+            if (participantChangeEmailButton) participantChangeEmailButton.classList.add('hidden');
+            if (participantSubmitButton) participantSubmitButton.disabled = true;
+            if (participantEmail) participantEmail.readOnly = false;
+            if (participantLookupResults) {
+                participantLookupResults.innerHTML = '';
+                participantLookupResults.classList.add('hidden');
+            }
+        }
+
+        function populateParticipantDetails(profile) {
+            const fieldMap = {
+                name: 'id_participant-name',
+                phone: 'id_participant-phone',
+                degree: 'id_participant-degree',
+                year_of_graduation: 'id_participant-year_of_graduation',
+                department_name: 'id_participant-department_name',
+                organization: 'id_participant-organization',
+                country: 'id_participant-country',
+                BMDC_registration_number: 'id_participant-BMDC_registration_number'
+            };
+            Object.keys(fieldMap).forEach(function (key) {
+                const field = document.getElementById(fieldMap[key]);
+                if (field && profile[key] !== undefined && profile[key] !== null && profile[key] !== '') {
+                    field.value = profile[key];
+                }
+            });
+        }
+
+        if (participantLookupCompleted && participantLookupCompleted.value === '1' && participantEmail) {
+            participantEmail.readOnly = true;
+        }
+
+        function chooseParticipantLookup(result) {
+            if (result.already_registered) {
+                setLookupStatus('This person is already registered for the selected event.', 'error');
+                participantLookupStatus.classList.remove('hidden');
+                return;
+            }
+            populateParticipantDetails(result.profile || {});
+            participantEmail.value = result.email;
+            participantEmail.readOnly = true;
+            participantLookupCompleted.value = '1';
+            participantLookupEmail.value = result.email;
+            participantDetails.classList.remove('hidden');
+            participantChangeEmailButton.classList.remove('hidden');
+            participantSubmitButton.disabled = false;
+            participantLookupResults.classList.add('hidden');
+            setLookupStatus(result.message || 'Email selected. Review the details below.', result.profile_found ? 'success' : 'info');
+            participantLookupStatus.classList.remove('hidden');
+        }
+
+        function renderParticipantLookupResults(results, typedValue) {
+            if (!participantLookupResults) return;
+            participantLookupResults.innerHTML = '';
+            results.forEach(function (result) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.disabled = result.already_registered;
+                button.className = 'mb-1 flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-55';
+                const identity = document.createElement('span');
+                identity.className = 'min-w-0';
+                const name = document.createElement('span');
+                name.className = 'block truncate text-sm font-black text-ink';
+                name.textContent = (result.profile && result.profile.name) || 'Website user';
+                const email = document.createElement('span');
+                email.className = 'block truncate text-xs font-semibold text-slate-500';
+                email.textContent = result.email;
+                identity.append(name, email);
+                const state = document.createElement('span');
+                state.className = 'shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-bsbcs-blue';
+                state.textContent = result.already_registered ? 'Registered' : result.profile_found ? 'Profile' : 'Login';
+                button.append(identity, state);
+                button.addEventListener('click', function () { chooseParticipantLookup(result); });
+                participantLookupResults.appendChild(button);
+            });
+
+            const normalized = typedValue.trim().toLowerCase();
+            const exactMatch = results.some(function (result) { return result.email.toLowerCase() === normalized; });
+            if (participantEmail.checkValidity() && !exactMatch) {
+                const newButton = document.createElement('button');
+                newButton.type = 'button';
+                newButton.className = 'mt-1 flex w-full items-center justify-between gap-3 rounded-lg border border-dashed border-blue-200 bg-blue-50/60 px-3 py-2 text-left hover:border-bsbcs-blue';
+                newButton.innerHTML = '<span><span class="block text-sm font-black text-bsbcs-blue">Use this new email</span><span class="block text-xs font-semibold text-slate-500"></span></span><span class="text-xs font-black text-bsbcs-blue">Create profile</span>';
+                newButton.querySelector('.text-slate-500').textContent = normalized;
+                newButton.addEventListener('click', function () {
+                    chooseParticipantLookup({
+                        email: normalized,
+                        profile_found: false,
+                        already_registered: false,
+                        message: 'New account and profile will be created after you save.',
+                        profile: {email: normalized, country: 'Bangladesh'}
+                    });
+                });
+                participantLookupResults.appendChild(newButton);
+            }
+            participantLookupResults.classList.toggle('hidden', participantLookupResults.children.length === 0);
+        }
+
+        async function searchParticipantLookup() {
+            const value = participantEmail.value.trim();
+            if (!participantEvent.value || value.length < 1) {
+                if (participantLookupResults) participantLookupResults.classList.add('hidden');
+                return;
+            }
+            if (participantLookupRequest) participantLookupRequest.abort();
+            participantLookupRequest = new AbortController();
+            try {
+                const lookupUrl = new URL(participantLookupResults.dataset.lookupUrl, window.location.origin);
+                lookupUrl.searchParams.set('q', value);
+                lookupUrl.searchParams.set('event', participantEvent.value);
+                const response = await fetch(lookupUrl.toString(), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    signal: participantLookupRequest.signal
+                });
+                const result = await response.json();
+                if (response.ok && result.ok) renderParticipantLookupResults(result.results || [], value);
+            } catch (error) {
+                if (error.name !== 'AbortError') setLookupStatus('Could not search website profiles.', 'error');
+            }
+        }
+
+        if (participantEmail) {
+            participantEmail.addEventListener('input', function () {
+                invalidateParticipantLookup();
+                clearTimeout(participantLookupTimer);
+                participantLookupTimer = setTimeout(searchParticipantLookup, 250);
+            });
+            participantEmail.addEventListener('focus', function () {
+                if (participantEmail.value.trim()) searchParticipantLookup();
+            });
+        }
+        if (participantEvent) {
+            participantEvent.addEventListener('change', invalidateParticipantLookup);
+        }
+        if (participantChangeEmailButton) {
+            participantChangeEmailButton.addEventListener('click', function () {
+                invalidateParticipantLookup();
+                if (participantEmail) participantEmail.focus();
+            });
+        }
+        function resetParticipantModal() {
+            if (participantCreateForm) participantCreateForm.reset();
+            invalidateParticipantLookup();
+            const pageEvent = new URLSearchParams(window.location.search).get('event');
+            if (participantEvent && pageEvent) participantEvent.value = pageEvent;
+        }
+
+        function setParticipantModal(open, preserveForm) {
+            if (!participantModal) {
+                return;
+            }
+            if (!open && !preserveForm) resetParticipantModal();
+            participantModal.classList.toggle('hidden', !open);
+            document.body.classList.toggle('overflow-hidden', open);
+        }
+
+        openParticipantButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                setParticipantModal(true);
+            });
+        });
+        closeParticipantButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                setParticipantModal(false);
+            });
+        });
+        if (participantModal) {
+            participantModal.addEventListener('click', function (event) {
+                if (event.target === participantModal) {
+                    setParticipantModal(false);
+                }
+            });
+        }
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                setParticipantModal(false);
+            }
+        });
+
         const selectAll = document.querySelector('[data-select-all]');
         const actionPanel = document.querySelector('[data-selected-actions]');
         const selectedCount = document.querySelector('[data-selected-count]');
