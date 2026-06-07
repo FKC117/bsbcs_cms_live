@@ -420,6 +420,34 @@
             return selectedCamera ? selectedCamera.label : '';
         };
 
+        const tuneCameraForQr = async () => {
+            const video = document.querySelector('#kit-qr-reader video');
+            const stream = video && video.srcObject;
+            const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+            if (!track || !track.getCapabilities || !track.applyConstraints) return;
+
+            const capabilities = track.getCapabilities();
+            const advanced = [];
+            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                advanced.push({focusMode: 'continuous'});
+            }
+            if (capabilities.zoom) {
+                const maxZoom = Number(capabilities.zoom.max || 1);
+                const minZoom = Number(capabilities.zoom.min || 1);
+                const targetZoom = Math.min(maxZoom, Math.max(minZoom, 2));
+                if (targetZoom > minZoom) {
+                    advanced.push({zoom: targetZoom});
+                }
+            }
+            if (!advanced.length) return;
+
+            try {
+                await track.applyConstraints({advanced});
+            } catch (error) {
+                console.debug('QR camera tuning skipped:', error);
+            }
+        };
+
         const verifyLivePreview = async () => {
             await new Promise((resolve) => setTimeout(resolve, 900));
             const video = document.querySelector('#kit-qr-reader video');
@@ -436,6 +464,7 @@
                 setStatus('The selected camera is open but is not supplying video frames. Try another camera or check the laptop camera privacy shutter.', 'pink');
                 return false;
             }
+            await tuneCameraForQr();
             if (/dual|ultra|wide|0\.5/i.test(activeCameraLabel)) {
                 setStatus('Wide camera selected. If scanning is slow, choose the normal Back Camera and hold the phone a little farther away.', 'blue');
             } else {
@@ -463,6 +492,9 @@
             await waitForLayout();
             if (!scanner) scanner = new Html5Qrcode('kit-qr-reader', {
                 formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true,
+                },
                 verbose: false,
             });
             setStatus('Detecting available cameras...');
@@ -480,9 +512,6 @@
                         fps: 15,
                         qrbox: getQrBox(),
                         disableFlip: false,
-                        experimentalFeatures: {
-                            useBarCodeDetectorIfSupported: true,
-                        },
                     },
                     submitDecodedCode,
                     () => {}
