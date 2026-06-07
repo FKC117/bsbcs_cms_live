@@ -328,6 +328,7 @@
         let submitting = false;
         let cameraDevices = [];
         let scanHelpTimer = null;
+        let activeCameraLabel = '';
 
         const setStatus = (message, tone = 'blue') => {
             status.textContent = message;
@@ -394,17 +395,29 @@
                 cameraSelect.innerHTML = '<option value="">No camera found</option>';
                 return null;
             }
-            cameraDevices.forEach((camera) => {
+            const isRearCamera = (camera) => /back|rear|environment/i.test(camera.label);
+            const isWideCamera = (camera) => /dual|ultra|wide|0\.5/i.test(camera.label);
+            const cameraRank = (camera) => {
+                if (isRearCamera(camera) && !isWideCamera(camera)) return 0;
+                if (isRearCamera(camera)) return 1;
+                if (/front|integrated|webcam/i.test(camera.label)) return 2;
+                return 3;
+            };
+            const sortedCameras = [...cameraDevices].sort((a, b) => cameraRank(a) - cameraRank(b));
+            sortedCameras.forEach((camera) => {
                 const option = document.createElement('option');
                 option.value = camera.id;
                 option.textContent = camera.label || `Camera ${cameraSelect.options.length + 1}`;
                 cameraSelect.appendChild(option);
             });
-            const preferred = cameraDevices.find((camera) => /back|rear|environment/i.test(camera.label))
-                || cameraDevices.find((camera) => /front|integrated|webcam/i.test(camera.label))
-                || cameraDevices[0];
+            const preferred = sortedCameras[0];
             cameraSelect.value = preferred.id;
             return preferred.id;
+        };
+
+        const getCameraLabel = (cameraId) => {
+            const selectedCamera = cameraDevices.find((camera) => camera.id === cameraId);
+            return selectedCamera ? selectedCamera.label : '';
         };
 
         const verifyLivePreview = async () => {
@@ -423,11 +436,15 @@
                 setStatus('The selected camera is open but is not supplying video frames. Try another camera or check the laptop camera privacy shutter.', 'pink');
                 return false;
             }
-            setStatus('Live camera ready. Hold the complete QR code steady inside the frame.', 'green');
+            if (/dual|ultra|wide|0\.5/i.test(activeCameraLabel)) {
+                setStatus('Wide camera selected. If scanning is slow, choose the normal Back Camera and hold the phone a little farther away.', 'blue');
+            } else {
+                setStatus('Live camera ready. Hold the complete QR code steady inside the square.', 'green');
+            }
             clearTimeout(scanHelpTimer);
             scanHelpTimer = setTimeout(() => {
                 if (scannerRunning && !submitting) {
-                    setStatus('No QR detected yet. Move the code closer, remove glare, and keep all four corners inside the frame.');
+                    setStatus('No QR detected yet. Use the normal Back Camera if available, increase laptop brightness, and keep all four QR corners inside the square.');
                 }
             }, 8000);
             return true;
@@ -455,6 +472,7 @@
                     setStatus('No camera was found. Check Windows camera permission or scan a saved QR image.', 'pink');
                     return;
                 }
+                activeCameraLabel = getCameraLabel(selectedCameraId);
                 setStatus('Starting the selected camera...');
                 await scanner.start(
                     selectedCameraId,
@@ -462,6 +480,9 @@
                         fps: 15,
                         qrbox: getQrBox(),
                         disableFlip: false,
+                        experimentalFeatures: {
+                            useBarCodeDetectorIfSupported: true,
+                        },
                     },
                     submitDecodedCode,
                     () => {}
