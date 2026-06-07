@@ -1,0 +1,630 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Certificate Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-textarea { min-height: 110px; resize: vertical; }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Certificate workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_registration_kit_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Issue Kit</a>
+                <a href="{% url 'admin:registration_certificate_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_560px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Certificate center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Prepare certificates and feedback for one event.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Manage certificate assets, signatories, feedback questions, and the issued-kit participants who can download certificates after feedback.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid content-end">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Load</button>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search issued participant name, email, phone, invoice">
+                    <a href="{% url 'dashboard_certificate_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Certificate</div>
+                <div class="mt-1 text-xl font-black {% if totals.certificate_ready %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">
+                    {% if totals.certificate_ready %}Ready{% else %}Setup{% endif %}
+                </div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Signatories</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.signatories }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Questions</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.feedback_questions }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Issued kits</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.issued_kits }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Feedback done</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.feedback_submitted }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Feedback pending</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.feedback_pending }}</div>
+            </div>
+        </section>
+
+        {% if not selected_event %}
+            <section class="mt-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50 p-8 text-center">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-blue">Start here</div>
+                <h2 class="mt-2 text-2xl font-black text-ink">Choose an event to manage certificates.</h2>
+            </section>
+        {% else %}
+            <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+                <form id="certificate-setup-form" method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    {% csrf_token %}
+                    <input type="hidden" name="certificate_action" value="save_certificate">
+                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="mb-4">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Certificate design</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">{{ selected_event.name }} certificate setup</h2>
+                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Choose one certificate workflow. HTML/CSS uses logos and signatories. Uploaded image mode uses one complete certificate background.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3">
+                        <div class="max-w-xl">
+                            <label class="compact-label" for="design_mode">Design mode</label>
+                            <select id="design_mode" name="design_mode" class="workflow-select">
+                                <option value="html" {% if certificate.design_mode == 'html' or not certificate %}selected{% endif %}>HTML / CSS design</option>
+                                <option value="image" {% if certificate.design_mode == 'image' %}selected{% endif %}>Uploaded image design</option>
+                            </select>
+                        </div>
+
+                        <div data-design-panel="html" class="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">HTML certificate assets</div>
+                                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use these only for the HTML/CSS certificate template.</p>
+                                </div>
+                                <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">Active in HTML mode</span>
+                            </div>
+                            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                                <div>
+                                    <label class="compact-label" for="organizer_logo">Organizer logo</label>
+                                    <input id="organizer_logo" name="organizer_logo" type="file" accept="image/*" class="workflow-input">
+                                    {% if certificate.organizer_logo %}
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <a href="{{ certificate.organizer_logo.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View current organizer logo</a>
+                                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                                <input type="checkbox" name="clear_organizer_logo" class="h-3.5 w-3.5 rounded border-pink-200">
+                                                Remove on save
+                                            </label>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="co_organizer_logo">Co-organizer logo</label>
+                                    <input id="co_organizer_logo" name="co_organizer_logo" type="file" accept="image/*" class="workflow-input">
+                                    {% if certificate.co_organizer_logo %}
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <a href="{{ certificate.co_organizer_logo.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View current co-organizer logo</a>
+                                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                                <input type="checkbox" name="clear_co_organizer_logo" class="h-3.5 w-3.5 rounded border-pink-200">
+                                                Remove on save
+                                            </label>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="compact-label" for="event_logo">Certificate event logo</label>
+                                    <input id="event_logo" name="event_logo" type="file" accept="image/*" class="workflow-input">
+                                    {% if certificate.event_logo %}
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <a href="{{ certificate.event_logo.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View current certificate event logo</a>
+                                            <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                                <input type="checkbox" name="clear_event_logo" class="h-3.5 w-3.5 rounded border-pink-200">
+                                                Remove on save
+                                            </label>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="mt-4 rounded-xl bg-white px-3 py-3 ring-1 ring-blue-100">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Preview checklist</div>
+                                <div class="mt-2 grid gap-2 text-sm font-bold text-slate-700 sm:grid-cols-3">
+                                    <div class="rounded-lg {% if certificate.organizer_logo %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2">
+                                        {% if certificate.organizer_logo %}Ready{% else %}Missing{% endif %}: organizer logo
+                                    </div>
+                                    <div class="rounded-lg {% if certificate.event_logo %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2">
+                                        {% if certificate.event_logo %}Ready{% else %}Missing{% endif %}: event logo
+                                    </div>
+                                    <div class="rounded-lg {% if totals.signatories %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2">
+                                        {% if totals.signatories %}Ready{% else %}Missing{% endif %}: signatory
+                                    </div>
+                                </div>
+                                {% if not totals.html_assets_ready %}
+                                    <p class="mt-2 text-xs font-semibold text-slate-500">Save the logos and add at least one signatory before previewing the HTML certificate.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div data-design-panel="image" class="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Legacy uploaded certificate image</div>
+                                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this only when the whole certificate design is already prepared as one image.</p>
+                                </div>
+                                <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">Image mode only</span>
+                            </div>
+                            <div class="mt-4">
+                                <label class="compact-label" for="upload_image">Complete certificate image</label>
+                                <input id="upload_image" name="upload_image" type="file" accept="image/*" class="workflow-input">
+                                {% if certificate.upload_image %}
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <a href="{{ certificate.upload_image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View current uploaded certificate</a>
+                                        <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                            <input type="checkbox" name="clear_upload_image" class="h-3.5 w-3.5 rounded border-pink-200">
+                                            Remove on save
+                                        </label>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="mt-4 rounded-xl bg-white px-3 py-3 ring-1 ring-amber-100">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Preview checklist</div>
+                                <div class="mt-2 rounded-lg {% if totals.image_asset_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2 text-sm font-bold">
+                                    {% if totals.image_asset_ready %}Ready{% else %}Missing{% endif %}: uploaded certificate image
+                                </div>
+                                {% if not totals.image_asset_ready %}
+                                    <p class="mt-2 text-xs font-semibold text-slate-500">Save a complete certificate image before previewing image mode.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </div>
+                </form>
+
+                <section id="signatories" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <div class="mb-4">
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Signatories</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Certificate signature block</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Add one signatory at a time. Each signatory is saved immediately. Use the order field to control how multiple signatures appear on the certificate.</p>
+                    </div>
+                    <form method="post" enctype="multipart/form-data" class="grid gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="certificate_action" value="add_signatory">
+                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                        <div>
+                            <label class="compact-label" for="signatory_name">Name</label>
+                            <input id="signatory_name" name="signatory_name" class="workflow-input" placeholder="Signatory name" required>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_92px]">
+                            <div>
+                                <label class="compact-label" for="signatory_designation">Designation</label>
+                                <input id="signatory_designation" name="signatory_designation" class="workflow-input" placeholder="President / Chief Guest">
+                            </div>
+                            <div>
+                                <label class="compact-label" for="signatory_order">Order</label>
+                                <input id="signatory_order" name="signatory_order" type="number" min="1" value="{{ totals.signatories|add:1 }}" class="workflow-input">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="compact-label" for="signatory_organization">Organization</label>
+                            <textarea id="signatory_organization" name="signatory_organization" class="workflow-textarea" placeholder="Organization / affiliation"></textarea>
+                        </div>
+                        <div>
+                            <label class="compact-label" for="signature">Signature image</label>
+                            <input id="signature" name="signature" type="file" accept="image/*" class="workflow-input">
+                        </div>
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">+ Add signatory</button>
+                    </form>
+
+                    <div class="mt-4 space-y-2">
+                        {% for signatory in signatories %}
+                            <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2">
+                                <div class="min-w-0">
+                                    <div class="truncate text-sm font-black text-ink">{{ signatory.name }}</div>
+                                    <div class="truncate text-xs font-semibold text-slate-500">{{ signatory.designation|default:"No designation" }}</div>
+                                    {% if signatory.signature %}<a href="{{ signatory.signature.url }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">Signature file</a>{% endif %}
+                                </div>
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    {% if signatory.signature %}
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="certificate_action" value="clear_signatory_signature">
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="signatory_id" value="{{ signatory.id }}">
+                                            <button class="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-black text-bsbcs-amber hover:bg-amber-50">Remove image</button>
+                                        </form>
+                                    {% endif %}
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="certificate_action" value="delete_signatory">
+                                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="signatory_id" value="{{ signatory.id }}">
+                                        <button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-black text-bsbcs-pink hover:bg-pink-50">Remove person</button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="rounded-xl bg-amber-50 px-3 py-3 text-sm font-bold text-bsbcs-amber">No signatories added yet. HTML certificates should have at least one signatory.</div>
+                        {% endfor %}
+                    </div>
+                </section>
+            </section>
+
+            <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Finish setup</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Save design assets, then preview the certificate.</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Signatories save from their own add button. This save button only updates design mode and certificate assets.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button form="certificate-setup-form" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save certificate setup</button>
+                        {% if totals.certificate_ready %}
+                            <a href="{% url 'registration:certificate_design_preview' %}?event_id={{ selected_event.id }}&name=Sample%20Participant" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-bsbcs-blue bg-white px-5 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50">Preview certificate</a>
+                        {% else %}
+                            <span class="rounded-xl border border-line bg-white px-5 py-2.5 text-sm font-black text-slate-400">Preview after setup</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <section id="feedback" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback builder</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Build feedback questions with live preview</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Type the question and choose a type; the preview shows roughly how participants will see it before certificate download.</p>
+                </div>
+                <div class="grid gap-3 xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]">
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <form method="post" class="grid gap-2" id="feedback-question-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="certificate_action" value="add_question">
+                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                        <div>
+                            <label class="compact-label" for="question_text">Question</label>
+                            <textarea id="question_text" name="question_text" class="workflow-textarea" placeholder="Write the feedback question" required></textarea>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_92px]">
+                            <div>
+                                <label class="compact-label" for="question_type">Type</label>
+                                <select id="question_type" name="question_type" class="workflow-select">
+                                    {% for value, label in question_types %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="compact-label" for="question_order">Order</label>
+                                <input id="question_order" name="question_order" type="number" min="0" value="{{ totals.feedback_questions|add:1 }}" class="workflow-input">
+                            </div>
+                        </div>
+                        <label class="inline-flex items-center gap-2 text-sm font-bold text-slate-600">
+                            <input type="checkbox" name="is_required" class="h-4 w-4 rounded border-line" checked>
+                            Required question
+                        </label>
+                        <div class="grid gap-2 sm:grid-cols-2" data-matrix-fields>
+                            <div>
+                                <label class="compact-label" for="rows">Matrix rows</label>
+                                <textarea id="rows" name="rows" class="workflow-textarea" placeholder="For matrix only: Venue, Food, Sessions"></textarea>
+                            </div>
+                            <div>
+                                <label class="compact-label" for="columns">Matrix columns</label>
+                                <textarea id="columns" name="columns" class="workflow-textarea" placeholder="For matrix only: 1, 2, 3, 4, 5"></textarea>
+                            </div>
+                        </div>
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Add question</button>
+                    </form>
+                </section>
+
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <div class="mb-4">
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Live preview</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Participant view</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">This preview updates while you type. Save the question when it looks right.</p>
+                    </div>
+                    <div class="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
+                        <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                            <div class="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Question preview</div>
+                            <h3 id="feedback-preview-question" class="mt-2 text-lg font-black leading-6 text-ink">Write the feedback question</h3>
+                            <div class="mt-1 text-xs font-black text-bsbcs-pink" id="feedback-preview-required">Required</div>
+                            <div id="feedback-preview-body" class="mt-4"></div>
+                        </div>
+                    </div>
+                </section>
+                </div>
+            </section>
+
+            <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Saved feedback form</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Questions for {{ selected_event.name }}</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Responses are separate from question building and can be reviewed when participants start submitting feedback.</p>
+                    </div>
+                    <a href="{% url 'admin:registration_feedbackresponse_changelist' %}?event__id__exact={{ selected_event.id }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Responses</a>
+                </div>
+                <div class="space-y-2">
+                    {% for question in feedback_questions %}
+                            <article class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap gap-2">
+                                            <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-blue-100">{{ question.get_question_type_display }}</span>
+                                            {% if question.is_required %}<span class="rounded-full bg-pink-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-pink ring-1 ring-pink-100">Required</span>{% endif %}
+                                        </div>
+                                        <h3 class="mt-2 text-sm font-black leading-5 text-ink">{{ question.question_text }}</h3>
+                                        {% if question.rows or question.columns %}
+                                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Rows: {{ question.rows|default:"-" }}<br>Columns: {{ question.columns|default:"-" }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="certificate_action" value="remove_question">
+                                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="question_id" value="{{ question.id }}">
+                                        <button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-black text-bsbcs-pink hover:bg-pink-50">Remove</button>
+                                    </form>
+                                </div>
+                            </article>
+                    {% empty %}
+                        <div class="rounded-xl bg-amber-50 px-3 py-3 text-sm font-bold text-bsbcs-amber">No feedback questions added for this event yet.</div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Certificate eligibility</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Issued-kit participants and feedback status</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">The public certificate button appears after kit issue and feedback submission. Admin preview is for design checking only.</p>
+                    </div>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} rows</div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border border-line">
+                    <div class="grid grid-cols-[minmax(240px,1.2fr)_minmax(170px,0.6fr)_minmax(170px,0.6fr)_170px] gap-3 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
+                        <div>Participant</div>
+                        <div>Kit</div>
+                        <div>Feedback</div>
+                        <div>Action</div>
+                    </div>
+                    {% for kit in page_obj %}
+                        <div class="grid grid-cols-[minmax(240px,1.2fr)_minmax(170px,0.6fr)_minmax(170px,0.6fr)_170px] gap-3 border-t border-line px-4 py-3 text-sm">
+                            <div class="min-w-0">
+                                <div class="truncate font-black text-ink">{{ kit.payment_status.participant.name }}</div>
+                                <div class="truncate text-xs font-semibold text-slate-500">{{ kit.payment_status.participant.email }}</div>
+                                <div class="truncate text-xs font-semibold text-slate-500">{{ kit.payment_status.merchant_invoice_number|default:"No invoice" }}</div>
+                            </div>
+                            <div>
+                                <span class="rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Issued</span>
+                                <div class="mt-1 text-xs font-semibold text-slate-500">{{ kit.issued_at|date:"M d, Y h:i A"|default:"No time" }}</div>
+                            </div>
+                            <div>
+                                {% if kit.feedback_submitted %}
+                                    <span class="rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Submitted</span>
+                                {% else %}
+                                    <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">Pending</span>
+                                {% endif %}
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <a href="{% url 'registration:certificate_design_preview' %}?event_id={{ selected_event.id }}&name={{ kit.payment_status.participant.name|urlencode }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Preview</a>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="border-t border-line px-4 py-8 text-center text-sm font-bold text-slate-500">No issued-kit participants match this filter.</div>
+                    {% endfor %}
+                </div>
+
+                {% if page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-600">
+                        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                        <div class="flex gap-2">
+                            {% if page_obj.has_previous %}
+                                <a href="?{{ query_string }}&page={{ page_obj.previous_page_number }}" class="rounded-xl border border-line px-4 py-2 text-bsbcs-blue hover:border-bsbcs-blue">Previous</a>
+                            {% else %}
+                                <span class="rounded-xl border border-line px-4 py-2 text-slate-300">Previous</span>
+                            {% endif %}
+                            {% if page_obj.has_next %}
+                                <a href="?{{ query_string }}&page={{ page_obj.next_page_number }}" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-white hover:bg-bsbcs-navy">Next</a>
+                            {% else %}
+                                <span class="rounded-xl bg-slate-200 px-4 py-2 text-slate-400">Next</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+    </main>
+
+    <footer class="border-t border-line bg-white/80">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-3 py-4 text-xs font-semibold text-slate-500">
+            <span>BSBCS Certificate Center</span>
+            <span>Kit issue and feedback unlock certificate download for participants.</span>
+        </div>
+    </footer>
+    <script>
+        (function () {
+            const designMode = document.getElementById('design_mode');
+            const panels = document.querySelectorAll('[data-design-panel]');
+            if (!designMode || !panels.length) return;
+
+            function syncDesignPanels() {
+                panels.forEach((panel) => {
+                    const isActive = panel.dataset.designPanel === designMode.value;
+                    panel.hidden = !isActive;
+                    panel.querySelectorAll('input, select, textarea, button').forEach((field) => {
+                        field.disabled = !isActive;
+                    });
+                });
+            }
+
+            designMode.addEventListener('change', syncDesignPanels);
+            syncDesignPanels();
+        })();
+
+        (function () {
+            const form = document.getElementById('feedback-question-form');
+            const questionInput = document.getElementById('question_text');
+            const typeInput = document.getElementById('question_type');
+            const requiredInput = form ? form.querySelector('input[name="is_required"]') : null;
+            const rowsInput = document.getElementById('rows');
+            const columnsInput = document.getElementById('columns');
+            const matrixFields = document.querySelector('[data-matrix-fields]');
+            const previewQuestion = document.getElementById('feedback-preview-question');
+            const previewRequired = document.getElementById('feedback-preview-required');
+            const previewBody = document.getElementById('feedback-preview-body');
+            if (!form || !questionInput || !typeInput || !previewQuestion || !previewBody) return;
+
+            function splitList(value, fallback) {
+                const items = (value || '').split(',').map((item) => item.trim()).filter(Boolean);
+                return items.length ? items : fallback;
+            }
+
+            function radioPreview() {
+                const choices = ['Very satisfied', 'Satisfied', 'Neutral', 'Needs improvement'];
+                return '<div class="grid gap-2">' + choices.map((choice) => (
+                    '<label class="flex items-center gap-2 rounded-xl border border-line bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">' +
+                    '<span class="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white"></span>' +
+                    choice +
+                    '</label>'
+                )).join('') + '</div>';
+            }
+
+            function textPreview() {
+                return '<div class="min-h-[92px] rounded-xl border border-line bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-400">Participant writes their answer here...</div>';
+            }
+
+            function matrixPreview() {
+                const rows = splitList(rowsInput ? rowsInput.value : '', ['Venue', 'Food', 'Sessions']);
+                const columns = splitList(columnsInput ? columnsInput.value : '', ['1', '2', '3', '4', '5']);
+                return (
+                    '<div class="overflow-auto rounded-xl border border-line">' +
+                    '<table class="w-full min-w-[520px] border-collapse text-sm">' +
+                    '<thead><tr><th class="bg-slate-50 px-3 py-2 text-left font-black text-slate-500">Item</th>' +
+                    columns.map((column) => '<th class="bg-slate-50 px-3 py-2 text-center font-black text-slate-500">' + column + '</th>').join('') +
+                    '</tr></thead><tbody>' +
+                    rows.map((row) => (
+                        '<tr class="border-t border-line"><td class="px-3 py-2 font-bold text-ink">' + row + '</td>' +
+                        columns.map(() => '<td class="px-3 py-2 text-center"><span class="mx-auto block h-3.5 w-3.5 rounded-full border border-slate-300 bg-white"></span></td>').join('') +
+                        '</tr>'
+                    )).join('') +
+                    '</tbody></table></div>'
+                );
+            }
+
+            function syncFeedbackPreview() {
+                const type = typeInput.value;
+                const question = questionInput.value.trim() || 'Write the feedback question';
+                previewQuestion.textContent = question;
+                if (previewRequired && requiredInput) {
+                    previewRequired.hidden = !requiredInput.checked;
+                }
+                if (matrixFields) {
+                    matrixFields.hidden = type !== 'matrix';
+                }
+                if (type === 'matrix') {
+                    previewBody.innerHTML = matrixPreview();
+                } else if (type === 'radio') {
+                    previewBody.innerHTML = radioPreview();
+                } else {
+                    previewBody.innerHTML = textPreview();
+                }
+            }
+
+            [questionInput, typeInput, requiredInput, rowsInput, columnsInput].forEach((field) => {
+                if (field) {
+                    field.addEventListener('input', syncFeedbackPreview);
+                    field.addEventListener('change', syncFeedbackPreview);
+                }
+            });
+            syncFeedbackPreview();
+        })();
+    </script>
+</div>
+</body>
+</html>

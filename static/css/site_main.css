@@ -3247,6 +3247,10 @@ button{
   min-height: 500px;
 }
 
+.min-h-\[92px\]{
+  min-height: 92px;
+}
+
 .min-h-full{
   min-height: 100%;
 }
@@ -3394,6 +3398,10 @@ button{
 
 .min-w-\[360px\]{
   min-width: 360px;
+}
+
+.min-w-\[520px\]{
+  min-width: 520px;
 }
 
 .min-w-\[680px\]{
@@ -3633,6 +3641,10 @@ button{
 
 .grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 1fr\)_160px_minmax\(0\2c 1fr\)_94px\]{
   grid-template-columns: minmax(0,1fr) minmax(0,1fr) 160px minmax(0,1fr) 94px;
+}
+
+.grid-cols-\[minmax\(240px\2c 1\.2fr\)_minmax\(170px\2c 0\.6fr\)_minmax\(170px\2c 0\.6fr\)_170px\]{
+  grid-template-columns: minmax(240px,1.2fr) minmax(170px,0.6fr) minmax(170px,0.6fr) 170px;
 }
 
 .flex-row{
@@ -3979,6 +3991,11 @@ button{
   border-color: rgb(254 243 199 / var(--tw-border-opacity, 1));
 }
 
+.border-amber-200{
+  --tw-border-opacity: 1;
+  border-color: rgb(253 230 138 / var(--tw-border-opacity, 1));
+}
+
 .border-amber-200\/60{
   border-color: rgb(253 230 138 / 0.6);
 }
@@ -4228,6 +4245,10 @@ button{
 .bg-amber-50{
   --tw-bg-opacity: 1;
   background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
+}
+
+.bg-amber-50\/50{
+  background-color: rgb(255 251 235 / 0.5);
 }
 
 .bg-background{
@@ -4644,6 +4665,12 @@ button{
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
+.from-blue-50{
+  --tw-gradient-from: #eff6ff var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(239 246 255 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
 .from-bsbcs-blue{
   --tw-gradient-from: #1769C2 var(--tw-gradient-from-position);
   --tw-gradient-to: rgb(23 105 194 / 0) var(--tw-gradient-to-position);
@@ -4849,6 +4876,10 @@ button{
 
 .to-transparent{
   --tw-gradient-to: transparent var(--tw-gradient-to-position);
+}
+
+.to-white{
+  --tw-gradient-to: #fff var(--tw-gradient-to-position);
 }
 
 .bg-clip-text{
@@ -6085,6 +6116,11 @@ button{
   border-color: rgb(148 163 184 / var(--tw-border-opacity, 1));
 }
 
+.hover\:bg-amber-50:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 251 235 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-amber-700:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(180 83 9 / var(--tw-bg-opacity, 1));
@@ -6642,6 +6678,10 @@ button{
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_170px\]{
     grid-template-columns: minmax(0,1fr) 170px;
+  }
+
+  .sm\:grid-cols-\[minmax\(0\2c 1fr\)_92px\]{
+    grid-template-columns: minmax(0,1fr) 92px;
   }
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_auto\]{
@@ -7205,6 +7245,10 @@ button{
     grid-template-columns: minmax(0,1.15fr) minmax(360px,.85fr);
   }
 
+  .xl\:grid-cols-\[minmax\(0\2c 1\.15fr\)_minmax\(360px\2c 0\.85fr\)\]{
+    grid-template-columns: minmax(0,1.15fr) minmax(360px,0.85fr);
+  }
+
   .xl\:grid-cols-\[minmax\(0\2c 1fr\)_320px\]{
     grid-template-columns: minmax(0,1fr) 320px;
   }
@@ -7223,5 +7267,9 @@ button{
 
   .xl\:grid-cols-\[minmax\(0\2c 420px\)_minmax\(0\2c 1fr\)\]{
     grid-template-columns: minmax(0,420px) minmax(0,1fr);
+  }
+
+  .xl\:grid-cols-\[minmax\(360px\2c 0\.8fr\)_minmax\(0\2c 1\.2fr\)\]{
+    grid-template-columns: minmax(360px,0.8fr) minmax(0,1.2fr);
   }
 }

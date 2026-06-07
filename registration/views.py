@@ -4763,6 +4763,207 @@ def _send_bulk_email_recipient(request, bulk_email, recipient):
 
 
 @staff_member_required
+def dashboard_certificate_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    default_event = events.filter(event_status='active').first() or events.first()
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    if not event_filter and default_event:
+        event_filter = str(default_event.id)
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    selected_event = events.filter(pk=event_filter).first() if event_filter else None
+
+    query_params = {}
+    if selected_event:
+        query_params['event'] = selected_event.id
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = f"{reverse('dashboard_certificate_center')}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        action = request.POST.get('certificate_action')
+        try:
+            if not selected_event:
+                messages.error(request, 'Choose an event before updating certificates or feedback.')
+                return redirect(reverse('dashboard_certificate_center'))
+
+            certificate, certificate_created = Certificate.objects.get_or_create(event=selected_event)
+
+            if action == 'save_certificate':
+                design_mode = request.POST.get('design_mode') or Certificate.DESIGN_MODE_HTML
+                if design_mode not in dict(Certificate.DESIGN_MODE_CHOICES):
+                    design_mode = Certificate.DESIGN_MODE_HTML
+                certificate.design_mode = design_mode
+                file_fields = ['upload_image', 'organizer_logo', 'co_organizer_logo', 'event_logo']
+                for field_name in file_fields:
+                    if request.POST.get(f'clear_{field_name}'):
+                        setattr(certificate, field_name, None)
+                        continue
+                    uploaded_file = request.FILES.get(field_name)
+                    if uploaded_file:
+                        setattr(certificate, field_name, uploaded_file)
+                certificate.save()
+                dashboard_log_action(
+                    request,
+                    certificate,
+                    ADDITION if certificate_created else CHANGE,
+                    'Updated certificate design assets from Certificate Center dashboard.',
+                )
+                messages.success(request, f'Certificate setup updated for {selected_event.name}.')
+
+            elif action == 'add_signatory':
+                name = (request.POST.get('signatory_name') or '').strip()
+                if not name:
+                    messages.error(request, 'Signatory name is required.')
+                else:
+                    try:
+                        signatory_order = int(request.POST.get('signatory_order') or 1)
+                    except (TypeError, ValueError):
+                        signatory_order = certificate.signatories.count() + 1
+                    signatory = CertificateSignatory.objects.create(
+                        certificate=certificate,
+                        name=name,
+                        designation=(request.POST.get('signatory_designation') or '').strip() or None,
+                        organization=(request.POST.get('signatory_organization') or '').strip() or None,
+                        order=max(signatory_order, 1),
+                        signature=request.FILES.get('signature') or None,
+                    )
+                    dashboard_log_action(request, signatory, ADDITION, 'Added certificate signatory from Certificate Center dashboard.')
+                    messages.success(request, f'Added signatory {signatory.name}.')
+
+            elif action == 'delete_signatory':
+                signatory = get_object_or_404(CertificateSignatory, pk=request.POST.get('signatory_id'), certificate=certificate)
+                signatory_name = signatory.name
+                dashboard_log_action(request, signatory, DELETION, 'Removed certificate signatory from Certificate Center dashboard.')
+                signatory.delete()
+                messages.success(request, f'Removed signatory {signatory_name}.')
+
+            elif action == 'clear_signatory_signature':
+                signatory = get_object_or_404(CertificateSignatory, pk=request.POST.get('signatory_id'), certificate=certificate)
+                signatory.signature = None
+                signatory.save(update_fields=['signature'])
+                dashboard_log_action(request, signatory, CHANGE, 'Removed certificate signatory signature image from Certificate Center dashboard.')
+                messages.success(request, f'Removed signature image for {signatory.name}.')
+
+            elif action == 'add_question':
+                question_text = (request.POST.get('question_text') or '').strip()
+                question_type = request.POST.get('question_type') or FeedbackQuestion.TEXT
+                if question_type not in dict(FeedbackQuestion.QUESTION_TYPES):
+                    question_type = FeedbackQuestion.TEXT
+                if not question_text:
+                    messages.error(request, 'Feedback question text is required.')
+                else:
+                    question = FeedbackQuestion.objects.create(
+                        question_text=question_text,
+                        question_type=question_type,
+                        is_required=bool(request.POST.get('is_required')),
+                        rows=(request.POST.get('rows') or '').strip() or None,
+                        columns=(request.POST.get('columns') or '').strip() or None,
+                        order=int(request.POST.get('question_order') or 0),
+                    )
+                    question.event.add(selected_event)
+                    dashboard_log_action(request, selected_event, CHANGE, f'Added feedback question from Certificate Center dashboard: {question_text[:80]}')
+                    messages.success(request, 'Feedback question added.')
+
+            elif action == 'remove_question':
+                question = get_object_or_404(FeedbackQuestion, pk=request.POST.get('question_id'), event=selected_event)
+                question_text = question.question_text or 'Feedback question'
+                dashboard_log_action(request, selected_event, CHANGE, f'Removed feedback question from Certificate Center dashboard: {question_text[:80]}')
+                if question.event.count() <= 1:
+                    question.delete()
+                else:
+                    question.event.remove(selected_event)
+                messages.success(request, 'Feedback question removed from this event.')
+
+            else:
+                messages.error(request, 'Choose a valid certificate action.')
+        except Exception as exc:
+            logger.exception("Certificate center action failed: %s", exc)
+            messages.error(request, str(exc))
+        if action in ('add_signatory', 'delete_signatory', 'clear_signatory_signature'):
+            redirect_url = f"{redirect_url}#signatories"
+        elif action in ('add_question', 'remove_question'):
+            redirect_url = f"{redirect_url}#feedback"
+        return redirect(redirect_url)
+
+    certificate = None
+    signatories = CertificateSignatory.objects.none()
+    feedback_questions = FeedbackQuestion.objects.none()
+    kit_rows_qs = RegistrationKit.objects.none()
+    feedback_participant_ids = set()
+
+    if selected_event:
+        certificate = Certificate.objects.filter(event=selected_event).prefetch_related('signatories').first()
+        signatories = certificate.signatories.all() if certificate else CertificateSignatory.objects.none()
+        feedback_questions = selected_event.feedback_questions.all().order_by('order', 'id')
+        kit_rows_qs = RegistrationKit.objects.select_related(
+            'payment_status__participant',
+            'payment_status__event',
+        ).filter(event=selected_event, status='issued').order_by('-issued_at', 'payment_status__participant__name')
+        if search_query:
+            kit_rows_qs = kit_rows_qs.filter(
+                Q(payment_status__participant__name__icontains=search_query)
+                | Q(payment_status__participant__email__icontains=search_query)
+                | Q(payment_status__participant__phone__icontains=search_query)
+                | Q(payment_status__participant__organization__icontains=search_query)
+                | Q(payment_status__merchant_invoice_number__icontains=search_query)
+            )
+        feedback_participant_ids = set(
+            FeedbackResponse.objects.filter(event=selected_event).values_list('participant_id', flat=True).distinct()
+        )
+
+    page_obj = Paginator(kit_rows_qs, 15).get_page(request.GET.get('page'))
+    for kit in page_obj.object_list:
+        participant = kit.payment_status.participant
+        kit.feedback_submitted = participant.id in feedback_participant_ids
+
+    signatory_count = signatories.count()
+    html_assets_ready = False
+    image_asset_ready = False
+    certificate_ready = False
+    if certificate:
+        html_assets_ready = bool(certificate.organizer_logo and certificate.event_logo and signatory_count > 0)
+        image_asset_ready = bool(certificate.upload_image)
+        certificate_ready = (
+            certificate.design_mode == Certificate.DESIGN_MODE_HTML and html_assets_ready
+        ) or (
+            certificate.design_mode == Certificate.DESIGN_MODE_IMAGE and image_asset_ready
+        )
+
+    issued_total = RegistrationKit.objects.filter(event=selected_event, status='issued').count() if selected_event else 0
+    feedback_submitted_total = len(feedback_participant_ids) if selected_event else 0
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'certificate': certificate,
+        'signatories': signatories,
+        'feedback_questions': feedback_questions,
+        'question_types': FeedbackQuestion.QUESTION_TYPES,
+        'page_obj': page_obj,
+        'query_string': urlencode(query_params),
+        'current_filters': {
+            'event': str(selected_event.id) if selected_event else '',
+            'q': search_query,
+        },
+        'totals': {
+            'certificate_ready': certificate_ready,
+            'html_assets_ready': html_assets_ready,
+            'image_asset_ready': image_asset_ready,
+            'signatories': signatory_count,
+            'feedback_questions': feedback_questions.count(),
+            'issued_kits': issued_total,
+            'feedback_submitted': feedback_submitted_total,
+            'feedback_pending': max(issued_total - feedback_submitted_total, 0),
+        },
+    }
+    return render(request, 'dashboard_certificate_center.html', context)
+
+
+@staff_member_required
 def dashboard_bulk_email_center(request):
     from website.models import SiteSettings
 
