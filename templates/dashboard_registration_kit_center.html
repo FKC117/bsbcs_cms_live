@@ -32,6 +32,58 @@
             text-transform: uppercase;
             color: #64748b;
         }
+        .desk-alert {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 0.9rem;
+            align-items: start;
+            border: 1px solid #D9E4EF;
+            border-radius: 1.25rem;
+            background: #fff;
+            padding: 1rem;
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+        }
+        .desk-alert-mark {
+            display: grid;
+            height: 2.5rem;
+            width: 2.5rem;
+            place-items: center;
+            border-radius: 999px;
+            font-size: 0.86rem;
+            font-weight: 900;
+        }
+        .desk-alert-success {
+            border-color: #BBF7D0;
+            background: linear-gradient(90deg, rgba(240, 253, 244, 0.98), #fff);
+        }
+        .desk-alert-success .desk-alert-mark {
+            background: #DCFCE7;
+            color: #087443;
+        }
+        .desk-alert-error {
+            border-color: #FBCFE8;
+            background: linear-gradient(90deg, rgba(253, 242, 248, 0.98), #fff);
+        }
+        .desk-alert-error .desk-alert-mark {
+            background: #FCE7F3;
+            color: #DB2777;
+        }
+        .desk-alert-warning {
+            border-color: #FDE68A;
+            background: linear-gradient(90deg, rgba(255, 251, 235, 0.98), #fff);
+        }
+        .desk-alert-warning .desk-alert-mark {
+            background: #FEF3C7;
+            color: #B77905;
+        }
+        .desk-alert-info {
+            border-color: #BFDBFE;
+            background: linear-gradient(90deg, rgba(239, 246, 255, 0.98), #fff);
+        }
+        .desk-alert-info .desk-alert-mark {
+            background: #DBEAFE;
+            color: #1769C2;
+        }
         #kit-qr-reader video {
             border-radius: 0.75rem;
             object-fit: cover;
@@ -132,10 +184,29 @@
 
     <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
         {% if messages %}
-            <section class="mb-3 space-y-2">
+            <section class="mb-4 space-y-3" aria-label="Registration desk messages">
                 {% for message in messages %}
-                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
-                        {{ message }}
+                    <div class="desk-alert {% if message.tags == 'success' %}desk-alert-success{% elif message.tags == 'error' %}desk-alert-error{% elif message.tags == 'warning' %}desk-alert-warning{% else %}desk-alert-info{% endif %}">
+                        <div class="desk-alert-mark">
+                            {% if message.tags == 'success' %}OK{% elif message.tags == 'error' %}!{% elif message.tags == 'warning' %}!!{% else %}i{% endif %}
+                        </div>
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] {% if message.tags == 'success' %}text-bsbcs-green{% elif message.tags == 'error' %}text-bsbcs-pink{% elif message.tags == 'warning' %}text-bsbcs-amber{% else %}text-bsbcs-blue{% endif %}">
+                                {% if message.tags == 'success' %}Kit issued{% elif message.tags == 'error' %}Action needed{% elif message.tags == 'warning' %}Please review{% else %}Desk notice{% endif %}
+                            </div>
+                            <div class="mt-1 text-base font-black leading-6 text-ink sm:text-lg">{{ message }}</div>
+                            <div class="mt-1 text-xs font-semibold text-slate-500">
+                                {% if message.tags == 'success' %}
+                                    The record has been updated. Continue with the next participant.
+                                {% elif message.tags == 'error' %}
+                                    The kit was not issued. Check the selected event, participant, or payment status.
+                                {% elif message.tags == 'warning' %}
+                                    Review this before issuing another kit.
+                                {% else %}
+                                    No duplicate kit was issued. Use the queue below if you need to verify the row.
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 {% endfor %}
             </section>
