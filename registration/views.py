@@ -176,9 +176,46 @@ def get_active_member_for_user(user):
     return None
 
 
-def get_or_create_member_department(event):
-    department, _ = Department.objects.get_or_create(event=event, name='BSBCS Member')
+SYNTHETIC_PARTICIPANT_DEPARTMENTS = {'BSBCS Member', 'Corporate Registration'}
+
+
+def get_or_create_participant_department(event, department_name=None):
+    department_name = (department_name or '').strip()[:50] or 'Not specified'
+    department, _ = Department.objects.get_or_create(event=event, name=department_name)
     return department
+
+
+def get_previous_participant_department_name(email, current_event=None):
+    if not email:
+        return ''
+    previous_participants = Participant.objects.filter(
+        email__iexact=email,
+        department__isnull=False,
+    ).select_related('department').order_by('-created_at')
+    if current_event:
+        previous_participants = previous_participants.exclude(event=current_event)
+    for participant in previous_participants:
+        department_name = participant.department.name if participant.department_id else ''
+        if department_name and department_name not in SYNTHETIC_PARTICIPANT_DEPARTMENTS:
+            return department_name
+    return ''
+
+
+def resolve_public_participant_department(participant):
+    department_name = participant.department.name if participant.department_id else ''
+    if department_name and department_name not in SYNTHETIC_PARTICIPANT_DEPARTMENTS:
+        return department_name
+
+    corporate_attendee = getattr(participant, 'corporate_attendee', None)
+    corporate_department = (getattr(corporate_attendee, 'department', '') or '').strip()
+    if corporate_department:
+        return corporate_department
+
+    previous_department = get_previous_participant_department_name(participant.email, participant.event)
+    if previous_department:
+        return previous_department
+
+    return department_name or 'Not specified'
 
 
 def get_existing_registration_context(participant, event):
@@ -865,11 +902,17 @@ from .models import Participant, Event
 
 def participant_list(request, event_id):
     event = get_object_or_404(Event, id=event_id)
-    approved_paid_participants = Participant.objects.filter(event=event, approved=True, payment_statuses__status='completed')
-    
+    approved_paid_participants = (
+        Participant.objects
+        .filter(event=event, approved=True, payment_statuses__status='completed')
+        .select_related('department', 'corporate_attendee')
+    )
+    for participant in approved_paid_participants:
+        participant.display_department = resolve_public_participant_department(participant)
+
     if request.headers.get('HX-Request'):
         return render(request, 'partials/participant_list.html', {'participants': approved_paid_participants})
-    
+
     return render(request, 'participant_list.html', {'participants': approved_paid_participants, 'event': event})
 def participant_list_partial(request, event_id):
     event = get_object_or_404(Event, id=event_id)
@@ -877,7 +920,9 @@ def participant_list_partial(request, event_id):
     # Filter participants with approved=True and payment status='completed'
     approved_paid_participants = Participant.objects.filter(
         event=event, approved=True, payment_statuses__status='completed'
-    )
+    ).select_related('department', 'corporate_attendee')
+    for participant in approved_paid_participants:
+        participant.display_department = resolve_public_participant_department(participant)
 
     return render(request, 'partials/participant_list.html', {'participants': approved_paid_participants})
 
@@ -1101,7 +1146,11 @@ def member_event_registration(request, event_id):
     if existing_participant:
         return render(request, 'registration_error.html', get_existing_registration_context(existing_participant, event))
 
-    department = get_or_create_member_department(event)
+    department_name = get_previous_participant_department_name(user_profile.email, event)
+    if not department_name:
+        first_specialty = member.specialties.first()
+        department_name = first_specialty.name if first_specialty else ''
+    department = get_or_create_participant_department(event, department_name)
     payable_amount = event.member_registration_fee or 0
     merchant_invoice_number = f"MEMEVT-{event.pk}-{request.user.id}-{int(time.time())}"
 

@@ -725,7 +725,8 @@ def approve_corporate_attendees(request, queryset):
 
     for attendee in queryset.select_related('registration__event', 'matched_user', 'participant'):
         event = attendee.registration.event
-        department, _ = Department.objects.get_or_create(event=event, name='Corporate Registration')
+        department_name = (attendee.department or 'Not specified').strip()[:50] or 'Not specified'
+        department, _ = Department.objects.get_or_create(event=event, name=department_name)
         registration_type = 'member' if attendee.matched_member else 'regular'
         password = None
         include_password = False
