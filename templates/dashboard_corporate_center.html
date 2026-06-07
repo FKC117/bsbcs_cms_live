@@ -1,0 +1,367 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Corporate Management</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Corporate workflow</div>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
+                <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Participants management</a>
+                <a href="{% url 'dashboard_payment_center' %}?source=corporate{% if current_filters.event %}&amp;event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Corporate payments</a>
+                <a href="{% url 'admin:registration_corporateaccountrequest_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_640px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Corporate center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Approve corporate access and attendee lists from one workspace.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Handle corporate accounts, attendee approval, and invoice creation without jumping through four admin models.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-3">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="attendee_status">Attendees</label>
+                        <select id="attendee_status" name="attendee_status" class="workflow-select">
+                            {% for value, label in attendee_status_choices %}
+                                <option value="{{ value }}" {% if current_filters.attendee_status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="request_status">Requests</label>
+                        <select id="request_status" name="request_status" class="workflow-select">
+                            {% for value, label in request_status_choices %}
+                                <option value="{{ value }}" {% if current_filters.request_status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto_auto]">
+                    <select name="account_status" class="workflow-select">
+                        {% for value, label in account_status_choices %}
+                            <option value="{{ value }}" {% if current_filters.account_status == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search company, contact, email, phone, attendee, or event">
+                    <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                    <a href="{% url 'dashboard_corporate_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending access</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending_requests }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Approved accounts</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.approved_accounts }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending attendees</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.pending_attendees }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Approved attendees</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.approved_attendees }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Open invoices</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.open_invoices }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Completed invoices</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.completed_invoices }}</div>
+            </div>
+        </section>
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <form method="post" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                <input type="hidden" name="request_status" value="{{ current_filters.request_status }}">
+                <input type="hidden" name="attendee_status" value="{{ current_filters.attendee_status }}">
+                <input type="hidden" name="account_status" value="{{ current_filters.account_status }}">
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Access requests</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Corporate account approval</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Approval creates or links the corporate login and sends the access email.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button name="corporate_action" value="approve_requests" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Approve selected</button>
+                        <button name="corporate_action" value="reject_requests" class="rounded-xl border border-pink-200 bg-pink-50 px-4 py-2 text-sm font-black text-bsbcs-pink hover:bg-pink-100">Reject selected</button>
+                    </div>
+                </div>
+                <textarea name="admin_note" class="workflow-input mb-3 min-h-16" placeholder="Optional rejection note for selected requests"></textarea>
+                <div class="overflow-hidden rounded-xl border border-line">
+                    <table class="w-full min-w-[620px] text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="w-10 px-3 py-3"><input type="checkbox" data-select-all="request_ids"></th>
+                                <th class="px-3 py-3">Organization</th>
+                                <th class="px-3 py-3">Contact</th>
+                                <th class="px-3 py-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line">
+                            {% for access_request in request_page_obj %}
+                                <tr>
+                                    <td class="px-3 py-3"><input type="checkbox" name="request_ids" value="{{ access_request.id }}"></td>
+                                    <td class="px-3 py-3">
+                                        <div class="font-black text-ink">{{ access_request.company_name }}</div>
+                                        <div class="text-xs font-semibold text-slate-500">{{ access_request.note|default:"No note" }}</div>
+                                    </td>
+                                    <td class="px-3 py-3">
+                                        <div class="font-semibold">{{ access_request.contact_name }}</div>
+                                        <div class="text-xs text-slate-500">{{ access_request.email }} · {{ access_request.phone }}</div>
+                                    </td>
+                                    <td class="px-3 py-3"><span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-bsbcs-amber ring-1 ring-amber-100">{{ access_request.get_status_display }}</span></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="px-3 py-8 text-center text-sm font-semibold text-slate-500">No access requests match this filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+
+            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Accounts</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Authorized corporate users</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Suspend or reactivate access without touching the attendee history.</p>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ account_page_obj.paginator.count }} accounts</span>
+                </div>
+                <div class="grid gap-2 md:grid-cols-2">
+                    {% for account in account_page_obj %}
+                        <article class="rounded-xl border border-line bg-slate-50/70 p-3">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <h3 class="truncate text-sm font-black text-ink">{{ account.company_name }}</h3>
+                                    <p class="truncate text-xs font-semibold text-slate-500">{{ account.contact_name }} · {{ account.email }}</p>
+                                </div>
+                                <span class="rounded-full {% if account.status == 'approved' %}bg-green-50 text-bsbcs-green ring-green-100{% else %}bg-pink-50 text-bsbcs-pink ring-pink-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ account.get_status_display }}</span>
+                            </div>
+                            <form method="post" class="mt-3">
+                                {% csrf_token %}
+                                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                <input type="hidden" name="request_status" value="{{ current_filters.request_status }}">
+                                <input type="hidden" name="attendee_status" value="{{ current_filters.attendee_status }}">
+                                <input type="hidden" name="account_status" value="{{ current_filters.account_status }}">
+                                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <input type="hidden" name="account_id" value="{{ account.id }}">
+                                {% if account.status == 'approved' %}
+                                    <button name="corporate_action" value="suspend_account" class="w-full rounded-lg border border-pink-200 bg-white px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-50">Suspend access</button>
+                                {% else %}
+                                    <button name="corporate_action" value="activate_account" class="w-full rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-50">Reactivate access</button>
+                                {% endif %}
+                            </form>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue md:col-span-2">No corporate accounts match this filter.</div>
+                    {% endfor %}
+                </div>
+            </section>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                <input type="hidden" name="request_status" value="{{ current_filters.request_status }}">
+                <input type="hidden" name="attendee_status" value="{{ current_filters.attendee_status }}">
+                <input type="hidden" name="account_status" value="{{ current_filters.account_status }}">
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Corporate registrations</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Create invoices from approved attendee batches</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Invoice creation includes approved attendees that are not already attached to an open or completed corporate invoice.</p>
+                    </div>
+                    <button name="corporate_action" value="create_invoice" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Create invoice for selected</button>
+                </div>
+                <div class="overflow-hidden rounded-xl border border-line">
+                    <table class="w-full min-w-[820px] text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="w-10 px-3 py-3"><input type="checkbox" data-select-all="registration_ids"></th>
+                                <th class="px-3 py-3">Organization</th>
+                                <th class="px-3 py-3">Event</th>
+                                <th class="px-3 py-3">Attendees</th>
+                                <th class="px-3 py-3">Invoices</th>
+                                <th class="px-3 py-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line">
+                            {% for corporate_registration in registration_page_obj %}
+                                <tr>
+                                    <td class="px-3 py-3"><input type="checkbox" name="registration_ids" value="{{ corporate_registration.id }}"></td>
+                                    <td class="px-3 py-3 font-black text-ink">{{ corporate_registration.corporate_account.company_name }}</td>
+                                    <td class="px-3 py-3">{{ corporate_registration.event.name }} {{ corporate_registration.event.year }}</td>
+                                    <td class="px-3 py-3 text-xs font-bold text-slate-600">
+                                        {{ corporate_registration.approved_count }} approved · {{ corporate_registration.pending_count }} pending · {{ corporate_registration.denied_count }} denied
+                                    </td>
+                                    <td class="px-3 py-3 text-xs font-bold text-slate-600">{{ corporate_registration.invoice_count }} total · {{ corporate_registration.open_invoice_count }} open</td>
+                                    <td class="px-3 py-3"><span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ corporate_registration.get_status_display }}</span></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6" class="px-3 py-8 text-center text-sm font-semibold text-slate-500">No corporate registrations match this filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                <input type="hidden" name="request_status" value="{{ current_filters.request_status }}">
+                <input type="hidden" name="attendee_status" value="{{ current_filters.attendee_status }}">
+                <input type="hidden" name="account_status" value="{{ current_filters.account_status }}">
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Attendee review</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Approve or deny corporate attendee rows</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Approval creates or links user accounts, creates participants, applies member pricing, and emails each attendee.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button name="corporate_action" value="approve_attendees" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Approve selected</button>
+                        <button name="corporate_action" value="deny_attendees" class="rounded-xl border border-pink-200 bg-pink-50 px-4 py-2 text-sm font-black text-bsbcs-pink hover:bg-pink-100">Deny selected</button>
+                    </div>
+                </div>
+                <div class="overflow-hidden rounded-xl border border-line">
+                    <table class="w-full min-w-[960px] text-left text-sm">
+                        <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="w-10 px-3 py-3"><input type="checkbox" data-select-all="attendee_ids"></th>
+                                <th class="px-3 py-3">Attendee</th>
+                                <th class="px-3 py-3">Organization</th>
+                                <th class="px-3 py-3">Event</th>
+                                <th class="px-3 py-3">Member / fee</th>
+                                <th class="px-3 py-3">Review</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line">
+                            {% for attendee in attendee_page_obj %}
+                                <tr>
+                                    <td class="px-3 py-3"><input type="checkbox" name="attendee_ids" value="{{ attendee.id }}"></td>
+                                    <td class="px-3 py-3">
+                                        <div class="font-black text-ink">{{ attendee.name }}</div>
+                                        <div class="text-xs font-semibold text-slate-500">{{ attendee.email }} · {{ attendee.phone }}</div>
+                                    </td>
+                                    <td class="px-3 py-3">
+                                        <div class="font-semibold">{{ attendee.registration.corporate_account.company_name }}</div>
+                                        <div class="text-xs text-slate-500">{{ attendee.organization|default:"Organization not provided" }}</div>
+                                    </td>
+                                    <td class="px-3 py-3">{{ attendee.registration.event.name }} {{ attendee.registration.event.year }}</td>
+                                    <td class="px-3 py-3 text-xs font-bold text-slate-600">
+                                        <div>{{ attendee.member_match_label }}</div>
+                                        <div>{{ attendee.applied_fee_label }}</div>
+                                    </td>
+                                    <td class="px-3 py-3"><span class="rounded-full {% if attendee.review_status == 'approved' %}bg-green-50 text-bsbcs-green ring-green-100{% elif attendee.review_status == 'denied' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-xs font-black ring-1">{{ attendee.get_review_status_display }}</span></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6" class="px-3 py-8 text-center text-sm font-semibold text-slate-500">No corporate attendee rows match this filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <footer class="border-t border-line bg-white/80 py-4">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap justify-between gap-3 text-xs font-medium text-slate-500">
+            <span>BSBCS Corporate Center</span>
+            <span>Corporate payments are handled in the unified payment workflow.</span>
+        </div>
+    </footer>
+</div>
+
+<script>
+document.querySelectorAll('[data-select-all]').forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+        document.querySelectorAll(`input[name="${checkbox.dataset.selectAll}"]`).forEach((rowCheckbox) => {
+            rowCheckbox.checked = checkbox.checked;
+        });
+    });
+});
+</script>
+</body>
+</html>

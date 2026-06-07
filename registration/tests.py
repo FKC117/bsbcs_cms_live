@@ -10,7 +10,8 @@ from django.core import mail
 from registration.models import (
     Event, Department, Participant, PaymentStatus, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
-    ProgramItemFaculty, AbstractSubmission, RegistrationKit
+    ProgramItemFaculty, AbstractSubmission, RegistrationKit,
+    CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
 )
 from registration.forms import ProgramSessionBuilderForm
 from registration.pdf_utils import generate_invoice
@@ -771,6 +772,144 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(payment.transaction_id, 'PAY-123')
         self.assertEqual(payment.trxID, 'TRX-123')
         self.assertFalse(payment.email_sent)
+
+    def test_corporate_center_renders_account_registration_and_attendee_workflow(self):
+        access_request = CorporateAccountRequest.objects.create(
+            company_name='Corporate Care Ltd',
+            contact_name='Corporate Manager',
+            contact_designation='Coordinator',
+            email='corporate-care@example.com',
+            phone='01700000120',
+            note='Need group registration support.',
+        )
+        corporate_user = User.objects.create_user(
+            username='corporate-care@example.com',
+            email='corporate-care@example.com',
+            password='password',
+        )
+        corporate_account = CorporateAccount.objects.create(
+            user=corporate_user,
+            source_request=access_request,
+            company_name='Corporate Care Ltd',
+            contact_name='Corporate Manager',
+            contact_designation='Coordinator',
+            email='corporate-care@example.com',
+            phone='01700000120',
+        )
+        corporate_registration = CorporateEventRegistration.objects.create(
+            corporate_account=corporate_account,
+            event=self.event,
+            total_attendees=1,
+        )
+        CorporateEventAttendee.objects.create(
+            registration=corporate_registration,
+            name='Corporate Attendee',
+            email='corporate-attendee@example.com',
+            phone='01700000121',
+            organization='Corporate Care Ltd',
+        )
+
+        response = self.client.get(reverse('dashboard_corporate_center'))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_corporate_center'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Corporate Management')
+        self.assertContains(response, 'Corporate account approval')
+        self.assertContains(response, 'Corporate Care Ltd')
+        self.assertContains(response, 'Corporate Attendee')
+        self.assertContains(response, 'Create invoice for selected')
+
+    def test_payment_center_renders_and_updates_corporate_payments(self):
+        corporate_user = User.objects.create_user(
+            username='corporate-pay@example.com',
+            email='corporate-pay@example.com',
+            password='password',
+        )
+        corporate_account = CorporateAccount.objects.create(
+            user=corporate_user,
+            company_name='Corporate Payment Ltd',
+            contact_name='Payment Manager',
+            email='corporate-pay@example.com',
+            phone='01700000122',
+        )
+        corporate_registration = CorporateEventRegistration.objects.create(
+            corporate_account=corporate_account,
+            event=self.event,
+            total_attendees=1,
+            status='approved',
+        )
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Corporate Paid Attendee',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Corporate Payment Ltd',
+            email='corporate-paid-attendee@example.com',
+            phone='01700000123',
+            country='Bangladesh',
+            approved=True,
+        )
+        attendee = CorporateEventAttendee.objects.create(
+            registration=corporate_registration,
+            participant=participant,
+            matched_user=self.user,
+            name=participant.name,
+            email=participant.email,
+            phone=participant.phone,
+            organization=participant.organization,
+            review_status='approved',
+        )
+        participant_payment = PaymentStatus.objects.create(
+            participant=participant,
+            event=self.event,
+            merchant_invoice_number='CORP-PARTICIPANT-PAY',
+            amount='500.00',
+            status='unpaid',
+        )
+        corporate_payment = CorporatePayment.objects.create(
+            corporate_registration=corporate_registration,
+            corporate_account=corporate_account,
+            event=self.event,
+            amount='500.00',
+            status='unpaid',
+            merchant_invoice_number='CORP-DASH-PAY',
+        )
+        corporate_payment.attendees.add(attendee)
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_payment_center'), {'source': 'corporate', 'status': 'open'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Corporate Payment Ltd')
+        self.assertContains(response, 'CORP-DASH-PAY')
+        self.assertContains(response, 'Corporate payments')
+
+        response = self.client.post(reverse('dashboard_payment_center'), {
+            'payment_source': 'corporate',
+            'payment_id': corporate_payment.id,
+            'payment_action': 'update',
+            'manual_status': 'completed',
+            'manual_amount': '500.00',
+            'manual_invoice_number': 'CORP-DASH-PAY-COMPLETE',
+            'manual_transaction_id': 'CORP-TXN-1',
+            'manual_trx_id': 'CORP-TRX-1',
+            'source': 'corporate',
+            'status': 'open',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        corporate_payment.refresh_from_db()
+        participant_payment.refresh_from_db()
+        self.assertEqual(corporate_payment.status, 'completed')
+        self.assertEqual(corporate_payment.merchant_invoice_number, 'CORP-DASH-PAY-COMPLETE')
+        self.assertEqual(corporate_payment.transaction_id, 'CORP-TXN-1')
+        self.assertEqual(corporate_payment.trxID, 'CORP-TRX-1')
+        self.assertEqual(participant_payment.status, 'completed')
+        self.assertEqual(participant_payment.transaction_id, 'CORP-TXN-1')
+        self.assertEqual(participant_payment.trxID, 'CORP-TRX-1')
 
     def test_registration_kit_center_issues_only_completed_approved_participants(self):
         completed_participant = Participant.objects.create(

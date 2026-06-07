@@ -54,13 +54,14 @@
             <div class="flex flex-wrap gap-2">
                 <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
                 <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Participants management</a>
-                <a href="{% url 'admin:registration_paymentstatus_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Event Admin</a>
+                <a href="{% url 'dashboard_corporate_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Corporate management</a>
+                <a href="{% url 'admin:registration_paymentstatus_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
             </div>
         </div>
         <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
             <div>
                 <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Payment center</div>
-                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage event and membership payments separately.</h1>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage event, membership, and corporate payments in one place.</h1>
                 <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Update payment records, generate invoice PDFs, and send invoice emails only when the admin chooses to send them.</p>
             </div>
             <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
@@ -136,7 +137,7 @@
             </div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Missing invoices</div>
-                <div class="mt-1 text-2xl font-black text-slate-700">{{ totals.missing_event_invoices|add:totals.missing_membership_invoices }}</div>
+                <div class="mt-1 text-2xl font-black text-slate-700">{{ totals.missing_event_invoices|add:totals.missing_membership_invoices|add:totals.missing_corporate_invoices }}</div>
             </div>
         </section>
 
@@ -156,8 +157,8 @@
                         <div class="grid gap-3 lg:grid-cols-[minmax(220px,1.15fr)_minmax(160px,0.65fr)_minmax(250px,0.9fr)_minmax(180px,0.65fr)] lg:items-center">
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <span class="rounded-full {% if row.source == 'membership' %}bg-teal-50 text-bsbcs-teal ring-teal-100{% else %}bg-blue-50 text-bsbcs-blue ring-blue-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.source_label }}</span>
-                                    <span class="rounded-full {% if row.status == 'completed' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.status == 'failed' or row.status == 'cancelled' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.status_label }}</span>
+                                    <span class="rounded-full {% if row.source == 'membership' %}bg-teal-50 text-bsbcs-teal ring-teal-100{% elif row.source == 'corporate' %}bg-violet-50 text-violet-700 ring-violet-100{% else %}bg-blue-50 text-bsbcs-blue ring-blue-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.source_label }}</span>
+                                    <span class="rounded-full {% if row.status == 'completed' or row.status == 'paid' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.status == 'failed' or row.status == 'cancelled' %}bg-pink-50 text-bsbcs-pink ring-pink-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2.5 py-1 text-[11px] font-black ring-1">{{ row.status_label }}</span>
                                 </div>
                                 <h3 class="mt-2 truncate text-sm font-black text-ink">{{ row.owner_name }}</h3>
                                 <p class="truncate text-xs font-semibold text-slate-500">{{ row.owner_email }}</p>

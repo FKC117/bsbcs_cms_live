@@ -2741,17 +2741,21 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
             registration__event_id__in=event_ids,
             review_status='pending',
         ).select_related('registration__event', 'registration__corporate_account').order_by('-created_at')
-        corporate_attendee_workflow_url = admin_changelist_url(CorporateEventAttendee, {
-            'registration__event__id__exact': event_filter,
-            'review_status__exact': 'pending',
-        } if event_filter else {'review_status__exact': 'pending'})
+        corporate_attendee_workflow_url = dashboard_workflow_url('dashboard_corporate_center', {
+            'event': event_filter,
+            'attendee_status': 'pending',
+        })
         entries.extend([
             {
                 'label': 'Corporate',
                 'title': f'{item.name} - {item.registration.event.name}',
                 'meta': item.registration.corporate_account.company_name,
                 'status': item.get_review_status_display(),
-                'url': corporate_attendee_workflow_url,
+                'url': dashboard_workflow_url('dashboard_corporate_center', {
+                    'event': item.registration.event_id,
+                    'attendee_status': 'pending',
+                    'q': item.email,
+                }) if not event_filter else corporate_attendee_workflow_url,
                 'detail_url': admin_change_url(item),
                 'sort_date': item.created_at,
             }
@@ -2811,7 +2815,7 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
         ])
 
     if queue_type in ('all', 'corporate') and not event_filter:
-        corporate_access_workflow_url = admin_changelist_url(CorporateAccountRequest, {'status__exact': 'pending'})
+        corporate_access_workflow_url = dashboard_workflow_url('dashboard_corporate_center', {'request_status': 'pending'})
         pending_corporate_requests = CorporateAccountRequest.objects.filter(status='pending').order_by('-created_at')
         entries.extend([
             {
@@ -2819,7 +2823,10 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
                 'title': item.company_name,
                 'meta': f'{item.contact_name} - {item.email}',
                 'status': item.get_status_display(),
-                'url': corporate_access_workflow_url,
+                'url': dashboard_workflow_url('dashboard_corporate_center', {
+                    'request_status': 'pending',
+                    'q': item.email,
+                }) or corporate_access_workflow_url,
                 'detail_url': admin_change_url(item),
                 'sort_date': item.created_at,
             }
@@ -2995,10 +3002,12 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'count': pending_corporate_attendees.count() + corporate_access_request_count,
             'tone': 'primary',
             'description': 'Corporate access requests and attendee rows waiting for review.' if not event_filter else 'Corporate attendee rows waiting for review for this event.',
-            'url': admin_changelist_url(CorporateEventAttendee, {
-                'registration__event__id__exact': event_filter,
-                'review_status__exact': 'pending',
-            } if event_filter else {'review_status__exact': 'pending'}),
+            'url': dashboard_workflow_url('dashboard_corporate_center', {
+                'event': event_filter,
+                'attendee_status': 'pending',
+                'request_status': 'pending',
+            }),
+            'internal': True,
         },
         {
             'label': 'Membership approvals',
@@ -3019,10 +3028,12 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'count': unpaid_corporate_payments.count(),
             'tone': 'secondary',
             'description': 'Corporate invoices not marked paid or completed.',
-            'url': admin_changelist_url(CorporatePayment, {
-                'event__id__exact': event_filter,
-                'status__in': UNPAID_PAYMENT_STATUSES,
-            } if event_filter else {'status__in': UNPAID_PAYMENT_STATUSES}),
+            'url': dashboard_workflow_url('dashboard_payment_center', {
+                'source': 'corporate',
+                'status': 'open',
+                'event': event_filter,
+            }),
+            'internal': True,
         },
     ]
 
@@ -3045,9 +3056,9 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'membership_benefits': admin_changelist_url(MembershipBenefitModal),
             'participants': admin_changelist_url(Participant),
             'payments': payment_center_url,
-            'corporate_registrations': admin_changelist_url(CorporateEventRegistration),
-            'corporate_attendees': admin_changelist_url(CorporateEventAttendee),
-            'corporate_payments': admin_changelist_url(CorporatePayment),
+            'corporate_registrations': dashboard_workflow_url('dashboard_corporate_center', {'event': event_filter}),
+            'corporate_attendees': dashboard_workflow_url('dashboard_corporate_center', {'event': event_filter, 'attendee_status': 'pending'}),
+            'corporate_payments': dashboard_workflow_url('dashboard_payment_center', {'source': 'corporate', 'event': event_filter}),
             'membership': admin_changelist_url(Member),
             'membership_payments': admin_changelist_url(MembershipPayment),
             'abstracts': admin_changelist_url(AbstractSubmission),
@@ -3959,6 +3970,312 @@ def _normalize_payment_amount(raw_amount, fallback):
         raise ValueError('Enter a valid amount.')
 
 
+def _build_dashboard_absolute_url(request, path):
+    site_url = getattr(settings, 'SITE_URL', '').rstrip('/')
+    if site_url:
+        return f"{site_url}{path}"
+    return request.build_absolute_uri(path)
+
+
+def _send_dashboard_corporate_approval_email(request, access_request, corporate_account, created_user):
+    from django.core.mail import send_mail
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    user = corporate_account.user
+    dashboard_path = reverse('corporate_dashboard')
+    login_url = _build_dashboard_absolute_url(request, f"{reverse('corporate_login')}?next={dashboard_path}")
+    setup_url = None
+    if created_user:
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        setup_url = _build_dashboard_absolute_url(
+            request,
+            reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token}),
+        )
+
+    context = {
+        'contact_name': access_request.contact_name,
+        'company_name': access_request.company_name,
+        'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
+        'login_url': login_url,
+        'setup_url': setup_url,
+        'created_user': created_user,
+    }
+    html_message = render_to_string('emails/corporate_account_approved.html', context)
+    send_mail(
+        subject=f"{context['site_name']} Corporate Access Approved",
+        message=strip_tags(html_message),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[access_request.email],
+        html_message=html_message,
+        fail_silently=False,
+    )
+
+
+def _send_dashboard_corporate_rejection_email(access_request):
+    from django.core.mail import send_mail
+
+    context = {
+        'contact_name': access_request.contact_name,
+        'company_name': access_request.company_name,
+        'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
+        'admin_note': access_request.admin_note,
+        'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
+    }
+    html_message = render_to_string('emails/corporate_account_rejected.html', context)
+    send_mail(
+        subject=f"{context['site_name']} Corporate Access Request Update",
+        message=strip_tags(html_message),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[access_request.email],
+        html_message=html_message,
+        fail_silently=False,
+    )
+
+
+def _approve_dashboard_corporate_request(request, access_request):
+    user = User.objects.filter(email__iexact=access_request.email).first() or User.objects.filter(username__iexact=access_request.email).first()
+    created_user = False
+    if not user:
+        user = User.objects.create_user(username=access_request.email, email=access_request.email)
+        user.set_unusable_password()
+        user.first_name = access_request.contact_name[:150]
+        user.save()
+        created_user = True
+        dashboard_log_action(request, user, ADDITION, 'Created corporate login user from Corporate Center dashboard.')
+
+    corporate_account, account_created = CorporateAccount.objects.update_or_create(
+        user=user,
+        defaults={
+            'source_request': access_request,
+            'company_name': access_request.company_name,
+            'contact_name': access_request.contact_name,
+            'contact_designation': access_request.contact_designation,
+            'email': access_request.email,
+            'phone': access_request.phone,
+            'status': 'approved',
+            'approved_at': timezone.now(),
+        },
+    )
+    access_request.status = 'approved'
+    access_request.save(update_fields=['status', 'updated_at'])
+    dashboard_log_action(
+        request,
+        corporate_account,
+        ADDITION if account_created else CHANGE,
+        'Approved corporate access from Corporate Center dashboard.',
+    )
+    _send_dashboard_corporate_approval_email(request, access_request, corporate_account, created_user)
+    return corporate_account
+
+
+@staff_member_required
+def dashboard_corporate_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    request_status = request.POST.get('request_status') if request.method == 'POST' else request.GET.get('request_status')
+    attendee_status = request.POST.get('attendee_status') if request.method == 'POST' else request.GET.get('attendee_status')
+    account_status = request.POST.get('account_status') if request.method == 'POST' else request.GET.get('account_status')
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    request_status = request_status or 'pending'
+    attendee_status = attendee_status or 'pending'
+    account_status = account_status or 'approved'
+
+    query_params = {
+        'request_status': request_status,
+        'attendee_status': attendee_status,
+        'account_status': account_status,
+    }
+    if event_filter:
+        query_params['event'] = event_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = f"{reverse('dashboard_corporate_center')}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        action = request.POST.get('corporate_action')
+        try:
+            if action == 'approve_requests':
+                request_ids = request.POST.getlist('request_ids')
+                if not request_ids:
+                    messages.error(request, 'Select at least one corporate access request first.')
+                    return redirect(redirect_url)
+                approved = 0
+                for access_request in CorporateAccountRequest.objects.filter(pk__in=request_ids):
+                    _approve_dashboard_corporate_request(request, access_request)
+                    approved += 1
+                messages.success(request, f'{approved} corporate access request(s) approved and emailed.')
+
+            elif action == 'reject_requests':
+                request_ids = request.POST.getlist('request_ids')
+                admin_note = (request.POST.get('admin_note') or '').strip()
+                if not request_ids:
+                    messages.error(request, 'Select at least one corporate access request first.')
+                    return redirect(redirect_url)
+                rejected = 0
+                for access_request in CorporateAccountRequest.objects.filter(pk__in=request_ids):
+                    access_request.status = 'rejected'
+                    if admin_note:
+                        access_request.admin_note = admin_note
+                    access_request.save(update_fields=['status', 'admin_note', 'updated_at'])
+                    _send_dashboard_corporate_rejection_email(access_request)
+                    dashboard_log_action(request, access_request, CHANGE, 'Rejected corporate access from Corporate Center dashboard.')
+                    rejected += 1
+                messages.success(request, f'{rejected} corporate access request(s) rejected and emailed.')
+
+            elif action in ('approve_attendees', 'deny_attendees'):
+                attendee_ids = request.POST.getlist('attendee_ids')
+                if not attendee_ids:
+                    messages.error(request, 'Select at least one corporate attendee first.')
+                    return redirect(redirect_url)
+                attendees = CorporateEventAttendee.objects.filter(pk__in=attendee_ids).select_related('registration')
+                if action == 'approve_attendees':
+                    from registration.admin import approve_corporate_attendees
+
+                    approved_count = approve_corporate_attendees(request, attendees)
+                    for attendee in attendees:
+                        dashboard_log_action(request, attendee, CHANGE, 'Approved corporate attendee from Corporate Center dashboard.')
+                    messages.success(request, f'{approved_count} attendee(s) approved, converted to participants, and emailed.')
+                else:
+                    affected_registrations = list({attendee.registration for attendee in attendees})
+                    denied_count = attendees.update(review_status='denied')
+                    from registration.admin import update_corporate_registration_status
+
+                    for corporate_registration in affected_registrations:
+                        update_corporate_registration_status(corporate_registration)
+                    messages.success(request, f'{denied_count} attendee(s) denied.')
+
+            elif action == 'create_invoice':
+                registration_ids = request.POST.getlist('registration_ids')
+                if not registration_ids:
+                    messages.error(request, 'Select at least one corporate event registration first.')
+                    return redirect(redirect_url)
+                from registration.admin import create_corporate_payment_for_registration
+
+                created = 0
+                skipped = 0
+                for corporate_registration in CorporateEventRegistration.objects.filter(pk__in=registration_ids):
+                    corporate_payment, was_created, reason = create_corporate_payment_for_registration(corporate_registration, request=request)
+                    if was_created:
+                        dashboard_log_action(request, corporate_payment, ADDITION, 'Created corporate invoice from Corporate Center dashboard.')
+                        created += 1
+                    else:
+                        skipped += 1
+                        if reason:
+                            messages.warning(request, f'{corporate_registration}: {reason}')
+                messages.success(request, f'{created} corporate invoice(s) created. {skipped} skipped.')
+
+            elif action in ('activate_account', 'suspend_account'):
+                account_id = request.POST.get('account_id')
+                corporate_account = get_object_or_404(CorporateAccount, pk=account_id)
+                corporate_account.status = 'approved' if action == 'activate_account' else 'suspended'
+                if corporate_account.status == 'approved' and not corporate_account.approved_at:
+                    corporate_account.approved_at = timezone.now()
+                    corporate_account.save(update_fields=['status', 'approved_at', 'updated_at'])
+                else:
+                    corporate_account.save(update_fields=['status', 'updated_at'])
+                dashboard_log_action(request, corporate_account, CHANGE, 'Changed corporate account status from Corporate Center dashboard.')
+                messages.success(request, f'{corporate_account.company_name} marked {corporate_account.get_status_display().lower()}.')
+
+            else:
+                messages.error(request, 'Choose a valid corporate workflow action.')
+        except Exception as exc:
+            logger.exception("Corporate center action failed: %s", exc)
+            messages.error(request, str(exc))
+        return redirect(redirect_url)
+
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    access_requests = CorporateAccountRequest.objects.order_by('-created_at')
+    accounts = CorporateAccount.objects.select_related('user', 'source_request').order_by('company_name')
+    registrations = CorporateEventRegistration.objects.select_related('corporate_account', 'event').prefetch_related('attendees', 'corporate_payments').order_by('-created_at')
+    attendees = CorporateEventAttendee.objects.select_related('registration__corporate_account', 'registration__event', 'participant', 'matched_user').order_by('-created_at')
+
+    if event_filter:
+        registrations = registrations.filter(event_id=event_filter)
+        attendees = attendees.filter(registration__event_id=event_filter)
+
+    if request_status != 'all':
+        access_requests = access_requests.filter(status=request_status)
+    if account_status != 'all':
+        accounts = accounts.filter(status=account_status)
+    if attendee_status != 'all':
+        attendees = attendees.filter(review_status=attendee_status)
+
+    if search_query:
+        access_requests = access_requests.filter(
+            Q(company_name__icontains=search_query)
+            | Q(contact_name__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+        )
+        accounts = accounts.filter(
+            Q(company_name__icontains=search_query)
+            | Q(contact_name__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(user__email__icontains=search_query)
+        )
+        registrations = registrations.filter(
+            Q(corporate_account__company_name__icontains=search_query)
+            | Q(corporate_account__email__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+        attendees = attendees.filter(
+            Q(name__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(organization__icontains=search_query)
+            | Q(registration__corporate_account__company_name__icontains=search_query)
+            | Q(registration__event__name__icontains=search_query)
+        )
+
+    registration_page = Paginator(registrations, 8).get_page(request.GET.get('registrations_page'))
+    for corporate_registration in registration_page.object_list:
+        registration_attendees = corporate_registration.attendees.all()
+        corporate_registration.pending_count = registration_attendees.filter(review_status='pending').count()
+        corporate_registration.approved_count = registration_attendees.filter(review_status='approved').count()
+        corporate_registration.denied_count = registration_attendees.filter(review_status='denied').count()
+        corporate_registration.invoice_count = corporate_registration.corporate_payments.count()
+        corporate_registration.open_invoice_count = corporate_registration.corporate_payments.filter(status__in=UNPAID_PAYMENT_STATUSES).count()
+
+    event_scope = {'event_id': event_filter} if event_filter else {}
+    attendee_event_scope = {'registration__event_id': event_filter} if event_filter else {}
+    totals = {
+        'pending_requests': CorporateAccountRequest.objects.filter(status='pending').count(),
+        'approved_accounts': CorporateAccount.objects.filter(status='approved').count(),
+        'pending_attendees': CorporateEventAttendee.objects.filter(**attendee_event_scope, review_status='pending').count(),
+        'approved_attendees': CorporateEventAttendee.objects.filter(**attendee_event_scope, review_status='approved').count(),
+        'open_invoices': CorporatePayment.objects.filter(**event_scope, status__in=UNPAID_PAYMENT_STATUSES).count(),
+        'completed_invoices': CorporatePayment.objects.filter(**event_scope, status__in=['completed', 'paid']).count(),
+    }
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'request_page_obj': Paginator(access_requests, 6).get_page(request.GET.get('requests_page')),
+        'account_page_obj': Paginator(accounts, 6).get_page(request.GET.get('accounts_page')),
+        'registration_page_obj': registration_page,
+        'attendee_page_obj': Paginator(attendees, 10).get_page(request.GET.get('attendees_page')),
+        'totals': totals,
+        'current_filters': {
+            'event': event_filter or '',
+            'request_status': request_status,
+            'attendee_status': attendee_status,
+            'account_status': account_status,
+            'q': search_query,
+        },
+        'query_string': urlencode(query_params),
+        'request_status_choices': [('pending', 'Pending requests'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('all', 'All requests')],
+        'attendee_status_choices': [('pending', 'Pending attendees'), ('approved', 'Approved attendees'), ('denied', 'Denied attendees'), ('all', 'All attendees')],
+        'account_status_choices': [('approved', 'Approved accounts'), ('suspended', 'Suspended accounts'), ('all', 'All accounts')],
+    }
+    return render(request, 'dashboard_corporate_center.html', context)
+
+
 @staff_member_required
 def dashboard_payment_center(request):
     from website.models import MembershipPayment, MembershipType, SiteSettings
@@ -4059,6 +4376,57 @@ def dashboard_payment_center(request):
                         messages.success(request, f'Membership invoice email sent to {payment_record.user_profile.email}.')
                     else:
                         messages.error(request, 'Could not send membership invoice email. Check invoice file and email settings.')
+            elif payment_source == 'corporate':
+                payment_record = get_object_or_404(
+                    CorporatePayment.objects.select_related('corporate_account', 'event', 'corporate_registration').prefetch_related('attendees__participant'),
+                    pk=payment_id,
+                )
+                if payment_action == 'update':
+                    previous_status = payment_record.status
+                    payment_record.status = request.POST.get('manual_status') or payment_record.status
+                    payment_record.amount = _normalize_payment_amount(request.POST.get('manual_amount'), payment_record.amount)
+                    payment_record.transaction_id = (request.POST.get('manual_transaction_id') or '').strip() or None
+                    payment_record.trxID = (request.POST.get('manual_trx_id') or '').strip() or None
+                    invoice_number = (request.POST.get('manual_invoice_number') or '').strip()
+                    if invoice_number:
+                        payment_record.merchant_invoice_number = invoice_number
+                    payment_record.save()
+                    dashboard_log_action(request, payment_record, CHANGE, 'Updated corporate payment from Payment Center dashboard.')
+                    if payment_record.status in ['completed', 'paid'] and previous_status not in ['completed', 'paid']:
+                        updated_participant_payments = 0
+                        for attendee in payment_record.attendees.select_related('participant'):
+                            if not attendee.participant_id:
+                                continue
+                            participant_payment = PaymentStatus.objects.filter(
+                                participant=attendee.participant,
+                                event=payment_record.event,
+                            ).first()
+                            if participant_payment:
+                                participant_payment.status = 'completed'
+                                participant_payment.transaction_id = payment_record.transaction_id
+                                participant_payment.trxID = payment_record.trxID
+                                participant_payment.save(update_fields=['status', 'transaction_id', 'trxID', 'updated_at'])
+                                updated_participant_payments += 1
+                        messages.success(request, f'Corporate payment updated and {updated_participant_payments} participant payment row(s) marked completed.')
+                    else:
+                        messages.success(request, f'Corporate payment updated for {payment_record.corporate_account.company_name}.')
+                elif payment_action == 'generate_invoice':
+                    if payment_record.invoice:
+                        messages.info(request, f'Corporate invoice already exists for {payment_record.corporate_account.company_name}. Use View invoice.')
+                    else:
+                        generate_corporate_invoice(payment_record)
+                        dashboard_log_action(request, payment_record, CHANGE, 'Generated corporate invoice from Payment Center dashboard.')
+                        messages.success(request, f'Corporate invoice generated for {payment_record.corporate_account.company_name}.')
+                elif payment_action == 'email_invoice':
+                    from registration.admin import send_corporate_invoice_email
+
+                    if not payment_record.invoice:
+                        generate_corporate_invoice(payment_record)
+                    if send_corporate_invoice_email(payment_record, request):
+                        dashboard_log_action(request, payment_record, CHANGE, 'Sent corporate invoice email from Payment Center dashboard.')
+                        messages.success(request, f'Corporate invoice email sent to {payment_record.corporate_account.email}.')
+                    else:
+                        messages.error(request, 'Could not send corporate invoice email. Check invoice file and email settings.')
             else:
                 messages.error(request, 'Choose a valid payment row.')
         except Exception as exc:
@@ -4069,9 +4437,11 @@ def dashboard_payment_center(request):
     events = Event.objects.order_by('-year', '-start_date', 'name')
     event_payments = PaymentStatus.objects.select_related('participant', 'event').order_by('-updated_at')
     membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').order_by('-updated_at')
+    corporate_payments = CorporatePayment.objects.select_related('corporate_account', 'event', 'corporate_registration').prefetch_related('attendees').order_by('-updated_at')
 
     if event_filter:
         event_payments = event_payments.filter(event_id=event_filter)
+        corporate_payments = corporate_payments.filter(event_id=event_filter)
 
     if search_query:
         event_payments = event_payments.filter(
@@ -4089,19 +4459,32 @@ def dashboard_payment_center(request):
             | Q(transaction_id__icontains=search_query)
             | Q(trxID__icontains=search_query)
         )
+        corporate_payments = corporate_payments.filter(
+            Q(corporate_account__company_name__icontains=search_query)
+            | Q(corporate_account__contact_name__icontains=search_query)
+            | Q(corporate_account__email__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(merchant_invoice_number__icontains=search_query)
+            | Q(transaction_id__icontains=search_query)
+            | Q(trxID__icontains=search_query)
+        )
 
     if status_filter == 'open':
         event_payments = event_payments.filter(status__in=UNPAID_PAYMENT_STATUSES)
         membership_payments = membership_payments.exclude(status='completed')
+        corporate_payments = corporate_payments.filter(status__in=UNPAID_PAYMENT_STATUSES)
     elif status_filter == 'paid':
         event_payments = event_payments.filter(status__in=PAID_PAYMENT_STATUSES)
         membership_payments = membership_payments.filter(status='completed')
+        corporate_payments = corporate_payments.filter(status__in=['completed', 'paid'])
     elif status_filter != 'all':
         event_payments = event_payments.filter(status=status_filter)
         membership_payments = membership_payments.filter(status=status_filter)
+        corporate_payments = corporate_payments.filter(status=status_filter)
 
     event_rows = []
     membership_rows = []
+    corporate_rows = []
     if source_filter in ('all', 'event'):
         event_rows = [
             {
@@ -4156,8 +4539,35 @@ def dashboard_payment_center(request):
             }
             for payment in membership_payments[:350]
         ]
+    if source_filter in ('all', 'corporate'):
+        corporate_rows = [
+            {
+                'source': 'corporate',
+                'source_label': 'Corporate',
+                'id': payment.id,
+                'owner_name': payment.corporate_account.company_name,
+                'owner_email': payment.corporate_account.email,
+                'context': f'{payment.event.name} {payment.event.year} - {payment.attendees.count()} attendee(s)',
+                'amount': payment.amount or 0,
+                'status': payment.status,
+                'status_label': payment.get_status_display(),
+                'invoice_number': payment.merchant_invoice_number or '-',
+                'transaction_id': payment.transaction_id or '',
+                'trx_id': payment.trxID or '',
+                'invoice_url': payment.invoice.url if payment.invoice else '',
+                'invoice_ready': bool(payment.invoice),
+                'qr_url': '',
+                'qr_ready': False,
+                'email_sent': payment.email_sent,
+                'email_trackable': True,
+                'email_sent_at': payment.updated_at if payment.email_sent else None,
+                'updated_at': payment.updated_at,
+                'status_choices': CorporatePayment.STATUS_CHOICES,
+            }
+            for payment in corporate_payments[:350]
+        ]
 
-    payment_rows = sorted(event_rows + membership_rows, key=lambda row: row['updated_at'] or timezone.now(), reverse=True)
+    payment_rows = sorted(event_rows + membership_rows + corporate_rows, key=lambda row: row['updated_at'] or timezone.now(), reverse=True)
     page_obj = Paginator(payment_rows, 15).get_page(request.GET.get('page'))
 
     totals = {
@@ -4165,12 +4575,16 @@ def dashboard_payment_center(request):
         'event_paid': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).count(),
         'membership_open': MembershipPayment.objects.exclude(status='completed').count(),
         'membership_paid': MembershipPayment.objects.filter(status='completed').count(),
+        'corporate_open': CorporatePayment.objects.filter(status__in=UNPAID_PAYMENT_STATUSES).count(),
+        'corporate_paid': CorporatePayment.objects.filter(status__in=['completed', 'paid']).count(),
         'event_revenue': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).aggregate(total=Sum('amount'))['total'] or 0,
         'membership_revenue': MembershipPayment.objects.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0,
+        'corporate_revenue': CorporatePayment.objects.filter(status__in=['completed', 'paid']).aggregate(total=Sum('amount'))['total'] or 0,
         'missing_event_invoices': PaymentStatus.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
         'missing_membership_invoices': MembershipPayment.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
+        'missing_corporate_invoices': CorporatePayment.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
     }
-    totals['revenue'] = totals['event_revenue'] + totals['membership_revenue']
+    totals['revenue'] = totals['event_revenue'] + totals['membership_revenue'] + totals['corporate_revenue']
 
     context = {
         'site_settings': site_settings,
@@ -4188,6 +4602,7 @@ def dashboard_payment_center(request):
             ('all', 'All sources'),
             ('event', 'Event payments'),
             ('membership', 'Membership payments'),
+            ('corporate', 'Corporate payments'),
         ],
         'status_choices': [
             ('open', 'Needs payment / review'),
