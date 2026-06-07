@@ -289,12 +289,14 @@
                     </div>
                 </div>
                 <div id="kit-qr-reader" class="min-h-0 overflow-hidden border-y border-line bg-slate-950 sm:mx-4 sm:rounded-xl sm:border"></div>
+                <div id="kit-qr-frame-decoder" class="hidden"></div>
                 <div class="qr-scanner-actions shrink-0 space-y-3 border-t border-line bg-white p-3 sm:border-t-0 sm:p-4">
                     <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <input id="qr-manual-code" class="workflow-input" placeholder="QR / invoice code if camera fails" autocomplete="off">
                         <button type="button" id="submit-manual-qr-code" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Use Code</button>
                     </div>
-                    <div class="grid gap-2 sm:grid-cols-2">
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <button type="button" id="scan-current-frame" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700">Scan Frame</button>
                         <label class="grid cursor-pointer place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">
                         Scan saved QR image
                             <input type="file" id="qr-image-input" accept="image/*" class="hidden">
@@ -323,11 +325,15 @@
         const restartCameraButton = document.getElementById('restart-qr-camera');
         const manualQrCode = document.getElementById('qr-manual-code');
         const submitManualQrCode = document.getElementById('submit-manual-qr-code');
+        const scanCurrentFrameButton = document.getElementById('scan-current-frame');
         let scanner = null;
+        let frameDecoder = null;
         let scannerRunning = false;
         let submitting = false;
         let cameraDevices = [];
         let scanHelpTimer = null;
+        let frameScanTimer = null;
+        let frameScanRunning = false;
         let activeCameraLabel = '';
 
         const setStatus = (message, tone = 'blue') => {
@@ -346,6 +352,7 @@
             if (submitting || !decodedText) return;
             submitting = true;
             clearTimeout(scanHelpTimer);
+            clearInterval(frameScanTimer);
             scanInput.value = decodedText.trim();
             setStatus('QR matched. Issuing registration kit...', 'green');
             if (scannerRunning && scanner) {
@@ -361,6 +368,7 @@
 
         const stopScanner = async (hideModal = true) => {
             clearTimeout(scanHelpTimer);
+            clearInterval(frameScanTimer);
             if (scannerRunning && scanner) {
                 try {
                     await scanner.stop();
@@ -369,6 +377,7 @@
                 }
             }
             scannerRunning = false;
+            frameScanRunning = false;
             if (hideModal) {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
@@ -420,6 +429,42 @@
             return selectedCamera ? selectedCamera.label : '';
         };
 
+        const decodeCurrentFrame = async (manual = false) => {
+            if (frameScanRunning || submitting || !window.Html5Qrcode) return;
+            const video = document.querySelector('#kit-qr-reader video');
+            if (!video || !video.videoWidth || !video.videoHeight) {
+                if (manual) setStatus('Camera frame is not ready yet. Wait one second and try again.', 'pink');
+                return;
+            }
+            frameScanRunning = true;
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const context = canvas.getContext('2d', {willReadFrequently: true});
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                if (!blob) return;
+                const file = new File([blob], 'qr-camera-frame.png', {type: 'image/png'});
+                if (!frameDecoder) frameDecoder = new Html5Qrcode('kit-qr-frame-decoder');
+                const decodedText = await frameDecoder.scanFile(file, false);
+                await submitDecodedCode(decodedText);
+            } catch (error) {
+                if (manual && !submitting) {
+                    setStatus('No QR found in this frame. Fill the square with the QR and try Scan Frame again.', 'pink');
+                }
+            } finally {
+                frameScanRunning = false;
+            }
+        };
+
+        const startFrameScanLoop = () => {
+            clearInterval(frameScanTimer);
+            frameScanTimer = setInterval(() => {
+                decodeCurrentFrame(false);
+            }, 1400);
+        };
+
         const tuneCameraForQr = async () => {
             const video = document.querySelector('#kit-qr-reader video');
             const stream = video && video.srcObject;
@@ -457,6 +502,8 @@
             }
             try {
                 await video.play();
+                video.setAttribute('playsinline', '');
+                video.setAttribute('muted', '');
             } catch (error) {
                 console.debug('Camera preview play request was blocked:', error);
             }
@@ -465,6 +512,7 @@
                 return false;
             }
             await tuneCameraForQr();
+            startFrameScanLoop();
             if (/dual|ultra|wide|0\.5/i.test(activeCameraLabel)) {
                 setStatus('Wide camera selected. If scanning is slow, choose the normal Back Camera and hold the phone a little farther away.', 'blue');
             } else {
@@ -506,13 +554,18 @@
                 }
                 activeCameraLabel = getCameraLabel(selectedCameraId);
                 setStatus('Starting the selected camera...');
+                const scannerConfig = {
+                    fps: 20,
+                    qrbox: getQrBox(),
+                    disableFlip: false,
+                    videoConstraints: {
+                        width: {ideal: 1920},
+                        height: {ideal: 1080},
+                    },
+                };
                 await scanner.start(
                     selectedCameraId,
-                    {
-                        fps: 15,
-                        qrbox: getQrBox(),
-                        disableFlip: false,
-                    },
+                    scannerConfig,
                     submitDecodedCode,
                     () => {}
                 );
@@ -533,6 +586,7 @@
         });
         cameraSelect.addEventListener('change', startScanner);
         restartCameraButton.addEventListener('click', startScanner);
+        scanCurrentFrameButton.addEventListener('click', () => decodeCurrentFrame(true));
         closeButtons.forEach((button) => button.addEventListener('click', stopScanner));
         modal.addEventListener('click', (event) => {
             if (event.target === modal) stopScanner();
