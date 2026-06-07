@@ -4080,10 +4080,12 @@ def dashboard_corporate_center(request):
     request_status = request.POST.get('request_status') if request.method == 'POST' else request.GET.get('request_status')
     attendee_status = request.POST.get('attendee_status') if request.method == 'POST' else request.GET.get('attendee_status')
     account_status = request.POST.get('account_status') if request.method == 'POST' else request.GET.get('account_status')
+    active_panel = request.POST.get('panel') if request.method == 'POST' else request.GET.get('panel')
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
     request_status = request_status or 'pending'
     attendee_status = attendee_status or 'pending'
     account_status = account_status or 'approved'
+    active_panel = active_panel or 'access'
 
     query_params = {
         'request_status': request_status,
@@ -4094,6 +4096,8 @@ def dashboard_corporate_center(request):
         query_params['event'] = event_filter
     if search_query:
         query_params['q'] = search_query
+    if active_panel:
+        query_params['panel'] = active_panel
     redirect_url = f"{reverse('dashboard_corporate_center')}?{urlencode(query_params)}"
 
     if request.method == 'POST':
@@ -4267,6 +4271,7 @@ def dashboard_corporate_center(request):
             'attendee_status': attendee_status,
             'account_status': account_status,
             'q': search_query,
+            'panel': active_panel,
         },
         'query_string': urlencode(query_params),
         'request_status_choices': [('pending', 'Pending requests'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('all', 'All requests')],
