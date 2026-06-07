@@ -1,6 +1,7 @@
 from datetime import date, time
 import os
 import tempfile
+from urllib.parse import urlencode
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
@@ -123,17 +124,73 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Day 1")
         self.assertContains(response, "Main Auditorium")
 
-    def test_global_dashboard_shows_guided_workflows(self):
+    def test_global_dashboard_shows_action_center_shortcuts(self):
+        pending_participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Pending Queue Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='queue-participant@example.com',
+            phone='01700000021',
+            country='Bangladesh',
+        )
+        approved_participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Queue Payment Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='queue-payment@example.com',
+            phone='01700000022',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=approved_participant,
+            event=self.event,
+            merchant_invoice_number='REG-QUEUE',
+            amount='500.00',
+            status='unpaid',
+        )
+        pending_abstract = AbstractSubmission.objects.create(
+            user=self.user,
+            event=self.event,
+            title='Queue Abstract Needs Review',
+            authors='Queue Author',
+            institution='Queue Institution',
+            introduction='Intro',
+            methods='Methods',
+            results='Results',
+            conclusion='Conclusion',
+        )
+
         self.client.force_login(self.staff_user)
         response = self.client.get(reverse('global_dashboard'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Guided workflows")
-        self.assertContains(response, "Participant approval")
-        self.assertContains(response, "Membership approval")
-        self.assertContains(response, "Corporate approval")
-        self.assertContains(response, "Abstract approval")
-        self.assertContains(response, "Event payment details")
-        self.assertContains(response, "Membership payment details")
+        self.assertContains(response, "Workflow lanes")
+        self.assertContains(response, "What needs action now")
+        self.assertContains(response, "Participants management")
+        self.assertContains(response, "Payments Management")
+        self.assertContains(response, "Issue Kit")
+        self.assertContains(response, "Abstracts approval")
+        self.assertNotContains(response, "Guided workflows")
+        self.assertContains(
+            response,
+            f"{reverse('dashboard_participant_center')}?{urlencode({'event': self.event.id, 'status': 'pending', 'q': pending_participant.email}).replace('&', '&amp;')}",
+        )
+        self.assertContains(
+            response,
+            f"{reverse('dashboard_payment_center')}?{urlencode({'source': 'event', 'status': 'unpaid', 'event': self.event.id, 'q': approved_participant.email}).replace('&', '&amp;')}",
+        )
+        self.assertContains(
+            response,
+            f"{reverse('dashboard_abstract_center')}?{urlencode({'event': self.event.id, 'status': 'pending', 'q': pending_abstract.title}).replace('&', '&amp;')}",
+        )
 
     def test_bulk_email_center_renders_dashboard_workflow(self):
         self.client.force_login(self.staff_user)

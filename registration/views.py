@@ -2592,6 +2592,18 @@ def admin_changelist_url(model, query_params=None):
     return url
 
 
+def dashboard_workflow_url(view_name, query_params=None):
+    url = reverse(view_name)
+    cleaned_params = {
+        key: value
+        for key, value in (query_params or {}).items()
+        if value not in (None, '')
+    }
+    if cleaned_params:
+        return f'{url}?{urlencode(cleaned_params, doseq=True)}'
+    return url
+
+
 def admin_change_url(obj):
     opts = obj._meta
     return reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[obj.pk])
@@ -2674,10 +2686,9 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
     entries = []
 
     if queue_type in ('all', 'participants'):
-        participant_workflow_url = admin_changelist_url(Participant, {
-            **event_filter_query,
-            'approved__exact': '0',
-            'denied__exact': '0',
+        participant_workflow_url = dashboard_workflow_url('dashboard_participant_center', {
+            'event': event_filter,
+            'status': 'pending',
         })
         pending_participants = Participant.objects.filter(
             **event_scope,
@@ -2690,7 +2701,11 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
                 'title': f'{item.name} - {item.event.name}',
                 'meta': item.email,
                 'status': 'Pending approval',
-                'url': participant_workflow_url,
+                'url': dashboard_workflow_url('dashboard_participant_center', {
+                    'event': item.event_id,
+                    'status': 'pending',
+                    'q': item.email,
+                }) if not event_filter else participant_workflow_url,
                 'detail_url': admin_change_url(item),
                 'sort_date': item.created_at,
             }
@@ -2709,9 +2724,11 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
                 'title': f'{item.participant.name} - {item.event.name}',
                 'meta': f'BDT {item.amount or 0}',
                 'status': item.get_status_display(),
-                'url': admin_changelist_url(PaymentStatus, {
-                    **event_filter_query,
-                    'status__exact': item.status,
+                'url': dashboard_workflow_url('dashboard_payment_center', {
+                    'source': 'event',
+                    'status': item.status,
+                    'event': item.event_id,
+                    'q': item.participant.email,
                 }),
                 'detail_url': admin_change_url(item),
                 'sort_date': item.updated_at,
@@ -2742,7 +2759,10 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
         ])
 
     if queue_type in ('all', 'abstracts'):
-        abstract_workflow_url = admin_changelist_url(AbstractSubmission, event_filter_query)
+        abstract_workflow_url = dashboard_workflow_url('dashboard_abstract_center', {
+            'event': event_filter,
+            'status': 'pending',
+        })
         pending_abstracts = AbstractSubmission.objects.filter(
             event_id__in=event_ids,
             approved_for_presentation=False,
@@ -2754,7 +2774,11 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
                 'title': f'{item.title} - {item.event.name}',
                 'meta': item.user.email,
                 'status': 'Needs review',
-                'url': abstract_workflow_url,
+                'url': dashboard_workflow_url('dashboard_abstract_center', {
+                    'event': item.event_id,
+                    'status': 'pending',
+                    'q': item.title,
+                }) if not event_filter else abstract_workflow_url,
                 'detail_url': admin_change_url(item),
                 'sort_date': item.updated_at,
             }
@@ -2910,14 +2934,6 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         ).distinct().count()
     else:
         pending_membership_payment_count = pending_membership_payments.count()
-    completed_event_payments = PaymentStatus.objects.filter(
-        **event_scope,
-        status__in=PAID_PAYMENT_STATUSES,
-    ).select_related('event', 'participant')
-    completed_membership_payments = MembershipPayment.objects.filter(
-        status='completed',
-    ).select_related('user_profile', 'membership_type')
-
     open_events = scoped_events.filter(
         Q(event_status='active') | Q(registration='Open')
     ).order_by('start_date')
@@ -3010,214 +3026,10 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
     ]
 
-    participant_approval_url = admin_changelist_url(Participant, {
-        **event_filter_query,
-        'approved__exact': '0',
-        'denied__exact': '0',
-    })
     payment_center_url = reverse('dashboard_payment_center')
-    payment_center_params = {}
-    if event_filter:
-        payment_center_params['event'] = event_filter
-    event_payment_pending_url = f"{payment_center_url}?{urlencode({**payment_center_params, 'source': 'event', 'status': 'open'})}"
-    membership_pending_url = admin_changelist_url(Member, {'approval_status__exact': 'pending'})
-    membership_payment_pending_url = f"{payment_center_url}?{urlencode({'source': 'membership', 'status': 'open'})}"
-    corporate_access_pending_url = admin_changelist_url(CorporateAccountRequest, {'status__exact': 'pending'})
-    corporate_attendee_pending_url = admin_changelist_url(CorporateEventAttendee, {
-        'registration__event__id__exact': event_filter,
-        'review_status__exact': 'pending',
-    } if event_filter else {'review_status__exact': 'pending'})
-    corporate_registration_review_url = admin_changelist_url(CorporateEventRegistration, {
-        'event__id__exact': event_filter,
-        'status__in': ['submitted', 'under_review'],
-    } if event_filter else {'status__in': ['submitted', 'under_review']})
-    corporate_payment_pending_url = admin_changelist_url(CorporatePayment, {
-        'event__id__exact': event_filter,
-        'status__in': UNPAID_PAYMENT_STATUSES,
-    } if event_filter else {'status__in': UNPAID_PAYMENT_STATUSES})
-    abstract_pending_url = admin_changelist_url(AbstractSubmission, {
-        **event_filter_query,
-        'approved_for_presentation__exact': '0',
-        'approved_for_poster__exact': '0',
-    })
-    abstract_center_url = reverse('dashboard_abstract_center')
-    abstract_center_params = {'status': 'pending'}
-    if event_filter:
-        abstract_center_params['event'] = event_filter
-    abstract_center_url = f"{abstract_center_url}?{urlencode(abstract_center_params)}"
-    event_payment_completed_url = f"{payment_center_url}?{urlencode({**payment_center_params, 'source': 'event', 'status': 'paid'})}"
-    membership_payment_completed_url = f"{payment_center_url}?{urlencode({'source': 'membership', 'status': 'paid'})}"
-
-    workflow_groups = [
-        {
-            'title': 'Participant approval',
-            'eyebrow': 'Event workflow',
-            'count': pending_participants.count(),
-            'status': 'needs review',
-            'description': 'Approve or deny individual event registrations. Approval creates or updates the event payment record and sends the right email.',
-            'primary_label': 'Manage participants',
-            'primary_url': participant_pending_url,
-            'primary_internal': True,
-            'steps': [
-                {
-                    'label': 'Review pending rows',
-                    'count': pending_participants.count(),
-                    'detail': 'Select pending registrations, then approve or deny from the participant center.',
-                    'url': participant_pending_url,
-                    'internal': True,
-                },
-                {
-                    'label': 'Payment follow-up',
-                    'count': approved_unpaid_payments.count(),
-                    'detail': 'Approved paid-event registrations stay here until payment is completed.',
-                    'url': participant_unpaid_url,
-                    'internal': True,
-                },
-            ],
-        },
-        {
-            'title': 'Membership approval',
-            'eyebrow': 'Member workflow',
-            'count': pending_event_members.count() if event_filter else pending_members.count(),
-            'status': 'applications',
-            'description': 'Approve or reject membership applications. Approval triggers the membership email/payment flow already configured in admin signals.',
-            'primary_label': 'Open member approvals',
-            'primary_url': membership_pending_url,
-            'steps': [
-                {
-                    'label': 'Approve applications',
-                    'count': pending_event_members.count() if event_filter else pending_members.count(),
-                    'detail': 'Use Approve selected members. For rejection, add a rejection reason first, then use Reject selected members.',
-                    'url': membership_pending_url,
-                },
-                {
-                    'label': 'Membership payments',
-                    'count': pending_membership_payment_count,
-                    'detail': 'Track initiated, pending, or failed membership payment rows separately from event payments.',
-                    'url': membership_payment_pending_url,
-                },
-            ],
-        },
-        {
-            'title': 'Corporate approval',
-            'eyebrow': 'Organization workflow',
-            'count': pending_corporate_attendees.count() + corporate_access_request_count + pending_corporate_registrations.count(),
-            'status': 'corporate items',
-            'description': 'Handle corporate account access, attendee approval, participant creation, and invoice/payment email steps.',
-            'primary_label': 'Open corporate review',
-            'primary_url': corporate_attendee_pending_url if event_filter else corporate_access_pending_url,
-            'steps': [
-                {
-                    'label': 'Access requests',
-                    'count': corporate_access_request_count,
-                    'detail': 'Approve corporate access requests first. This creates or links the corporate login account and sends access email.',
-                    'url': corporate_access_pending_url,
-                },
-                {
-                    'label': 'Attendee approval',
-                    'count': pending_corporate_attendees.count(),
-                    'detail': 'Use Approve selected attendees or Deny selected attendees. Approval creates participant records and emails attendees.',
-                    'url': corporate_attendee_pending_url,
-                },
-                {
-                    'label': 'Invoice creation',
-                    'count': pending_corporate_registrations.count(),
-                    'detail': 'Open corporate registrations and use Step 3 - Create corporate invoice/payment for approved attendees.',
-                    'url': corporate_registration_review_url,
-                },
-                {
-                    'label': 'Corporate payment',
-                    'count': unpaid_corporate_payments.count(),
-                    'detail': 'Regenerate invoice PDF or send corporate invoice email from Corporate payments.',
-                    'url': corporate_payment_pending_url,
-                },
-            ],
-        },
-        {
-            'title': 'Abstract approval',
-            'eyebrow': 'Scientific workflow',
-            'count': pending_abstracts.count(),
-            'status': 'needs decision',
-            'description': 'Review submitted abstracts, approve for oral presentation or poster, and then schedule approved work in the program builder.',
-            'primary_label': 'Open abstract review',
-            'primary_url': abstract_center_url,
-            'primary_internal': True,
-            'steps': [
-                {
-                    'label': 'Review abstracts',
-                    'count': pending_abstracts.count(),
-                    'detail': 'Use Approve for presentation or Approve for poster. Approval sends the abstract decision email.',
-                    'url': abstract_center_url,
-                    'internal': True,
-                },
-                {
-                    'label': 'Schedule approved work',
-                    'count': 0,
-                    'count_label': 'Open',
-                    'unit': 'Tool',
-                    'detail': 'After approval, go to Program builder to add approved abstracts inside event-specific sessions.',
-                    'url': reverse('dashboard_program_session_builder') + (f'?event={event_filter}' if event_filter else ''),
-                    'internal': True,
-                },
-            ],
-        },
-        {
-            'title': 'Event payment details',
-            'eyebrow': 'Payment workflow',
-            'count': approved_unpaid_payments.count(),
-            'status': 'event invoices',
-            'description': 'Track event registration payment status, bKash IDs, invoices, reminders, and completion status.',
-            'primary_label': 'Open event payments',
-            'primary_url': event_payment_pending_url,
-            'primary_internal': True,
-            'steps': [
-                {
-                    'label': 'Pending or failed',
-                    'count': approved_unpaid_payments.count(),
-                    'detail': 'Review unpaid, pending, initiated, or failed event payment rows. These are participant-linked event payments.',
-                    'url': event_payment_pending_url,
-                    'internal': True,
-                },
-                {
-                    'label': 'Completed event payments',
-                    'count': completed_event_payments.count(),
-                    'detail': 'Use this to audit paid/completed event payment records and invoice details.',
-                    'url': event_payment_completed_url,
-                    'internal': True,
-                },
-            ],
-        },
-        {
-            'title': 'Membership payment details',
-            'eyebrow': 'Payment workflow',
-            'count': pending_membership_payment_count,
-            'status': 'membership invoices',
-            'description': 'Track membership payment rows separately from event payments. Completed membership payments activate membership through the existing completion logic.',
-            'primary_label': 'Open membership payments',
-            'primary_url': membership_payment_pending_url,
-            'primary_internal': True,
-            'steps': [
-                {
-                    'label': 'Pending membership payment',
-                    'count': pending_membership_payment_count,
-                    'detail': 'Review initiated, pending, or failed membership payments and transaction details.',
-                    'url': membership_payment_pending_url,
-                    'internal': True,
-                },
-                {
-                    'label': 'Completed membership payment',
-                    'count': completed_membership_payments.count(),
-                    'detail': 'Audit completed membership payment records, invoice files, and membership activation results.',
-                    'url': membership_payment_completed_url,
-                    'internal': True,
-                },
-            ],
-        },
-    ]
 
     return {
         'action_cards': action_cards,
-        'workflow_groups': workflow_groups,
         'event_health': event_health,
         'queue_page_obj': build_attention_queue(events, event_filter, queue_page_number, queue_type)[0],
         'queue_type': queue_type,
