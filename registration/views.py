@@ -2505,7 +2505,8 @@ def event_feedback_view(request, event_id):
 # Admin Dashboard Starts Here ------------------------------------------------------------------------------------#
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.admin.models import LogEntry
+from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import render
 from django.db import transaction
 from django.db.models import Sum, Q
@@ -2545,6 +2546,23 @@ def admin_changelist_url(model, query_params=None):
 def admin_change_url(obj):
     opts = obj._meta
     return reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[obj.pk])
+
+
+def dashboard_log_action(request, obj, action_flag=CHANGE, message='Updated from dashboard workflow.'):
+    if not obj or not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return
+    try:
+        content_type = ContentType.objects.get_for_model(obj, for_concrete_model=False)
+        LogEntry.objects.create(
+            user_id=request.user.pk,
+            content_type_id=content_type.pk,
+            object_id=str(obj.pk),
+            object_repr=str(obj)[:200],
+            action_flag=action_flag,
+            change_message=message,
+        )
+    except Exception as exc:
+        logger.exception("Could not write dashboard audit log for %s: %s", obj, exc)
 
 
 def build_event_metrics_chart_data(event_metrics):
@@ -3264,6 +3282,7 @@ def dashboard_event_builder(request):
         form = DashboardEventForm(request.POST, request.FILES)
         if form.is_valid():
             event = form.save()
+            dashboard_log_action(request, event, ADDITION, 'Created event from Event builder dashboard.')
             messages.success(request, f'"{event}" was created. You can now add program details, registration content, and event assets.')
             next_action = request.POST.get('next_action')
             if next_action == 'program':
@@ -3424,6 +3443,7 @@ def _approve_dashboard_participant(request, participant):
     participant.approved = True
     participant.denied = False
     participant.save(update_fields=['approved', 'denied'])
+    dashboard_log_action(request, participant, CHANGE, 'Approved participant from Participant Center dashboard.')
 
     payment_status, _ = PaymentStatus.objects.get_or_create(
         participant=participant,
@@ -3440,6 +3460,7 @@ def _approve_dashboard_participant(request, participant):
         if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
             payment_status.status = 'unpaid'
         payment_status.save()
+        dashboard_log_action(request, payment_status, CHANGE, 'Created or updated participant payment row during dashboard approval.')
         payment_url = request.build_absolute_uri(reverse('registration:payment', kwargs={
             'event_id': event.id,
             'participant_id': participant.id,
@@ -3456,6 +3477,7 @@ def _approve_dashboard_participant(request, participant):
         payment_status.merchant_invoice_number = f"FREE-{event.id}-{participant.id}-{int(time.time())}"
         payment_status.status = 'completed'
         payment_status.save()
+        dashboard_log_action(request, payment_status, CHANGE, 'Marked free participant payment as completed during dashboard approval.')
         email_queued = _queue_dashboard_participant_email(
             request,
             participant,
@@ -3594,6 +3616,7 @@ def dashboard_abstract_center(request):
             show_abstract_form = True
             if abstract_form.is_valid():
                 abstract = abstract_form.save()
+                dashboard_log_action(request, abstract, ADDITION, 'Added abstract from Abstract approval dashboard.')
                 messages.success(request, f'Abstract "{abstract.title}" added and kept pending for review.')
                 create_redirect = reverse('dashboard_abstract_center')
                 create_params = {
@@ -3616,6 +3639,7 @@ def dashboard_abstract_center(request):
                 abstract.approved_for_presentation = True
                 abstract.approved_for_poster = False
                 abstract.save(update_fields=['approved_for_presentation', 'approved_for_poster', 'updated_at'])
+                dashboard_log_action(request, abstract, CHANGE, 'Approved abstract for presentation from dashboard.')
                 sent_count += int(_send_abstract_approval_email(abstract, 'Presentation'))
             messages.success(request, f'{selected_abstracts.count()} abstract(s) approved for presentation. {sent_count} email(s) sent.')
             return redirect(redirect_url)
@@ -3626,6 +3650,7 @@ def dashboard_abstract_center(request):
                 abstract.approved_for_poster = True
                 abstract.approved_for_presentation = False
                 abstract.save(update_fields=['approved_for_poster', 'approved_for_presentation', 'updated_at'])
+                dashboard_log_action(request, abstract, CHANGE, 'Approved abstract for poster from dashboard.')
                 sent_count += int(_send_abstract_approval_email(abstract, 'Poster'))
             messages.success(request, f'{selected_abstracts.count()} abstract(s) approved for poster. {sent_count} email(s) sent.')
             return redirect(redirect_url)
@@ -3634,7 +3659,10 @@ def dashboard_abstract_center(request):
             if not selected_ids:
                 messages.error(request, 'Select at least one abstract before marking pending.')
                 return redirect(redirect_url)
+            pending_abstracts = list(selected_abstracts)
             updated = selected_abstracts.update(approved_for_presentation=False, approved_for_poster=False)
+            for abstract in pending_abstracts:
+                dashboard_log_action(request, abstract, CHANGE, 'Moved abstract back to pending review from dashboard.')
             messages.success(request, f'{updated} abstract(s) moved back to pending review.')
             return redirect(redirect_url)
 
@@ -3812,6 +3840,7 @@ def dashboard_participant_center(request):
                         participant.approved = False
                         participant.denied = False
                         participant.save()
+                        dashboard_log_action(request, participant, ADDITION, 'Added participant from Participant Center dashboard.')
 
                         if account_password:
                             transaction.on_commit(
@@ -3874,7 +3903,10 @@ def dashboard_participant_center(request):
             return redirect(redirect_url)
 
         if action == 'deny':
+            denied_participants = list(selected_participants)
             updated = selected_participants.update(approved=False, denied=True)
+            for participant in denied_participants:
+                dashboard_log_action(request, participant, CHANGE, 'Denied participant from Participant Center dashboard.')
             messages.success(request, f'{updated} participant(s) denied.')
             return redirect(redirect_url)
 
@@ -4106,21 +4138,25 @@ def dashboard_payment_center(request):
                     if invoice_number:
                         payment_record.merchant_invoice_number = invoice_number
                     payment_record.save()
+                    dashboard_log_action(request, payment_record, CHANGE, 'Updated event payment from Payment Center dashboard.')
                     messages.success(request, f'Event payment updated for {payment_record.participant.name}.')
                 elif payment_action == 'generate_invoice':
                     if payment_record.invoice:
                         messages.info(request, f'Invoice already exists for {payment_record.participant.name}. Use View invoice.')
                     else:
                         _generate_event_payment_invoice(payment_record)
+                        dashboard_log_action(request, payment_record, CHANGE, 'Generated event invoice from Payment Center dashboard.')
                         messages.success(request, f'Invoice generated for {payment_record.participant.name}.')
                 elif payment_action == 'refresh_invoice_qr':
                     _generate_event_payment_invoice(payment_record)
+                    dashboard_log_action(request, payment_record, CHANGE, 'Refreshed event invoice QR from Payment Center dashboard.')
                     messages.success(request, f'QR code created and invoice refreshed for {payment_record.participant.name}.')
                 elif payment_action == 'email_invoice':
                     if not payment_record.invoice:
                         messages.error(request, 'Generate the invoice first, then email it.')
                     else:
                         _send_event_payment_invoice_email(payment_record)
+                        dashboard_log_action(request, payment_record, CHANGE, 'Sent event invoice email from Payment Center dashboard.')
                         messages.success(request, f'Invoice email sent to {payment_record.participant.email}.')
 
             elif payment_source == 'membership':
@@ -4138,6 +4174,7 @@ def dashboard_payment_center(request):
                     if invoice_number:
                         payment_record.merchant_invoice_number = invoice_number
                     payment_record.save()
+                    dashboard_log_action(request, payment_record, CHANGE, 'Updated membership payment from Payment Center dashboard.')
                     if payment_record.status == 'completed' and previous_status != 'completed':
                         activated = _activate_membership_for_completed_payment(payment_record)
                         if activated:
@@ -4151,11 +4188,13 @@ def dashboard_payment_center(request):
                         messages.info(request, f'Membership invoice already exists for {payment_record.user_profile.name}. Use View invoice.')
                     else:
                         _generate_membership_payment_invoice(payment_record)
+                        dashboard_log_action(request, payment_record, CHANGE, 'Generated membership invoice from Payment Center dashboard.')
                         messages.success(request, f'Membership invoice generated for {payment_record.user_profile.name}.')
                 elif payment_action == 'email_invoice':
                     if not payment_record.invoice:
                         messages.error(request, 'Generate the membership invoice first, then email it.')
                     elif send_membership_invoice_email(payment_record):
+                        dashboard_log_action(request, payment_record, CHANGE, 'Sent membership invoice email from Payment Center dashboard.')
                         messages.success(request, f'Membership invoice email sent to {payment_record.user_profile.email}.')
                     else:
                         messages.error(request, 'Could not send membership invoice email. Check invoice file and email settings.')
@@ -4359,6 +4398,7 @@ def dashboard_registration_kit_center(request):
                 payment_record = get_object_or_404(eligible_payments, pk=request.POST.get('payment_id'))
                 kit, issued_now = _issue_registration_kit(payment_record)
                 if issued_now:
+                    dashboard_log_action(request, kit, CHANGE, 'Issued registration kit from Kit Center dashboard.')
                     messages.success(request, f'Registration kit issued to {payment_record.participant.name} at {kit.issued_at:%b %d, %Y %I:%M %p}.')
                 else:
                     messages.info(request, f'Registration kit was already issued to {payment_record.participant.name}.')
@@ -4391,6 +4431,7 @@ def dashboard_registration_kit_center(request):
                         payment_record = matches[0]
                         kit, issued_now = _issue_registration_kit(payment_record)
                         if issued_now:
+                            dashboard_log_action(request, kit, CHANGE, 'Issued registration kit by QR scan from Kit Center dashboard.')
                             messages.success(request, f'Scanned and issued kit to {payment_record.participant.name} at {kit.issued_at:%b %d, %Y %I:%M %p}.')
                         else:
                             messages.info(request, f'{payment_record.participant.name} already received a kit at {kit.issued_at:%b %d, %Y %I:%M %p}.')
@@ -4711,6 +4752,7 @@ def dashboard_bulk_email_center(request):
                     created_by=request.user,
                 )
                 redirect_campaign_id = campaign.id
+                dashboard_log_action(request, campaign, ADDITION, 'Created bulk email campaign from Bulk Email Center dashboard.')
                 messages.success(request, f'Campaign "{campaign.subject}" created. Prepare recipients when ready.')
 
         elif action == 'create_group':
@@ -4725,6 +4767,7 @@ def dashboard_bulk_email_center(request):
                     group.name = name
                     group.email_addresses = email_addresses
                     group.save(update_fields=['name', 'email_addresses'])
+                    dashboard_log_action(request, group, CHANGE, 'Updated email group from Bulk Email Center dashboard.')
                     messages.success(request, f'Email group "{group.name}" updated.')
                 else:
                     group, created = EmailGroup.objects.get_or_create(
@@ -4732,10 +4775,12 @@ def dashboard_bulk_email_center(request):
                         defaults={'email_addresses': email_addresses},
                     )
                     if created:
+                        dashboard_log_action(request, group, ADDITION, 'Created email group from Bulk Email Center dashboard.')
                         messages.success(request, f'Email group "{group.name}" created.')
                     else:
                         group.email_addresses = email_addresses
                         group.save(update_fields=['email_addresses'])
+                        dashboard_log_action(request, group, CHANGE, 'Updated email group from Bulk Email Center dashboard.')
                         messages.success(request, f'Email group "{group.name}" updated.')
 
         elif action == 'prepare_recipients':
@@ -4744,6 +4789,7 @@ def dashboard_bulk_email_center(request):
                 messages.error(request, 'Choose a valid campaign first.')
             else:
                 added = prepare_bulk_email_recipients(campaign)
+                dashboard_log_action(request, campaign, CHANGE, f'Prepared bulk email recipients from dashboard. New recipients added: {added}.')
                 messages.success(request, f'Recipient preparation complete. New recipients added: {added}.')
 
         elif action == 'add_manual_recipient':
@@ -4760,6 +4806,7 @@ def dashboard_bulk_email_center(request):
             ):
                 campaign.status = BulkEmail.STATUS_RECIPIENTS_READY
                 campaign.save(update_fields=['status', 'updated_at'])
+                dashboard_log_action(request, campaign, CHANGE, f'Added manual recipient {email} from Bulk Email Center dashboard.')
                 messages.success(request, f'{email} added to this campaign.')
             else:
                 messages.warning(request, 'That email is invalid or already exists in this campaign.')
@@ -4778,6 +4825,7 @@ def dashboard_bulk_email_center(request):
                     campaign.status = BulkEmail.STATUS_SENDING
                     campaign.save(update_fields=['status', 'updated_at'])
                     task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
+                    dashboard_log_action(request, campaign, CHANGE, f'Queued bulk email send from dashboard for {pending_recipients.count()} pending recipients.')
                     messages.success(
                         request,
                         f'Bulk email send queued for {pending_recipients.count()} pending recipients. Task ID: {task.id}.',
@@ -5157,6 +5205,7 @@ def dashboard_program_session_builder(request):
                         program_day = day_form.save(commit=False)
                         program_day.event = selected_event
                         program_day.save()
+                        dashboard_log_action(request, program_day, ADDITION, 'Added program day from Program builder dashboard.')
                         messages.success(request, f'Program day "{program_day.name}" added.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'edit_day':
@@ -5178,6 +5227,7 @@ def dashboard_program_session_builder(request):
                             day_edit_form.add_error(None, 'Another program day already uses this name and date.')
                         else:
                             program_day = day_edit_form.save()
+                            dashboard_log_action(request, program_day, CHANGE, 'Updated program day from Program builder dashboard.')
                             messages.success(request, f'Program day "{program_day.name}" updated.')
                             return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'delete_day':
@@ -5190,6 +5240,7 @@ def dashboard_program_session_builder(request):
                 elif TimeSlot.objects.filter(program_day=deleting_day).exists() or ProgramSession.objects.filter(program_day=deleting_day).exists():
                     messages.error(request, 'This program day already has slots or sessions. Edit it instead, or clear those schedule records first.')
                 else:
+                    dashboard_log_action(request, deleting_day, DELETION, 'Removed program day from Program builder dashboard.')
                     day_name = deleting_day.name
                     deleting_day.delete()
                     messages.success(request, f'Program day "{day_name}" removed.')
@@ -5208,6 +5259,7 @@ def dashboard_program_session_builder(request):
                         hall_room.event = selected_event
                         hall_room.location = (selected_event.location or selected_event.name)[:50]
                         hall_room.save()
+                        dashboard_log_action(request, hall_room, ADDITION, 'Added hall room from Program builder dashboard.')
                         messages.success(request, f'Hall room "{hall_room.name}" added.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'edit_room':
@@ -5228,6 +5280,7 @@ def dashboard_program_session_builder(request):
                             hall_edit_form.add_error(None, 'Another hall room already uses this name.')
                         else:
                             hall_room = hall_edit_form.save()
+                            dashboard_log_action(request, hall_room, CHANGE, 'Updated hall room from Program builder dashboard.')
                             messages.success(request, f'Hall room "{hall_room.name}" updated.')
                             return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'delete_room':
@@ -5240,6 +5293,7 @@ def dashboard_program_session_builder(request):
                 elif TimeSlot.objects.filter(hall_room=deleting_room).exists() or ProgramSession.objects.filter(hall_room=deleting_room).exists():
                     messages.error(request, 'This hall room already has slots or sessions. Edit it instead, or clear those schedule records first.')
                 else:
+                    dashboard_log_action(request, deleting_room, DELETION, 'Removed hall room from Program builder dashboard.')
                     room_name = deleting_room.name
                     deleting_room.delete()
                     messages.success(request, f'Hall room "{room_name}" removed.')
@@ -5255,6 +5309,7 @@ def dashboard_program_session_builder(request):
                         slot_form.add_error(None, exc)
                     else:
                         time_slot.save()
+                        dashboard_log_action(request, time_slot, ADDITION, 'Added time slot from Program builder dashboard.')
                         messages.success(request, f'Time slot "{time_slot}" added.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'edit_slot':
@@ -5279,6 +5334,7 @@ def dashboard_program_session_builder(request):
                             slot_edit_form.add_error(None, exc)
                         else:
                             time_slot.save()
+                            dashboard_log_action(request, time_slot, CHANGE, 'Updated time slot from Program builder dashboard.')
                             messages.success(request, f'Time slot "{time_slot}" updated.')
                             return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
             elif setup_action == 'generate_slots':
@@ -5372,6 +5428,7 @@ def dashboard_program_session_builder(request):
                             for time_slot, talk_slot_minutes in pending_slots:
                                 time_slot.save()
                                 create_talk_slots(time_slot, talk_slot_minutes)
+                                dashboard_log_action(request, time_slot, ADDITION, 'Generated time slot from Program builder dashboard.')
                         messages.success(request, f'{len(pending_slots)} generated time slot(s) saved.')
                         return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
                     if not pending_slots and not any(form.errors for form in generated_slot_formset):
@@ -5381,6 +5438,7 @@ def dashboard_program_session_builder(request):
                 if person_form.is_valid():
                     person = person_form.save()
                     person.events.add(selected_event)
+                    dashboard_log_action(request, person, ADDITION, f'Added program person to {selected_event.name} from Program builder dashboard.')
                     messages.success(request, f'Program person "{person.name}" added to {selected_event.name}.')
                     return redirect(
                         f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}&program_person_modal=1"
@@ -5396,6 +5454,7 @@ def dashboard_program_session_builder(request):
                     elif person:
                         person.events.add(selected_event)
                         action = 'added from profile' if created else 'ready from profile'
+                        dashboard_log_action(request, person, ADDITION if created else CHANGE, f'Added profile-linked program person to {selected_event.name} from Program builder dashboard.')
                         messages.success(request, f'Program person "{person.name}" is {action} for {selected_event.name}.')
                         return redirect(
                             f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}&program_person_modal=1"
@@ -5409,6 +5468,7 @@ def dashboard_program_session_builder(request):
                 else:
                     removed_roles = remove_program_person_from_event(removing_person, selected_event)
                     if removed_roles:
+                        dashboard_log_action(request, removing_person, CHANGE, f'Removed program person roles from {selected_event.name} in Program builder dashboard.')
                         messages.success(
                             request,
                             f'{removing_person.name} removed from {selected_event.name} program roles. '
@@ -5465,6 +5525,7 @@ def dashboard_program_session_builder(request):
                             missing_assignment_count += 1
 
                 if sent_count:
+                    dashboard_log_action(request, selected_event, CHANGE, f'Sent program details email to {sent_count} program person(s) from Program builder dashboard.')
                     messages.success(request, f'Program details email sent to {sent_count} person(s) for {selected_event.name}.')
                 if missing_email_count:
                     messages.warning(request, f'{missing_email_count} selected program person(s) were skipped because email is missing.')
@@ -5476,7 +5537,10 @@ def dashboard_program_session_builder(request):
             elif setup_action == 'delete_session':
                 session_id = request.POST.get('session_id')
                 if session_id:
-                    ProgramSession.objects.filter(pk=session_id, event=selected_event).delete()
+                    deleting_session = ProgramSession.objects.filter(pk=session_id, event=selected_event).first()
+                    if deleting_session:
+                        dashboard_log_action(request, deleting_session, DELETION, 'Deleted program session from Program builder dashboard.')
+                        deleting_session.delete()
                     messages.success(request, 'Program session successfully deleted.')
                 return redirect(f"{reverse('dashboard_program_session_builder')}?event={selected_event.id}")
 
@@ -5603,6 +5667,12 @@ def dashboard_program_session_builder(request):
                         item_count += 1
 
                 action_label = 'updated' if session_instance else 'created'
+                dashboard_log_action(
+                    request,
+                    session,
+                    CHANGE if session_instance else ADDITION,
+                    f'Program session {action_label} from Program builder dashboard with {item_count} item(s).',
+                )
                 messages.success(request, f'Program session "{session.title}" {action_label} with {item_count} item(s).')
                 return redirect(f"{reverse('dashboard_program_session_builder')}?event={session.event_id}")
     else:

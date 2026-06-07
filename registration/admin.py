@@ -1,5 +1,7 @@
 from django.db.models import Q
 from django.contrib import admin
+from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
 from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
@@ -27,6 +29,20 @@ from .program_emails import send_program_assignment_email
 import time
 
 User = get_user_model()  # Getting the user model.
+
+
+def write_admin_audit_log(request, obj, action_flag=CHANGE, message='Updated from admin workflow.'):
+    if not obj or not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return
+    content_type = ContentType.objects.get_for_model(obj, for_concrete_model=False)
+    LogEntry.objects.create(
+        user_id=request.user.pk,
+        content_type_id=content_type.pk,
+        object_id=str(obj.pk),
+        object_repr=str(obj)[:200],
+        action_flag=action_flag,
+        change_message=message,
+    )
 
 class UserProfileAdmin(ImportExportModelAdmin):
     list_display = ('user', 'name', 'phone', 'country')
@@ -100,9 +116,10 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
             user.set_unusable_password()
             user.first_name = obj.contact_name[:150]
             user.save()
+            write_admin_audit_log(request, user, ADDITION, "Created corporate login user from corporate access approval.")
             created_user = True
 
-        corporate_account, _ = CorporateAccount.objects.update_or_create(
+        corporate_account, account_created = CorporateAccount.objects.update_or_create(
             user=user,
             defaults={
                 'source_request': obj,
@@ -114,6 +131,12 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
                 'status': 'approved',
                 'approved_at': timezone.now(),
             }
+        )
+        write_admin_audit_log(
+            request,
+            corporate_account,
+            ADDITION if account_created else CHANGE,
+            "Created or updated corporate account from corporate access approval.",
         )
         return corporate_account, created_user
 
@@ -230,6 +253,8 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
     def approve_all_pending_attendees(self, request, queryset):
         attendees = CorporateEventAttendee.objects.filter(registration__in=queryset, review_status='pending')
         approved_count = approve_corporate_attendees(request, attendees)
+        for corporate_registration in queryset:
+            self.log_change(request, corporate_registration, "Approved all pending attendees from corporate registration admin action.")
         self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
     approve_all_pending_attendees.short_description = 'Step 2 - Approve all pending attendees and email participants'  # type: ignore
 
@@ -238,11 +263,13 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
         emailed_count = 0
         skipped_count = 0
         for corporate_registration in queryset:
-            payment, created, reason = create_corporate_payment_for_registration(corporate_registration)
+            payment, created, reason = create_corporate_payment_for_registration(corporate_registration, request=request)
             if created:
                 created_count += 1
+                self.log_addition(request, payment, "Created corporate payment invoice from admin action.")
                 if send_corporate_invoice_email(payment, request):
                     emailed_count += 1
+                    self.log_change(request, payment, "Sent corporate invoice email from admin action.")
             else:
                 skipped_count += 1
                 if reason:
@@ -259,6 +286,8 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
             if instance.pk:
                 old_status = CorporateEventAttendee.objects.filter(pk=instance.pk).values_list('review_status', flat=True).first()
             instance.save()
+            if isinstance(instance, CorporateEventAttendee):
+                self.log_change(request, instance, "Changed corporate attendee row from inline admin form.")
             if (
                 isinstance(instance, CorporateEventAttendee)
                 and instance.review_status == 'approved'
@@ -268,6 +297,8 @@ class CorporateEventRegistrationAdmin(admin.ModelAdmin):
                 approved_attendee_ids.append(instance.pk)
 
         for deleted_object in formset.deleted_objects:
+            if isinstance(deleted_object, CorporateEventAttendee):
+                self.log_change(request, deleted_object, "Deleted corporate attendee row from inline admin form.")
             deleted_object.delete()
         formset.save_m2m()
 
@@ -297,11 +328,16 @@ class CorporateEventAttendeeAdmin(admin.ModelAdmin):
 
     def approve_selected_attendees(self, request, queryset):
         approved_count = approve_corporate_attendees(request, queryset)
+        for attendee in queryset:
+            self.log_change(request, attendee, "Approved corporate attendee from admin action.")
         self.message_user(request, f'{approved_count} corporate attendee(s) approved and notified.')
     approve_selected_attendees.short_description = 'Step 2 - Approve selected attendees and email participants'  # type: ignore
 
     def deny_selected_attendees(self, request, queryset):
+        attendees = list(queryset)
         updated = queryset.update(review_status='denied')
+        for attendee in attendees:
+            self.log_change(request, attendee, "Denied corporate attendee from admin action.")
         self.message_user(request, f'{updated} corporate attendee(s) denied.')
     deny_selected_attendees.short_description = 'Deny selected attendees'  # type: ignore
 
@@ -317,6 +353,7 @@ class CorporateEventAttendeeAdmin(admin.ModelAdmin):
                 request,
                 CorporateEventAttendee.objects.filter(pk=obj.pk)
             )
+            self.log_change(request, obj, "Approved corporate attendee from admin change form.")
             self.message_user(request, f'{approved_count} attendee converted to participant and notified.')
 
 
@@ -350,6 +387,7 @@ class CorporatePaymentAdmin(admin.ModelAdmin):
         generated = 0
         for corporate_payment in queryset.prefetch_related('attendees'):
             generate_corporate_invoice(corporate_payment)
+            self.log_change(request, corporate_payment, "Regenerated corporate invoice PDF from admin action.")
             generated += 1
         self.message_user(request, f'{generated} corporate invoice PDF(s) generated.')
     regenerate_invoice_pdf.short_description = 'Regenerate corporate invoice PDF'  # type: ignore
@@ -358,6 +396,7 @@ class CorporatePaymentAdmin(admin.ModelAdmin):
         sent = 0
         for corporate_payment in queryset.select_related('corporate_registration', 'corporate_account', 'event').prefetch_related('attendees'):
             if send_corporate_invoice_email(corporate_payment, request):
+                self.log_change(request, corporate_payment, "Sent corporate invoice email from admin action.")
                 sent += 1
         self.message_user(request, f'{sent} corporate invoice email(s) sent.')
     send_invoice_email_to_corporate.short_description = 'Send corporate invoice email'  # type: ignore
@@ -543,7 +582,7 @@ def update_corporate_registration_status(corporate_registration):
     corporate_registration.save(update_fields=['status', 'total_attendees', 'updated_at'])
 
 
-def create_corporate_payment_for_registration(corporate_registration):
+def create_corporate_payment_for_registration(corporate_registration, request=None):
     approved_attendees = CorporateEventAttendee.objects.filter(
         registration=corporate_registration,
         review_status='approved',
@@ -596,10 +635,14 @@ def create_corporate_payment_for_registration(corporate_registration):
     corporate_payment.attendees.set(invoice_attendees)
 
     if total_amount == 0:
-        PaymentStatus.objects.filter(
+        zero_fee_payments = list(PaymentStatus.objects.filter(
             participant__corporate_attendee__in=invoice_attendees,
             event=corporate_registration.event,
-        ).update(status='completed')
+        ))
+        for payment_status in zero_fee_payments:
+            payment_status.status = 'completed'
+            payment_status.save(update_fields=['status', 'updated_at'])
+            write_admin_audit_log(request, payment_status, CHANGE, "Completed zero-fee corporate payment row during invoice creation.")
 
     generate_corporate_invoice(corporate_payment)
     return corporate_payment, True, ''
@@ -694,6 +737,7 @@ def approve_corporate_attendees(request, queryset):
         if not user:
             password = get_random_string(length=12)
             user = User.objects.create_user(username=attendee.email, email=attendee.email, password=password)
+            write_admin_audit_log(request, user, ADDITION, "Created user while approving corporate attendee.")
             include_password = True
         elif not attendee.matched_user_id:
             attendee.matched_user = user
@@ -724,8 +768,10 @@ def approve_corporate_attendees(request, queryset):
             for field, value in participant_defaults.items():
                 setattr(participant, field, value)
             participant.save()
+            write_admin_audit_log(request, participant, CHANGE, "Updated participant while approving corporate attendee.")
         else:
             participant = Participant.objects.create(event=event, **participant_defaults)
+            write_admin_audit_log(request, participant, ADDITION, "Created participant while approving corporate attendee.")
 
         payable_amount = participant.get_payable_amount()
         payment_status, _ = PaymentStatus.objects.get_or_create(
@@ -742,6 +788,7 @@ def approve_corporate_attendees(request, queryset):
             if payment_status.status not in ['completed', 'paid']:
                 payment_status.status = 'unpaid'
             payment_status.save()
+            write_admin_audit_log(request, payment_status, CHANGE, "Created or updated event payment row for corporate attendee.")
             send_corporate_attendee_approval_email(
                 participant,
                 event,
@@ -753,6 +800,7 @@ def approve_corporate_attendees(request, queryset):
         else:
             payment_status.status = 'completed'
             payment_status.save()
+            write_admin_audit_log(request, payment_status, CHANGE, "Completed zero-fee event payment row for corporate attendee.")
             send_corporate_attendee_approval_email(
                 participant,
                 event,
@@ -765,6 +813,7 @@ def approve_corporate_attendees(request, queryset):
         attendee.participant = participant
         attendee.review_status = 'approved'
         attendee.save(update_fields=['matched_user', 'participant', 'review_status', 'updated_at'])
+        write_admin_audit_log(request, attendee, CHANGE, "Approved corporate attendee and linked participant.")
         touched_registrations.add(attendee.registration_id)
         approved_count += 1
 
@@ -876,10 +925,15 @@ def approve_participants(modeladmin, request, queryset):
             )
         approved_count += 1
         queued_count += int(bool(email_queued))
+        modeladmin.log_change(request, participant, "Approved participant from admin action.")
+        modeladmin.log_change(request, payment_status, "Created or updated payment row during participant approval admin action.")
     modeladmin.message_user(request, f'{approved_count} participant(s) approved. {queued_count} approval email(s) queued.', messages.SUCCESS)
 
 def deny_participants(modeladmin, request, queryset):
+    participants = list(queryset)
     queryset.update(denied=True, approved=False)
+    for participant in participants:
+        modeladmin.log_change(request, participant, "Denied participant from admin action.")
 
 approve_participants.short_description = "Approve selected participants"
 deny_participants.short_description = "Deny selected participants"
@@ -967,18 +1021,22 @@ admin.site.register(ProgramDay, ProgramDayAdmin)
 
 # Abstracts admin view START------------------------------------------------------------------------------#
 def approve_for_presentation(modeladmin, request, queryset):
+    abstracts = list(queryset)
     queryset.update(approved_for_presentation=True, approved_for_poster=False)
 
     # send an approval email
-    for abstract in queryset:
+    for abstract in abstracts:
         send_approval_email(abstract, "Presentation")
+        modeladmin.log_change(request, abstract, "Approved abstract for presentation from admin action.")
 
 def approve_for_poster(modeladmin, request, queryset):
+    abstracts = list(queryset)
     queryset.update(approved_for_poster=True, approved_for_presentation=False)
 
     # send an approval email
-    for abstract in queryset:
+    for abstract in abstracts:
         send_approval_email(abstract, "Poster")
+        modeladmin.log_change(request, abstract, "Approved abstract for poster from admin action.")
 def export_as_pdf(modeladmin, request, queryset):
     if queryset.exists():
         event = queryset.first().event
@@ -1063,6 +1121,7 @@ class ProgramScheduleAdmin(admin.ModelAdmin):
                 email.send()
                 schedule.email_sent = True
                 schedule.save()
+                self.log_change(request, schedule, "Sent program schedule email from admin action.")
                 self.message_user(request, f"Email sent to participant for schedule: {schedule.title}")
             except Exception as e:
                 messages.error(request, f"Failed to send email for schedule: {schedule.title}. Error: {e}")
@@ -1138,6 +1197,7 @@ class ProgramPersonAdmin(admin.ModelAdmin):
                 sent, reason = send_program_assignment_email(person)
                 if sent:
                     sent_count += 1
+                    self.log_change(request, person, "Sent program details email from admin action.")
                 elif reason == 'missing_email':
                     missing_email_count += 1
                 else:
@@ -1438,11 +1498,12 @@ class ThankYouEmailAdmin(admin.ModelAdmin):
                 continue  
 
             if not ThankYouEmail.objects.filter(registration_kit=kit).exists():
-                ThankYouEmail.objects.create(
+                thank_you_email = ThankYouEmail.objects.create(
                     registration_kit=kit,
                     subject=event.email_subject,
                     body=event.email_body,
                 )
+                self.log_addition(request, thank_you_email, "Created thank-you email row from admin action.")
                 created_count += 1
 
         self.message_user(request, f"Created {created_count} Thank You Emails.", messages.SUCCESS)
@@ -1455,6 +1516,7 @@ class ThankYouEmailAdmin(admin.ModelAdmin):
         for email_obj in queryset:
             if not email_obj.email_sent:
                 email_obj.send_email()
+                self.log_change(request, email_obj, "Sent thank-you email from admin action.")
                 count += 1
         self.message_user(request, f"Successfully sent {count} thank-you emails.", messages.SUCCESS)
 
@@ -1818,6 +1880,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
         prepared = 0
         for bulk_email in queryset:
             prepared += self._prepare_recipients(bulk_email)
+            self.log_change(request, bulk_email, "Prepared bulk email recipients from admin action.")
         self.message_user(request, f"Prepared recipient lists. New valid recipients found: {prepared}.")
     prepare_recipients_from_audience.short_description = "Step 1 - Prepare recipients from selected audience"
 
@@ -1869,6 +1932,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
                 bulk_email.status = BulkEmail.STATUS_SENDING
                 bulk_email.save(update_fields=['status', 'updated_at'])
                 send_pending_bulk_email_campaign.delay(bulk_email.id, request.user.id)
+                self.log_change(request, bulk_email, "Queued bulk email campaign send from admin action.")
                 queued += 1
         self.message_user(request, f"Queued {queued} bulk email campaign(s). The Celery worker will send pending recipients.")
     send_pending_recipients.short_description = "Step 2 - Send pending recipients individually"
@@ -1904,6 +1968,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
             recipients=', '.join(recipients),  # Convert recipient list to comma-separated string
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )
+        self.log_change(request, bulk_email, "Sent bulk email to active users from admin action.")
 
         # Notify admin of success
         self.message_user(request, f"Email sent to {len(recipients)} active users and logged successfully.")
@@ -1946,6 +2011,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
                 attachment=bulk_email.attachment,
             )
 
+            self.log_change(request, bulk_email, f"Sent bulk email to email group: {group.name}.")
             self.message_user(request, f"Email sent to group '{group.name}'.")
             return HttpResponseRedirect(request.get_full_path())
 
@@ -2057,7 +2123,7 @@ class PendingPaymentReminderAdmin(admin.ModelAdmin):
                     print(f"Checking participant {participant.name} with payment status: {payment_status.status if payment_status else 'No Status'}")  # Debugging log
 
                     if not payment_status or payment_status.status not in ['paid', 'completed']:
-                        PendingPaymentReminder.objects.create(
+                        reminder = PendingPaymentReminder.objects.create(
                             participant=participant,
                             event=event,
                             payment_link=reverse('registration:payment', kwargs={
@@ -2065,6 +2131,7 @@ class PendingPaymentReminderAdmin(admin.ModelAdmin):
                                 'participant_id': participant.id
                             })
                         )
+                        self.log_addition(request, reminder, "Created pending payment reminder from admin action.")
                         print(f"Added {participant.name} to PendingPaymentReminder.")  # Debugging log
                         added_count += 1
                     else:
@@ -2119,6 +2186,7 @@ class PendingPaymentReminderAdmin(admin.ModelAdmin):
                 reminder.reminder_count += 1
                 reminder.last_reminder_sent = now()
                 reminder.save()
+                self.log_change(request, reminder, "Sent payment reminder from admin action.")
                 success_count += 1
 
             except Exception as e:
@@ -2130,3 +2198,48 @@ class PendingPaymentReminderAdmin(admin.ModelAdmin):
     send_payment_reminders.short_description = "Send Payment Reminders"
 
 # Pending Payment Reminder Admin ends here ----------------------------------------------------------#
+
+from django.contrib import admin
+from django.contrib.admin.models import LogEntry
+
+
+@admin.register(LogEntry)
+class LogEntryAdmin(admin.ModelAdmin):
+    list_display = (
+        "action_time",
+        "user",
+        "action_type",
+        "content_type",
+        "object_repr",
+    )
+
+    list_filter = (
+        "user",
+        "content_type",
+        "action_flag",
+        "action_time",
+    )
+
+    search_fields = (
+        "object_repr",
+        "change_message",
+        "user__username",
+    )
+
+    ordering = ("-action_time",)
+
+    readonly_fields = [field.name for field in LogEntry._meta.fields]
+
+    def action_type(self, obj):
+        return obj.get_action_flag_display()
+
+    action_type.short_description = "Action"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

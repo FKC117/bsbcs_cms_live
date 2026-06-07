@@ -51,7 +51,7 @@
             </div>
             <div class="flex flex-wrap gap-2">
                 <a href="{% url 'global_dashboard' %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Dashboard</a>
-                <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Abstracts</a>
+                <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Abstracts approval</a>
                 <a href="{% url 'admin:registration_participant_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font-bold text-bsbcs-navy shadow-sm hover:bg-slate-100">Admin List</a>
             </div>
         </div>
@@ -261,7 +261,7 @@
                                         <div class="flex flex-col gap-2">
                                             <a href="{% url 'admin:registration_participant_change' participant.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Admin Edit</a>
                                             {% if participant.payment_statuses %}
-                                                <a href="{% url 'admin:registration_paymentstatus_change' participant.payment_statuses.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Payment Row</a>
+                                                <a href="{% url 'dashboard_payment_center' %}?source=event&amp;status=all&amp;event={{ participant.event.id }}&amp;q={{ participant.email|urlencode }}" class="rounded-lg border border-line px-3 py-2 text-center text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Manage Payment</a>
                                             {% endif %}
                                         </div>
                                     </td>

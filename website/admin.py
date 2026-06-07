@@ -246,6 +246,7 @@ class MemberAdmin(admin.ModelAdmin):
             member.approved_at = timezone.now()
             # Signal will handle the email send since approval_status is in update_fields
             member.save(update_fields=['approval_status', 'approved_at'])
+            self.log_change(request, member, 'Approved member from admin action.')
             
             logger.info(f"[ADMIN ACTION] Member saved, signal should trigger email for: {member.approval_status}")
             count += 1
@@ -279,6 +280,7 @@ class MemberAdmin(admin.ModelAdmin):
             member.approval_status = 'rejected'
             member.rejected_at = timezone.now()
             member.save(update_fields=['approval_status', 'rejected_at'])
+            self.log_change(request, member, 'Rejected member from admin action.')
             logger.info(f"[ADMIN ACTION] Member saved, checking new status: {member.approval_status}")
             count += 1
         

@@ -38,8 +38,8 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <a href="{% url 'admin:registration_event_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Events</a>
-                    <a href="{% url 'admin:registration_participant_changelist' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Participants</a>
-                    <a href="{% url 'dashboard_payment_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Payments</a>
+                    <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Participants management</a>
+                    <a href="{% url 'dashboard_payment_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-lg border border-white/25 px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10">Payments Management</a>
                     <a href="{% url 'admin:index' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-white px-3 py-2 text-sm font800 font-semibold text-bsbcs-navy shadow-sm hover:bg-slate-100">Django Admin</a>
                 </div>
             </div>
