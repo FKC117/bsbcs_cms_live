@@ -320,7 +320,6 @@ def build_public_participant_list_context(request, event):
         Participant.objects
         .filter(event=event, approved=True, payment_statuses__status='completed')
         .select_related('department', 'corporate_attendee', 'user__userprofile', 'user__userprofile__member')
-        .order_by('name', 'id')
     )
     if search_query:
         participants = participants.filter(
