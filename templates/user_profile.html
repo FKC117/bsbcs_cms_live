@@ -55,6 +55,15 @@
             {% if message %}
                 <div class="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-800">{{ message }}</div>
             {% endif %}
+            {% if messages %}
+                <div class="mb-6 space-y-2">
+                    {% for django_message in messages %}
+                        <div class="rounded-xl border px-4 py-3 text-sm font-bold {% if django_message.tags == 'success' %}border-green-200 bg-green-50 text-green-800{% elif django_message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}">
+                            {{ django_message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
 
             <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div class="grid gap-5 p-5 lg:grid-cols-[1.35fr_0.9fr] lg:p-7">
@@ -112,6 +121,7 @@
                     <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="member-zone">Member Zone</button>
                     <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="my-events">My Events</button>
                     <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="abstracts">Abstracts</button>
+                    <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="presentations">Presentations</button>
                     <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="payments">Payments</button>
                     <button class="profile-tab rounded-xl px-4 py-3 text-sm font-bold" data-tab-target="settings">Profile Settings</button>
                 </div>
@@ -380,6 +390,68 @@
                 </section>
             </section>
 
+            <section id="presentations" class="profile-panel mt-6 hidden">
+                <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-widest text-blue-700">Presentation Upload</p>
+                            <h2 class="mt-1 text-xl font-bold">Upload slides for your event roles</h2>
+                            <p class="mt-2 max-w-3xl text-sm leading-6 text-gray-600">Eligible uploads are shown when you submitted an abstract or when the program team added you as a speaker, presenter, chairperson, moderator, or panelist for an event.</p>
+                        </div>
+                        <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{{ presentation_assignments|length }} assignment{{ presentation_assignments|length|pluralize }}</span>
+                    </div>
+
+                    <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                        {% for assignment in presentation_assignments %}
+                            <article class="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="text-xs font-bold uppercase tracking-widest text-gray-500">{{ assignment.event.name }} {{ assignment.event.year }}</p>
+                                        <h3 class="mt-1 text-lg font-bold leading-snug text-gray-950">{{ assignment.title }}</h3>
+                                        <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                                            <span class="rounded-full bg-blue-100 px-3 py-1 text-blue-700">{{ assignment.role }}</span>
+                                            <span class="rounded-full bg-white px-3 py-1 text-gray-700 ring-1 ring-gray-200">{{ assignment.status_label }}</span>
+                                        </div>
+                                        <p class="mt-3 text-sm text-gray-600">{{ assignment.time_label }}</p>
+                                    </div>
+                                    {% if assignment.file %}
+                                        <a href="{{ assignment.file.url }}" target="_blank" rel="noopener noreferrer" class="shrink-0 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">View file</a>
+                                    {% endif %}
+                                </div>
+
+                                {% if assignment.file %}
+                                    <p class="mt-4 rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+                                        File uploaded{% if assignment.uploaded_at %} on {{ assignment.uploaded_at|date:"M d, Y h:i A" }}{% endif %}. Upload again to replace or update for the event team.
+                                    </p>
+                                {% else %}
+                                    <p class="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">No presentation file uploaded yet.</p>
+                                {% endif %}
+
+                                <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="profile_action" value="upload_presentation">
+                                    <input type="hidden" name="assignment_type" value="{{ assignment.assignment_type }}">
+                                    <input type="hidden" name="assignment_id" value="{{ assignment.assignment_id }}">
+                                    <div>
+                                        <label class="mb-2 block text-sm font-bold text-gray-700">Presentation file</label>
+                                        <input type="file" name="presentation_file" accept=".pdf,.ppt,.pptx" required class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="mb-2 block text-sm font-bold text-gray-700">Notes for event team</label>
+                                        <input type="text" name="presentation_notes" placeholder="Optional, e.g. final version, needs video/audio check" class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm">
+                                    </div>
+                                    <button type="submit" class="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">
+                                        {% if assignment.file %}Replace Presentation{% else %}Upload Presentation{% endif %}
+                                    </button>
+                                </form>
+                            </article>
+                        {% empty %}
+                            <p class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-gray-500 lg:col-span-2">No presentation upload assignment is available yet. Once an abstract is submitted or you are added to an event program, uploads will appear here.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+            </section>
+
             <section id="payments" class="profile-panel mt-6 hidden">
                 <div class="grid gap-6 lg:grid-cols-2">
                     <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -492,6 +564,17 @@
             }
         </style>
         <script>
+            function activateProfileTab(target) {
+                document.querySelectorAll('[data-tab-target]').forEach((tab) => tab.classList.remove('active'));
+                document.querySelectorAll('.profile-panel').forEach((panel) => panel.classList.add('hidden'));
+                const button = document.querySelector(`[data-tab-target="${target}"]`);
+                const panel = document.getElementById(target);
+                if (button && panel) {
+                    button.classList.add('active');
+                    panel.classList.remove('hidden');
+                }
+            }
+
             document.querySelectorAll('[data-tab-target]').forEach((button) => {
                 button.addEventListener('click', () => {
                     document.querySelectorAll('[data-tab-target]').forEach((tab) => tab.classList.remove('active'));
@@ -501,6 +584,9 @@
                     if (panel) panel.classList.remove('hidden');
                 });
             });
+
+            const requestedTab = new URLSearchParams(window.location.search).get('tab');
+            if (requestedTab) activateProfileTab(requestedTab);
         </script>
     {% endif %}
 </body>

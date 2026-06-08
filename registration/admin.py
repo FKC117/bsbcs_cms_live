@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -1350,6 +1350,24 @@ class ProgramSessionItemAdmin(admin.ModelAdmin):
             obj.faculty_roles.select_related('person').values_list('person__name', flat=True)
         )
     get_speakers.short_description = 'People'  # type: ignore
+
+
+@admin.register(PresentationUpload)
+class PresentationUploadAdmin(admin.ModelAdmin):
+    list_display = ('title', 'presenter_name', 'event', 'source_type', 'uploaded_at')
+    list_filter = ('event', 'source_type', 'uploaded_at')
+    search_fields = (
+        'title',
+        'presenter_name',
+        'user__email',
+        'program_person__name',
+        'program_person__email',
+        'abstract_submission__title',
+        'session__title',
+        'session_item__title',
+    )
+    autocomplete_fields = ('event', 'user', 'program_person', 'abstract_submission', 'session', 'session_item')
+    readonly_fields = ('uploaded_at', 'updated_at')
 
 
 class SponsorAdmin(admin.ModelAdmin):

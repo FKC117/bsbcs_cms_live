@@ -1,0 +1,209 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presentation Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Presentation workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Presentation Center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Collect speaker slides before program day.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Review abstract presenter uploads and program faculty uploads in one event-scoped place, then download selected files or the full filtered package.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_170px_auto]">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="source">Source</label>
+                        <select id="source" name="source" class="workflow-select">
+                            {% for value, label in source_choices %}
+                                <option value="{{ value }}" {% if current_filters.source == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid content-end">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search title, presenter, email, or event">
+                    <a href="{% url 'dashboard_presentation_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Rows</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.all }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Files</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.files }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Abstracts</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.abstract }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Program roles</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.program }}</div>
+            </div>
+        </section>
+
+        <form method="post" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            {% csrf_token %}
+            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Download queue</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Presentation files</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Select one or more rows for a ZIP download, or download everything that matches the current filters.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button name="presentation_action" value="download_selected" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Download selected</button>
+                    <button name="presentation_action" value="download_all_filtered" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Download filtered ZIP</button>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-xl border border-line">
+                <div class="grid grid-cols-[42px_minmax(220px,1.3fr)_minmax(180px,0.8fr)_minmax(170px,0.7fr)_140px] gap-3 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
+                    <div><input type="checkbox" aria-label="Select all" data-select-all-presentations></div>
+                    <div>Presentation</div>
+                    <div>Presenter</div>
+                    <div>Source</div>
+                    <div>File</div>
+                </div>
+                <div class="divide-y divide-line">
+                    {% for row in page_obj %}
+                        <label class="grid cursor-pointer grid-cols-[42px_minmax(220px,1.3fr)_minmax(180px,0.8fr)_minmax(170px,0.7fr)_140px] gap-3 px-4 py-4 text-sm hover:bg-blue-50/50">
+                            <div><input type="checkbox" name="selected_presentations" value="{{ row.source_key }}" class="presentation-checkbox"></div>
+                            <div class="min-w-0">
+                                <div class="font-black text-ink">{{ row.title }}</div>
+                                <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.event_label }}</div>
+                                {% if row.uploaded_at %}
+                                    <div class="mt-1 text-xs font-semibold text-slate-400">Uploaded {{ row.uploaded_at|date:"M d, Y h:i A" }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="font-bold text-ink">{{ row.presenter }}</div>
+                                <div class="truncate text-xs font-semibold text-slate-500">{{ row.email }}</div>
+                            </div>
+                            <div>
+                                <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-blue-100">{{ row.source_label }}</span>
+                                {% if row.role_label %}
+                                    <div class="mt-2 text-xs font-bold text-slate-500">{{ row.role_label }}</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if row.file %}
+                                    <a href="{{ row.file.url }}" target="_blank" rel="noopener noreferrer" class="inline-flex rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-black text-bsbcs-blue hover:bg-blue-50">View file</a>
+                                {% else %}
+                                    <span class="inline-flex rounded-lg bg-amber-50 px-3 py-2 text-xs font-black text-bsbcs-amber">Missing</span>
+                                {% endif %}
+                            </div>
+                        </label>
+                    {% empty %}
+                        <div class="rounded-xl border border-dashed border-blue-200 bg-slate-50 px-4 py-10 text-center text-sm font-bold text-slate-500">No presentation uploads match this filter.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% if page_obj.paginator.num_pages > 1 %}
+                <div class="mt-4 flex items-center justify-between gap-3 text-sm font-bold text-slate-600">
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    <div class="flex gap-2">
+                        {% if page_obj.has_previous %}
+                            <a href="?event={{ current_filters.event }}&source={{ current_filters.source }}&q={{ current_filters.q }}&page={{ page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Previous</a>
+                        {% endif %}
+                        {% if page_obj.has_next %}
+                            <a href="?event={{ current_filters.event }}&source={{ current_filters.source }}&q={{ current_filters.q }}&page={{ page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </form>
+    </main>
+</div>
+<script>
+    const selectAllPresentations = document.querySelector('[data-select-all-presentations]');
+    if (selectAllPresentations) {
+        selectAllPresentations.addEventListener('change', () => {
+            document.querySelectorAll('.presentation-checkbox').forEach((checkbox) => {
+                checkbox.checked = selectAllPresentations.checked;
+            });
+        });
+    }
+</script>
+</body>
+</html>

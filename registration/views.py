@@ -35,6 +35,7 @@ import logging
 import csv
 import io
 import os
+import zipfile
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
@@ -475,9 +476,208 @@ def corporate_account_request_done(request):
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
-from .models import UserProfile, AbstractSubmission, ProgramSchedule, Event, CorporateAccount
+from .models import UserProfile, AbstractSubmission, ProgramSchedule, Event, CorporateAccount, PresentationUpload
 from django.db.models import Q
 from website.models import SiteSettings, MembershipBenefitModal, MembershipPayment, PendingEventIntent
+
+
+def _safe_presentation_filename(*parts):
+    raw_name = '_'.join(str(part or '').strip() for part in parts if str(part or '').strip())
+    safe_name = ''.join(ch if ch.isalnum() or ch in (' ', '-', '_', '.') else '_' for ch in raw_name).strip()
+    return safe_name.replace(' ', '_') or 'presentation'
+
+
+def _user_program_people(user, user_profile):
+    identifiers = Q()
+    if user_profile:
+        identifiers |= Q(profile=user_profile)
+        if user_profile.email:
+            identifiers |= Q(email__iexact=user_profile.email)
+    if user.email:
+        identifiers |= Q(email__iexact=user.email)
+    if not identifiers:
+        return ProgramPerson.objects.none()
+    return ProgramPerson.objects.filter(identifiers).distinct()
+
+
+def _latest_presentation_upload_map(user):
+    uploads = (
+        PresentationUpload.objects.filter(user=user)
+        .select_related('event', 'abstract_submission', 'session', 'session_item', 'program_person')
+        .order_by('-uploaded_at')
+    )
+    latest = {}
+    for upload in uploads:
+        if upload.abstract_submission_id:
+            latest.setdefault(('abstract', upload.abstract_submission_id), upload)
+        if upload.session_item_id:
+            latest.setdefault(('session_item', upload.session_item_id), upload)
+        elif upload.session_id:
+            latest.setdefault(('session', upload.session_id), upload)
+    return latest
+
+
+def _build_user_presentation_assignments(user, user_profile, abstract_submissions):
+    latest_uploads = _latest_presentation_upload_map(user)
+    assignments = []
+
+    for abstract in abstract_submissions.select_related('event').order_by('-updated_at'):
+        latest = latest_uploads.get(('abstract', abstract.id))
+        assignments.append({
+            'assignment_type': 'abstract',
+            'assignment_id': abstract.id,
+            'event': abstract.event,
+            'title': abstract.title,
+            'role': 'Abstract presenter',
+            'time_label': 'Scheduled after abstract review',
+            'status_label': 'Presentation' if abstract.approved_for_presentation else ('Poster' if abstract.approved_for_poster else 'Submitted'),
+            'file': latest.file if latest else abstract.presentation_file,
+            'uploaded_at': latest.uploaded_at if latest else None,
+        })
+
+    program_people = list(_user_program_people(user, user_profile))
+    if program_people:
+        person_ids = [person.id for person in program_people]
+        item_roles = (
+            ProgramItemFaculty.objects.filter(person_id__in=person_ids)
+            .select_related(
+                'person',
+                'item',
+                'item__session',
+                'item__session__event',
+                'item__session__program_day',
+                'item__session__hall_room',
+            )
+            .order_by('item__session__event__start_date', 'item__session__start_time', 'item__order')
+        )
+        seen_items = set()
+        for role in item_roles:
+            item = role.item
+            if item.id in seen_items:
+                continue
+            seen_items.add(item.id)
+            session = item.session
+            latest = latest_uploads.get(('session_item', item.id))
+            assignments.append({
+                'assignment_type': 'session_item',
+                'assignment_id': item.id,
+                'event': session.event,
+                'title': item.display_title,
+                'role': 'Program talk / activity',
+                'time_label': (
+                    f"{session.program_day.name if session.program_day else 'Day'} · "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
+                    f"{item.start_time.strftime('%I:%M %p').lstrip('0') if item.start_time else 'Start'} - "
+                    f"{item.end_time.strftime('%I:%M %p').lstrip('0') if item.end_time else 'End'}"
+                ),
+                'status_label': role.get_role_display(),
+                'file': latest.file if latest else None,
+                'uploaded_at': latest.uploaded_at if latest else None,
+            })
+
+        session_roles = (
+            ProgramSessionFaculty.objects.filter(person_id__in=person_ids)
+            .select_related('person', 'session', 'session__event', 'session__program_day', 'session__hall_room')
+            .order_by('session__event__start_date', 'session__start_time')
+        )
+        seen_sessions = set()
+        for role in session_roles:
+            session = role.session
+            if session.id in seen_sessions:
+                continue
+            seen_sessions.add(session.id)
+            latest = latest_uploads.get(('session', session.id))
+            assignments.append({
+                'assignment_type': 'session',
+                'assignment_id': session.id,
+                'event': session.event,
+                'title': session.title,
+                'role': 'Session faculty',
+                'time_label': (
+                    f"{session.program_day.name if session.program_day else 'Day'} · "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
+                    f"{session.start_time.strftime('%I:%M %p').lstrip('0') if session.start_time else 'Start'} - "
+                    f"{session.end_time.strftime('%I:%M %p').lstrip('0') if session.end_time else 'End'}"
+                ),
+                'status_label': role.get_role_display(),
+                'file': latest.file if latest else None,
+                'uploaded_at': latest.uploaded_at if latest else None,
+            })
+
+    assignments.sort(key=lambda item: (
+        item['event'].start_date or datetime.max.date(),
+        item['title'].lower(),
+    ))
+    return assignments
+
+
+def _save_user_presentation_upload(request, user_profile):
+    presentation_file = request.FILES.get('presentation_file')
+    if not presentation_file:
+        messages.error(request, 'Please choose a PDF, PPT, or PPTX file before uploading.')
+        return redirect(f"{reverse('user_profile')}?tab=presentations")
+
+    assignment_type = request.POST.get('assignment_type')
+    assignment_id = request.POST.get('assignment_id')
+    program_people = _user_program_people(request.user, user_profile)
+    program_person = program_people.first()
+
+    upload_kwargs = {
+        'user': request.user,
+        'program_person': program_person,
+        'presenter_name': user_profile.name,
+        'file': presentation_file,
+        'notes': request.POST.get('presentation_notes', '').strip(),
+    }
+
+    if assignment_type == 'abstract':
+        abstract = get_object_or_404(AbstractSubmission, id=assignment_id, user=request.user)
+        upload_kwargs.update({
+            'event': abstract.event,
+            'abstract_submission': abstract,
+            'source_type': PresentationUpload.SOURCE_ABSTRACT,
+            'title': abstract.title,
+            'role_label': 'Abstract presenter',
+        })
+        upload = PresentationUpload.objects.create(**upload_kwargs)
+        abstract.presentation_file = upload.file.name
+        abstract.save(update_fields=['presentation_file', 'updated_at'])
+    elif assignment_type == 'session_item':
+        item = get_object_or_404(
+            ProgramSessionItem.objects.select_related('session', 'session__event'),
+            id=assignment_id,
+            faculty_roles__person__in=program_people,
+        )
+        upload_kwargs.update({
+            'event': item.session.event,
+            'session': item.session,
+            'session_item': item,
+            'source_type': PresentationUpload.SOURCE_SESSION_ITEM,
+            'title': item.display_title,
+            'role_label': 'Program talk / activity',
+        })
+        PresentationUpload.objects.create(**upload_kwargs)
+    elif assignment_type == 'session':
+        session = get_object_or_404(
+            ProgramSession.objects.select_related('event'),
+            id=assignment_id,
+            faculty_roles__person__in=program_people,
+        )
+        upload_kwargs.update({
+            'event': session.event,
+            'session': session,
+            'source_type': PresentationUpload.SOURCE_SESSION_ROLE,
+            'title': session.title,
+            'role_label': 'Session faculty',
+        })
+        PresentationUpload.objects.create(**upload_kwargs)
+    else:
+        messages.error(request, 'Presentation assignment could not be identified.')
+        return redirect(f"{reverse('user_profile')}?tab=presentations")
+
+    messages.success(request, 'Presentation uploaded successfully.')
+    return redirect(f"{reverse('user_profile')}?tab=presentations")
+
 
 @login_required
 def user_profile(request):
@@ -538,8 +738,12 @@ def user_profile(request):
     pending_event_intents = PendingEventIntent.objects.filter(user_profile=user_profile).select_related('event', 'participant').order_by('-created_at')
     member = getattr(user_profile, 'member', None)
     membership_benefits = MembershipBenefitModal.objects.filter(is_active=True).prefetch_related('benefit_items').first()
+    presentation_assignments = _build_user_presentation_assignments(request.user, user_profile, abstract_submissions)
 
     if request.method == 'POST':
+        if request.POST.get('profile_action') == 'upload_presentation':
+            return _save_user_presentation_upload(request, user_profile)
+
         user_profile.name = request.POST.get('name')
         user_profile.email = request.POST.get('email')
         user_profile.phone = request.POST.get('phone')
@@ -569,6 +773,7 @@ def user_profile(request):
         'pending_event_intents': pending_event_intents,
         'member': member,
         'membership_benefits': membership_benefits,
+        'presentation_assignments': presentation_assignments,
         'site_settings': site_settings,
     })
 
@@ -5595,6 +5800,196 @@ def dashboard_certificate_center(request):
         },
     }
     return render(request, 'dashboard_certificate_center.html', context)
+
+
+def _presentation_file_exists(file_field):
+    return bool(file_field and getattr(file_field, 'name', '') and file_field.storage.exists(file_field.name))
+
+
+def _presentation_archive_name(row):
+    file_field = row.get('file')
+    extension = os.path.splitext(getattr(file_field, 'name', '') or '')[1] or '.pptx'
+    event_label = _safe_presentation_filename(row.get('event_label'))
+    presenter_label = _safe_presentation_filename(row.get('presenter'))
+    title_label = _safe_presentation_filename(row.get('title'))[:80]
+    return f"{event_label}/{presenter_label}_{title_label}{extension}"
+
+
+def _write_presentation_zip(rows):
+    buffer = io.BytesIO()
+    added = 0
+    used_names = set()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for row in rows:
+            file_field = row.get('file')
+            if not _presentation_file_exists(file_field):
+                continue
+            archive_name = _presentation_archive_name(row)
+            if archive_name in used_names:
+                base, extension = os.path.splitext(archive_name)
+                archive_name = f"{base}_{row.get('source_key')}{extension}"
+            used_names.add(archive_name)
+            with file_field.storage.open(file_field.name, 'rb') as source_file:
+                archive.writestr(archive_name, source_file.read())
+            added += 1
+    buffer.seek(0)
+    return buffer, added
+
+
+def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
+    query_text = (query or '').strip()
+    rows = []
+
+    uploads = (
+        PresentationUpload.objects.select_related(
+            'event',
+            'user',
+            'program_person',
+            'abstract_submission',
+            'session',
+            'session_item',
+        )
+        .order_by('-uploaded_at')
+    )
+    if event_filter:
+        uploads = uploads.filter(event_id=event_filter)
+    if source_filter != 'all':
+        uploads = uploads.filter(source_type=source_filter)
+    if query_text:
+        uploads = uploads.filter(
+            Q(title__icontains=query_text)
+            | Q(presenter_name__icontains=query_text)
+            | Q(user__email__icontains=query_text)
+            | Q(program_person__name__icontains=query_text)
+            | Q(program_person__email__icontains=query_text)
+            | Q(event__name__icontains=query_text)
+        )
+
+    uploaded_abstract_ids = set()
+    for upload in uploads:
+        if upload.abstract_submission_id:
+            uploaded_abstract_ids.add(upload.abstract_submission_id)
+        rows.append({
+            'kind': 'upload',
+            'source_key': f"upload:{upload.id}",
+            'id': upload.id,
+            'event': upload.event,
+            'event_label': f"{upload.event.name} {upload.event.year}",
+            'title': upload.title,
+            'presenter': upload.presenter_name or upload.user.get_full_name() or upload.user.email,
+            'email': upload.user.email,
+            'source_type': upload.source_type,
+            'source_label': upload.get_source_type_display(),
+            'role_label': upload.role_label,
+            'uploaded_at': upload.uploaded_at,
+            'file': upload.file,
+        })
+
+    if source_filter in ('all', PresentationUpload.SOURCE_ABSTRACT):
+        legacy_abstracts = (
+            AbstractSubmission.objects.filter(presentation_file__isnull=False)
+            .exclude(presentation_file='')
+            .select_related('event', 'user')
+            .order_by('-updated_at')
+        )
+        if uploaded_abstract_ids:
+            legacy_abstracts = legacy_abstracts.exclude(id__in=uploaded_abstract_ids)
+        if event_filter:
+            legacy_abstracts = legacy_abstracts.filter(event_id=event_filter)
+        if query_text:
+            legacy_abstracts = legacy_abstracts.filter(
+                Q(title__icontains=query_text)
+                | Q(authors__icontains=query_text)
+                | Q(user__email__icontains=query_text)
+                | Q(event__name__icontains=query_text)
+            )
+        for abstract in legacy_abstracts:
+            rows.append({
+                'kind': 'abstract',
+                'source_key': f"abstract:{abstract.id}",
+                'id': abstract.id,
+                'event': abstract.event,
+                'event_label': f"{abstract.event.name} {abstract.event.year}",
+                'title': abstract.title,
+                'presenter': abstract.user.get_full_name() or abstract.user.email,
+                'email': abstract.user.email,
+                'source_type': PresentationUpload.SOURCE_ABSTRACT,
+                'source_label': 'Abstract submission',
+                'role_label': 'Legacy abstract file',
+                'uploaded_at': abstract.updated_at,
+                'file': abstract.presentation_file,
+            })
+
+    rows.sort(key=lambda row: row.get('uploaded_at') or timezone.now(), reverse=True)
+    return rows
+
+
+@staff_member_required
+def dashboard_presentation_center(request):
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-start_date', '-year', 'name')
+    event_filter = request.GET.get('event', '').strip()
+    source_filter = request.GET.get('source', 'all').strip() or 'all'
+    query = request.GET.get('q', '').strip()
+
+    rows = _presentation_upload_rows(event_filter, source_filter, query)
+
+    if request.method == 'POST':
+        selected_keys = request.POST.getlist('selected_presentations')
+        action = request.POST.get('presentation_action')
+        if action == 'download_all_filtered':
+            selected_rows = rows
+        else:
+            selected_rows = [row for row in rows if row['source_key'] in selected_keys]
+
+        if not selected_rows:
+            messages.error(request, 'Please select at least one presentation file to download.')
+            redirect_params = {}
+            if event_filter:
+                redirect_params['event'] = event_filter
+            if source_filter != 'all':
+                redirect_params['source'] = source_filter
+            if query:
+                redirect_params['q'] = query
+            redirect_url = reverse('dashboard_presentation_center')
+            if redirect_params:
+                redirect_url = f"{redirect_url}?{urlencode(redirect_params)}"
+            return redirect(redirect_url)
+
+        zip_buffer, added_count = _write_presentation_zip(selected_rows)
+        if not added_count:
+            messages.error(request, 'No stored presentation files were found for the selected rows.')
+            return redirect(reverse('dashboard_presentation_center'))
+
+        response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+        response['Content-Disposition'] = 'attachment; filename="bsbcs_presentations.zip"'
+        return response
+
+    page_obj = Paginator(rows, 15).get_page(request.GET.get('page'))
+    totals = {
+        'all': len(rows),
+        'abstract': sum(1 for row in rows if row['source_type'] == PresentationUpload.SOURCE_ABSTRACT),
+        'program': sum(1 for row in rows if row['source_type'] != PresentationUpload.SOURCE_ABSTRACT),
+        'files': sum(1 for row in rows if _presentation_file_exists(row.get('file'))),
+    }
+
+    return render(request, 'dashboard_presentation_center.html', {
+        'site_settings': site_settings,
+        'events': events,
+        'page_obj': page_obj,
+        'totals': totals,
+        'source_choices': [
+            ('all', 'All sources'),
+            (PresentationUpload.SOURCE_ABSTRACT, 'Abstract submissions'),
+            (PresentationUpload.SOURCE_SESSION_ITEM, 'Program talks'),
+            (PresentationUpload.SOURCE_SESSION_ROLE, 'Session faculty'),
+        ],
+        'current_filters': {
+            'event': event_filter,
+            'source': source_filter,
+            'q': query,
+        },
+    })
 
 
 @staff_member_required

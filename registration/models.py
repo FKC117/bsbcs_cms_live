@@ -1226,6 +1226,76 @@ class ProgramItemFaculty(models.Model):
             raise ValidationError(_('This person is already assigned to another session in a parallel hall at the same time.'))
 
 
+class PresentationUpload(models.Model):
+    SOURCE_ABSTRACT = 'abstract'
+    SOURCE_SESSION_ITEM = 'session_item'
+    SOURCE_SESSION_ROLE = 'session_role'
+    SOURCE_CHOICES = [
+        (SOURCE_ABSTRACT, 'Abstract submission'),
+        (SOURCE_SESSION_ITEM, 'Program talk / activity'),
+        (SOURCE_SESSION_ROLE, 'Session faculty role'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='presentation_uploads')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='presentation_uploads')
+    program_person = models.ForeignKey(
+        ProgramPerson,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='presentation_uploads',
+    )
+    abstract_submission = models.ForeignKey(
+        AbstractSubmission,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='presentation_uploads',
+    )
+    session = models.ForeignKey(
+        ProgramSession,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='presentation_uploads',
+    )
+    session_item = models.ForeignKey(
+        ProgramSessionItem,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='presentation_uploads',
+    )
+    source_type = models.CharField(max_length=30, choices=SOURCE_CHOICES)
+    title = models.CharField(max_length=400)
+    role_label = models.CharField(max_length=120, blank=True, null=True)
+    presenter_name = models.CharField(max_length=150, blank=True, null=True)
+    file = models.FileField(
+        upload_to='media/presentation_uploads/',
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'ppt', 'pptx'])],
+    )
+    notes = models.TextField(blank=True, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['event__start_date', 'session__start_time', 'session_item__order', 'title']
+        verbose_name = 'Presentation Upload'
+        verbose_name_plural = 'Presentation Uploads'
+
+    def __str__(self):
+        return f"{self.presenter_name or self.user.email} - {self.title}"
+
+    def clean(self):
+        super().clean()
+        if self.abstract_submission and self.abstract_submission.event_id != self.event_id:
+            raise ValidationError(_('Abstract submission must belong to the same event.'))
+        if self.session and self.session.event_id != self.event_id:
+            raise ValidationError(_('Program session must belong to the same event.'))
+        if self.session_item and self.session_item.session.event_id != self.event_id:
+            raise ValidationError(_('Program item must belong to the same event.'))
+
+
 # Invitation Model START------------------------------------------------------------------------------------#
 class Invitation(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
