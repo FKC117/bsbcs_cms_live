@@ -228,7 +228,9 @@ def process_pending_event_intents(member):
             intent.save(update_fields=['participant', 'status', 'note', 'completed_at', 'updated_at'])
             continue
 
-        department, _ = Department.objects.get_or_create(event=event, name='BSBCS Member')
+        first_specialty = member.specialties.first()
+        department_name = first_specialty.name if first_specialty else 'Not specified'
+        department, _ = Department.objects.get_or_create(event=event, name=department_name[:50])
         payable_amount = event.member_registration_fee or 0
         merchant_invoice_number = f"MEMEVT-{event.pk}-{member.user_profile.user_id}-{int(time.time())}"
 
@@ -241,7 +243,7 @@ def process_pending_event_intents(member):
                 degree=(member.position or 'Member')[:50],
                 year_of_graduation=0,
                 department=department,
-                organization=(member.institution or 'BSBCS Member')[:100],
+                organization=(member.institution or 'Not provided')[:100],
                 email=member.user_profile.email,
                 phone=member.user_profile.phone,
                 country=member.user_profile.country,

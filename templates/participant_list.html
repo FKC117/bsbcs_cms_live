@@ -1,49 +1,56 @@
 {% extends "gene_base.html" %}
 
 {% block title %}Participants{% endblock %}
+{% block legacy_event_styles %}{% endblock %}
 
 {% block content %}
-    <style>
-        .custom-max-width {
-            max-width: 95rem;
-            margin-left: auto;
-            margin-right: auto;
-        }
-    </style>
-    <div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10">
-        <div class="mx-auto max-w-full text-center px-4">
-            <h1 class="text-4xl sm:text-6xl font-extrabold md-10">Participants of the {{ event.name }} {{ event.year }}</h1>
-            <p class="mt-4 text-lg">{{ event.slogan }}</p>
-        </div>
-    </div>
-    <section id="participants" class="py-10">
-        <div class="custom-max-width px-4 overflow-x-auto py-6">
-            <table class="min-w-full divide-y divide-gray-200 bg-white table-auto">
-                <thead>
-                    <tr class="bg-pink-300">
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Name</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Degree</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Department</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Organization</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Country</strong></th>
-                    </tr>
-                </thead>
-                <tbody 
-                    id="participant-list" 
-                    hx-get="{% url 'registration:participant_list_partial' event.id %}" 
-                    hx-trigger="load"
-                    hx-target="#participant-list"
-                    hx-swap="innerHTML"
-                    class="bg-white divide-y divide-gray-400">
-                    <tr>
-                        <td colspan="5" class="py-4 text-center">Loading participants...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="text-center mt-8">
-            <a href="{% url 'registration:home' event.id %}" class="inline-block px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">Back to Event Details</a>
+    <section class="bg-secondary text-white">
+        <div class="container-custom py-10 text-center sm:py-12">
+            <p class="text-sm font-bold uppercase tracking-widest text-white/80">Confirmed participants</p>
+            <h1 class="mt-4 text-4xl font-bold text-white sm:text-5xl">
+                Participants of the {{ event.name }} {{ event.year }}
+            </h1>
+            {% if event.slogan %}
+                <p class="mx-auto mt-4 max-w-4xl text-lg font-semibold text-white/90">{{ event.slogan }}</p>
+            {% endif %}
         </div>
     </section>
-    <br/><br/><br/><br/><br/><br/>
+
+    <section id="participants" class="section-compact bg-background">
+        <div class="container-custom">
+            <form
+                method="get"
+                action="{% url 'registration:participant_list' event.id %}"
+                class="rounded-xl border border-border bg-surface p-5 shadow-quiet sm:p-6"
+                hx-get="{% url 'registration:participant_list' event.id %}"
+                hx-trigger="submit, input delay:350ms from:#participant-search"
+                hx-target="#participant-results"
+                hx-push-url="true"
+                hx-swap="innerHTML">
+                <label for="participant-search" class="text-base font-bold text-text-primary">Search participants</label>
+                <div class="mt-4 flex flex-col gap-4 lg:flex-row">
+                    <input
+                        id="participant-search"
+                        type="search"
+                        name="q"
+                        value="{{ search_query }}"
+                        class="min-h-[64px] min-w-0 flex-1 rounded-xl border border-border bg-white px-5 text-lg font-semibold text-text-primary shadow-sm outline-none transition focus:border-secondary focus:ring-4 focus:ring-secondary-100"
+                        placeholder="Name, degree, department, organization, designation, country">
+                    <button type="submit" class="min-h-[64px] shrink-0 rounded-xl bg-secondary px-8 text-base font-bold text-white shadow-sm transition hover:bg-secondary-700 lg:min-w-44">
+                        Search
+                    </button>
+                </div>
+            </form>
+
+            <div id="participant-results" class="mt-5">
+                {% include "partials/participant_list.html" %}
+            </div>
+
+            <div class="mt-8 text-center">
+                <a href="{% url 'registration:home' event.id %}" class="btn-secondary">
+                    Back to Event Details
+                </a>
+            </div>
+        </div>
+    </section>
 {% endblock %}

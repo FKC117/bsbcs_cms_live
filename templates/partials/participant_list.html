@@ -1,13 +1,126 @@
-{% for participant in participants %}
-<tr>
-    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.name }}</td>
-    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.degree }}</td>
-    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.display_department|default:participant.department }}</td>
-    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.organization }}</td>
-    <td class="py-4 px-4 whitespace-nowrap text-center">{{ participant.country }}</td>
-{% empty %}
-<tr>
-    <td colspan="4" class="py-4 text-center text-gray-500">No approved participants found.</td>
-</tr>
-{% endfor %}
+<style>
+    @media (max-width: 639px) {
+        .participant-public-table .participant-country-col {
+            display: none;
+        }
 
+        .participant-public-table col.participant-name-col {
+            width: 39% !important;
+        }
+
+        .participant-public-table col.participant-designation-col {
+            width: 24% !important;
+        }
+
+        .participant-public-table col.participant-affiliation-col {
+            width: 37% !important;
+        }
+    }
+</style>
+
+<div class="overflow-hidden rounded-xl border border-border bg-surface shadow-quiet">
+    <div class="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+            <h2 class="text-xl font-bold text-text-primary">Participant list</h2>
+            <p class="mt-1 text-sm font-semibold text-text-secondary">
+                {% if page_obj.paginator.count %}
+                    Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+                {% else %}
+                    No approved paid participants found
+                {% endif %}
+            </p>
+        </div>
+        {% if search_query %}
+            <a
+                href="{% url 'registration:participant_list' event.id %}"
+                class="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-border px-4 text-sm font-bold text-secondary hover:border-secondary hover:bg-secondary-50"
+                onclick="document.getElementById('participant-search').value = '';"
+                hx-get="{% url 'registration:participant_list' event.id %}"
+                hx-target="#participant-results"
+                hx-push-url="true"
+                hx-swap="innerHTML">
+                Clear search
+            </a>
+        {% endif %}
+    </div>
+
+    <table class="participant-public-table w-full table-fixed divide-y divide-border text-left text-sm">
+        <colgroup>
+            <col class="participant-name-col" style="width: 34%;">
+            <col class="participant-designation-col" style="width: 23%;">
+            <col class="participant-affiliation-col" style="width: 31%;">
+            <col class="participant-country-col" style="width: 12%;">
+        </colgroup>
+        <thead class="bg-secondary-100">
+            <tr>
+                <th class="px-3 py-3 text-xs font-bold uppercase tracking-wide text-secondary-900 sm:px-4">Participant</th>
+                <th class="px-3 py-3 text-xs font-bold uppercase tracking-wide text-secondary-900 sm:px-4">Designation</th>
+                <th class="px-3 py-3 text-xs font-bold uppercase tracking-wide text-secondary-900 sm:px-4">Affiliation</th>
+                <th class="participant-country-col px-3 py-3 text-xs font-bold uppercase tracking-wide text-secondary-900 sm:px-4">Country</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-border bg-surface">
+            {% for participant in page_obj %}
+                <tr class="align-top hover:bg-secondary-50">
+                    <td class="min-w-0 px-3 py-4 sm:px-4">
+                        <div class="break-words font-bold leading-6 text-text-primary">{{ participant.name }}</div>
+                        <div class="mt-1 break-words text-sm font-bold text-secondary">{{ participant.degree|default:"Degree not specified" }}</div>
+                        <div class="mt-1 break-words text-xs font-bold text-text-tertiary sm:hidden">{{ participant.country|default:"N/A" }}</div>
+                    </td>
+                    <td class="min-w-0 px-3 py-4 sm:px-4">
+                        <div class="break-words font-semibold text-text-primary">{{ participant.display_designation|default:"N/A" }}</div>
+                    </td>
+                    <td class="min-w-0 px-3 py-4 sm:px-4">
+                        <div class="break-words font-semibold text-text-primary">{{ participant.display_department|default:participant.department|default:"Not specified" }}</div>
+                        <div class="mt-1 break-words text-text-secondary">{{ participant.display_organization|default:participant.organization|default:"Not specified" }}</div>
+                    </td>
+                    <td class="participant-country-col min-w-0 px-3 py-4 sm:px-4">
+                        <div class="break-words font-semibold text-text-primary">{{ participant.country|default:"N/A" }}</div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" class="px-4 py-10 text-center">
+                        <h3 class="text-lg font-bold text-text-primary">No participants found</h3>
+                        <p class="mt-2 text-sm font-semibold text-text-secondary">Try a different search term.</p>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+        <div class="flex flex-col gap-3 border-t border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div class="text-sm font-bold text-text-secondary">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+            <div class="flex flex-wrap gap-2">
+                {% if page_obj.has_previous %}
+                    <a
+                        href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                        class="inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-bold text-secondary hover:border-secondary hover:bg-secondary-50"
+                        hx-get="{% url 'registration:participant_list_partial' event.id %}?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                        hx-target="#participant-results"
+                        hx-push-url="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                        hx-swap="innerHTML">
+                        Previous
+                    </a>
+                {% else %}
+                    <span class="inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-bold text-text-tertiary">Previous</span>
+                {% endif %}
+
+                {% if page_obj.has_next %}
+                    <a
+                        href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                        class="inline-flex min-h-[44px] items-center rounded-lg bg-secondary px-4 text-sm font-bold text-white hover:bg-secondary-700"
+                        hx-get="{% url 'registration:participant_list_partial' event.id %}?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                        hx-target="#participant-results"
+                        hx-push-url="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                        hx-swap="innerHTML">
+                        Next
+                    </a>
+                {% else %}
+                    <span class="inline-flex min-h-[44px] items-center rounded-lg bg-border-light px-4 text-sm font-bold text-text-tertiary">Next</span>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>

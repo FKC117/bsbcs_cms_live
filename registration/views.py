@@ -176,7 +176,19 @@ def get_active_member_for_user(user):
     return None
 
 
-SYNTHETIC_PARTICIPANT_DEPARTMENTS = {'BSBCS Member', 'Corporate Registration'}
+SYNTHETIC_PARTICIPANT_DEPARTMENTS = {'BSBCS Member', 'Corporate Registration', 'Corporate registration'}
+SYNTHETIC_PARTICIPANT_ORGANIZATIONS = {'BSBCS Member', 'Corporate Registration', 'Corporate registration'}
+
+
+def clean_public_participant_value(value, synthetic_values=None):
+    value = (value or '').strip()
+    if not value:
+        return ''
+    if value in {'N/A', 'Not provided', 'Not specified'}:
+        return ''
+    if synthetic_values and value in synthetic_values:
+        return ''
+    return value
 
 
 def get_or_create_participant_department(event, department_name=None):
@@ -201,13 +213,45 @@ def get_previous_participant_department_name(email, current_event=None):
     return ''
 
 
+def get_previous_participant_organization(email, current_event=None):
+    if not email:
+        return ''
+    previous_participants = Participant.objects.filter(
+        email__iexact=email,
+    ).order_by('-created_at')
+    if current_event:
+        previous_participants = previous_participants.exclude(event=current_event)
+    for participant in previous_participants:
+        organization = clean_public_participant_value(
+            participant.organization,
+            SYNTHETIC_PARTICIPANT_ORGANIZATIONS,
+        )
+        if organization:
+            return organization
+    return ''
+
+
+def get_participant_member(participant):
+    try:
+        user_profile = participant.user.userprofile
+        return getattr(user_profile, 'member', None)
+    except (AttributeError, UserProfile.DoesNotExist):
+        pass
+
+    if not participant.email:
+        return None
+    user_profile = UserProfile.objects.filter(email__iexact=participant.email).first()
+    return getattr(user_profile, 'member', None) if user_profile else None
+
+
 def resolve_public_participant_department(participant):
     department_name = participant.department.name if participant.department_id else ''
-    if department_name and department_name not in SYNTHETIC_PARTICIPANT_DEPARTMENTS:
-        return department_name
+    public_department = clean_public_participant_value(department_name, SYNTHETIC_PARTICIPANT_DEPARTMENTS)
+    if public_department:
+        return public_department
 
     corporate_attendee = getattr(participant, 'corporate_attendee', None)
-    corporate_department = (getattr(corporate_attendee, 'department', '') or '').strip()
+    corporate_department = clean_public_participant_value(getattr(corporate_attendee, 'department', ''))
     if corporate_department:
         return corporate_department
 
@@ -215,7 +259,94 @@ def resolve_public_participant_department(participant):
     if previous_department:
         return previous_department
 
-    return department_name or 'Not specified'
+    member = get_participant_member(participant)
+    if member:
+        first_specialty = member.specialties.first()
+        if first_specialty:
+            return first_specialty.name
+
+    return 'Not specified'
+
+
+def resolve_public_participant_organization(participant):
+    organization = clean_public_participant_value(
+        participant.organization,
+        SYNTHETIC_PARTICIPANT_ORGANIZATIONS,
+    )
+    if organization:
+        return organization
+
+    corporate_attendee = getattr(participant, 'corporate_attendee', None)
+    corporate_organization = clean_public_participant_value(getattr(corporate_attendee, 'organization', ''))
+    if corporate_organization:
+        return corporate_organization
+
+    member = get_participant_member(participant)
+    member_institution = clean_public_participant_value(getattr(member, 'institution', ''))
+    if member_institution:
+        return member_institution
+
+    previous_organization = get_previous_participant_organization(participant.email, participant.event)
+    if previous_organization:
+        return previous_organization
+
+    return 'Not specified'
+
+
+def resolve_public_participant_designation(participant):
+    corporate_attendee = getattr(participant, 'corporate_attendee', None)
+    corporate_designation = clean_public_participant_value(getattr(corporate_attendee, 'designation', ''))
+    if corporate_designation:
+        return corporate_designation
+
+    member = get_participant_member(participant)
+    member_position = clean_public_participant_value(getattr(member, 'position', ''))
+    if member_position:
+        return member_position
+
+    return 'N/A'
+
+
+def apply_public_participant_display(participant):
+    participant.display_department = resolve_public_participant_department(participant)
+    participant.display_organization = resolve_public_participant_organization(participant)
+    participant.display_designation = resolve_public_participant_designation(participant)
+    return participant
+
+
+def build_public_participant_list_context(request, event):
+    search_query = (request.GET.get('q') or '').strip()
+    participants = (
+        Participant.objects
+        .filter(event=event, approved=True, payment_statuses__status='completed')
+        .select_related('department', 'corporate_attendee', 'user__userprofile', 'user__userprofile__member')
+        .order_by('name', 'id')
+    )
+    if search_query:
+        participants = participants.filter(
+            Q(name__icontains=search_query)
+            | Q(degree__icontains=search_query)
+            | Q(organization__icontains=search_query)
+            | Q(country__icontains=search_query)
+            | Q(department__name__icontains=search_query)
+            | Q(corporate_attendee__designation__icontains=search_query)
+            | Q(corporate_attendee__department__icontains=search_query)
+            | Q(corporate_attendee__organization__icontains=search_query)
+        ).distinct()
+
+    page_obj = Paginator(participants, 12).get_page(request.GET.get('page'))
+    for participant in page_obj.object_list:
+        apply_public_participant_display(participant)
+
+    query_params = request.GET.copy()
+    query_params.pop('page', None)
+
+    return {
+        'event': event,
+        'page_obj': page_obj,
+        'search_query': search_query,
+        'query_string': query_params.urlencode(),
+    }
 
 
 def get_existing_registration_context(participant, event):
@@ -902,29 +1033,18 @@ from .models import Participant, Event
 
 def participant_list(request, event_id):
     event = get_object_or_404(Event, id=event_id)
-    approved_paid_participants = (
-        Participant.objects
-        .filter(event=event, approved=True, payment_statuses__status='completed')
-        .select_related('department', 'corporate_attendee')
-    )
-    for participant in approved_paid_participants:
-        participant.display_department = resolve_public_participant_department(participant)
+    context = build_public_participant_list_context(request, event)
 
     if request.headers.get('HX-Request'):
-        return render(request, 'partials/participant_list.html', {'participants': approved_paid_participants})
+        return render(request, 'partials/participant_list.html', context)
 
-    return render(request, 'participant_list.html', {'participants': approved_paid_participants, 'event': event})
+    return render(request, 'participant_list.html', context)
+
+
 def participant_list_partial(request, event_id):
     event = get_object_or_404(Event, id=event_id)
-
-    # Filter participants with approved=True and payment status='completed'
-    approved_paid_participants = Participant.objects.filter(
-        event=event, approved=True, payment_statuses__status='completed'
-    ).select_related('department', 'corporate_attendee')
-    for participant in approved_paid_participants:
-        participant.display_department = resolve_public_participant_department(participant)
-
-    return render(request, 'partials/participant_list.html', {'participants': approved_paid_participants})
+    context = build_public_participant_list_context(request, event)
+    return render(request, 'partials/participant_list.html', context)
 
 
 
@@ -1163,7 +1283,7 @@ def member_event_registration(request, event_id):
             degree=(member.position or 'Member')[:50],
             year_of_graduation=0,
             department=department,
-            organization=(member.institution or 'BSBCS Member')[:100],
+            organization=(member.institution or 'Not provided')[:100],
             email=user_profile.email,
             phone=user_profile.phone,
             country=user_profile.country,
