@@ -4173,6 +4173,32 @@ def dashboard_corporate_center(request):
                             messages.warning(request, f'{corporate_registration}: {reason}')
                 messages.success(request, f'{created} corporate invoice(s) created. {skipped} skipped.')
 
+            elif action == 'update_account':
+                account_id = request.POST.get('account_id')
+                corporate_account = get_object_or_404(CorporateAccount, pk=account_id)
+                corporate_account.company_name = (request.POST.get('company_name') or corporate_account.company_name).strip()
+                corporate_account.contact_name = (request.POST.get('contact_name') or corporate_account.contact_name).strip()
+                corporate_account.contact_designation = (request.POST.get('contact_designation') or '').strip() or None
+                corporate_account.email = (request.POST.get('email') or corporate_account.email).strip()
+                corporate_account.phone = (request.POST.get('phone') or corporate_account.phone).strip()
+                requested_status = request.POST.get('status')
+                if requested_status in dict(CorporateAccount.APPROVAL_STATUS_CHOICES):
+                    corporate_account.status = requested_status
+                    if requested_status == 'approved' and not corporate_account.approved_at:
+                        corporate_account.approved_at = timezone.now()
+                corporate_account.save(update_fields=[
+                    'company_name',
+                    'contact_name',
+                    'contact_designation',
+                    'email',
+                    'phone',
+                    'status',
+                    'approved_at',
+                    'updated_at',
+                ])
+                dashboard_log_action(request, corporate_account, CHANGE, 'Updated corporate account from Corporate Center dashboard.')
+                messages.success(request, f'{corporate_account.company_name} account details updated.')
+
             elif action in ('activate_account', 'suspend_account'):
                 account_id = request.POST.get('account_id')
                 corporate_account = get_object_or_404(CorporateAccount, pk=account_id)
