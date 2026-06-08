@@ -10,6 +10,40 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
 from dateutil.relativedelta import relativedelta
 
+
+def ensure_membership_payment_for_member(member):
+    """
+    Ensure an approved, inactive member has one open membership payment row.
+
+    Approval makes the member eligible to pay. Completion still happens only
+    when the payment status becomes completed.
+    """
+    from .models import MembershipPayment
+
+    if not member or not member.user_profile_id:
+        return None
+    if member.approval_status != 'approved' or member.is_active_member:
+        return None
+    if not member.membership_type_id:
+        return None
+
+    open_payment = MembershipPayment.objects.filter(
+        user_profile=member.user_profile,
+    ).exclude(status='completed').order_by('-created_at').first()
+    if open_payment:
+        return open_payment
+
+    invoice_number = f"MEM-{member.id}-{int(timezone.now().timestamp())}"
+    return MembershipPayment.objects.create(
+        user_profile=member.user_profile,
+        membership_type=member.membership_type,
+        duration_years=member.membership_type.duration_years or 1,
+        amount=member.membership_type.amount,
+        merchant_invoice_number=invoice_number,
+        status='initiated',
+    )
+
+
 def generate_membership_invoice(payment):
     """
     Generates a PDF invoice for a membership payment.

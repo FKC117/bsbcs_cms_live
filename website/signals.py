@@ -87,6 +87,23 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
         if instance.is_active_member:
             logger.info(f"[MEMBER SIGNAL] Member {user_email} already active/paid, skipping approval email")
             return
+
+        try:
+            from .utils_membership import ensure_membership_payment_for_member
+            payment = ensure_membership_payment_for_member(instance)
+            if payment:
+                logger.info(
+                    "[MEMBER SIGNAL] Ensured membership payment row for %s: payment_id=%s",
+                    user_email,
+                    payment.id,
+                )
+            else:
+                logger.info(
+                    "[MEMBER SIGNAL] Membership payment row not created for %s. Membership type may be missing.",
+                    user_email,
+                )
+        except Exception as e:
+            logger.error(f"[MEMBER SIGNAL] Failed to ensure membership payment row for {user_email}: {str(e)}", exc_info=True)
             
         logger.info(f"[MEMBER SIGNAL] Processing approval for {user_email}")
         template_name = 'emails/member_approval_email.html'

@@ -41,6 +41,7 @@
       <a href="{% url 'dashboard_program_session_builder' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Program builder</a>
       <a href="{% url 'dashboard_participant_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Participants management</a>
       <a href="{% url 'dashboard_payment_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Payments Management</a>
+      <a href="{% url 'dashboard_membership_center' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership management</a>
       <a href="{% url 'dashboard_corporate_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate management</a>
       <a href="{% url 'dashboard_registration_kit_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Issue Kit</a>
       <a href="{% url 'dashboard_bulk_email_center' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Bulk email</a>
@@ -218,8 +219,8 @@
     <div class="grid gap-2">
       <a href="{{ operations.admin_links.corporate_registrations }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate registrations</a>
       <a href="{{ operations.admin_links.corporate_payments }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Corporate payments</a>
-      <a href="{{ operations.admin_links.membership }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership applications</a>
-      <a href="{{ operations.admin_links.membership_payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership payments</a>
+      <a href="{{ operations.admin_links.membership }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership applications</a>
+      <a href="{{ operations.admin_links.membership_payments }}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Membership payments</a>
       <a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstract submissions</a>
     </div>
   </div>

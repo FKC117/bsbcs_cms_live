@@ -2800,7 +2800,7 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
             pending_members = Member.objects.filter(
                 approval_status='pending'
             ).select_related('user_profile').order_by('-created_at')
-        member_workflow_url = admin_changelist_url(Member, {'approval_status__exact': 'pending'})
+        member_workflow_url = dashboard_workflow_url('dashboard_membership_center', {'approval_status': 'pending'})
         entries.extend([
             {
                 'label': 'Member',
@@ -3014,7 +3014,8 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'count': pending_event_members.count() if event_filter else pending_members.count(),
             'tone': 'success',
             'description': 'Membership applications waiting for approval or rejection.' if not event_filter else 'Membership applications tied to this event through member-event intent.',
-            'url': admin_changelist_url(Member, {'approval_status__exact': 'pending'}),
+            'url': dashboard_workflow_url('dashboard_membership_center', {'approval_status': 'pending'}),
+            'internal': True,
         },
         {
             'label': 'Abstract review',
@@ -3059,8 +3060,8 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'corporate_registrations': dashboard_workflow_url('dashboard_corporate_center', {'event': event_filter}),
             'corporate_attendees': dashboard_workflow_url('dashboard_corporate_center', {'event': event_filter, 'attendee_status': 'pending'}),
             'corporate_payments': dashboard_workflow_url('dashboard_payment_center', {'source': 'corporate', 'event': event_filter}),
-            'membership': admin_changelist_url(Member),
-            'membership_payments': admin_changelist_url(MembershipPayment),
+            'membership': dashboard_workflow_url('dashboard_membership_center', {'approval_status': 'pending'}),
+            'membership_payments': dashboard_workflow_url('dashboard_payment_center', {'source': 'membership'}),
             'abstracts': admin_changelist_url(AbstractSubmission),
             'events': admin_changelist_url(Event),
         },
@@ -3893,6 +3894,262 @@ def dashboard_participant_center(request):
         'participant_lookup_completed': participant_lookup_completed,
     }
     return render(request, 'dashboard_participant_center.html', context)
+
+
+def _parse_dashboard_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return None
+
+
+@staff_member_required
+def dashboard_membership_center(request):
+    from website.models import (
+        Member,
+        MembershipBenefitItem,
+        MembershipBenefitModal,
+        MembershipPayment,
+        MembershipType,
+        PendingEventIntent,
+        SiteSettings,
+    )
+    from website.utils_membership import ensure_membership_payment_for_member
+
+    approval_filter = request.POST.get('approval_status') if request.method == 'POST' else request.GET.get('approval_status')
+    active_filter = request.POST.get('active_status') if request.method == 'POST' else request.GET.get('active_status')
+    type_filter = request.POST.get('membership_type') if request.method == 'POST' else request.GET.get('membership_type')
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    panel = (request.POST.get('panel') if request.method == 'POST' else request.GET.get('panel')) or 'applications'
+
+    approval_filter = approval_filter or 'pending'
+    active_filter = active_filter or 'all'
+    query_params = {
+        'approval_status': approval_filter,
+        'active_status': active_filter,
+        'panel': panel,
+    }
+    if type_filter:
+        query_params['membership_type'] = type_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = f"{reverse('dashboard_membership_center')}?{urlencode(query_params)}"
+
+    def filtered_members_queryset(force_approval=None):
+        queryset = Member.objects.select_related('user_profile', 'membership_type').prefetch_related(
+            'specialties',
+            'research_interest_areas',
+        ).order_by('-created_at')
+        effective_approval = force_approval or approval_filter
+        if effective_approval != 'all':
+            queryset = queryset.filter(approval_status=effective_approval)
+        if type_filter:
+            queryset = queryset.filter(membership_type_id=type_filter)
+        today = timezone.now().date()
+        if active_filter == 'active':
+            queryset = queryset.filter(is_active_member=True)
+        elif active_filter == 'inactive':
+            queryset = queryset.filter(is_active_member=False)
+        elif active_filter == 'expired':
+            queryset = queryset.filter(subscription_expiry_date__lt=today)
+        if search_query:
+            queryset = queryset.filter(
+                Q(user_profile__name__icontains=search_query)
+                | Q(user_profile__email__icontains=search_query)
+                | Q(user_profile__phone__icontains=search_query)
+                | Q(institution__icontains=search_query)
+                | Q(position__icontains=search_query)
+            )
+        return queryset
+
+    if request.method == 'POST':
+        action = request.POST.get('membership_action')
+        selected_ids = request.POST.getlist('member_ids')
+
+        if action in ('approve', 'reject') and not selected_ids:
+            messages.error(request, 'Select at least one membership application first.')
+            return redirect(redirect_url)
+
+        selected_members = Member.objects.filter(pk__in=selected_ids).select_related('user_profile', 'membership_type')
+
+        if action == 'approve':
+            approved_count = 0
+            for member in selected_members.filter(approval_status='pending'):
+                member.approval_status = 'approved'
+                member.approved_at = timezone.now()
+                member.rejected_at = None
+                member.rejection_reason = ''
+                member.save(update_fields=['approval_status', 'approved_at', 'rejected_at', 'rejection_reason', 'updated_at'])
+                ensure_membership_payment_for_member(member)
+                dashboard_log_action(request, member, CHANGE, 'Approved member from Membership Center dashboard.')
+                approved_count += 1
+            messages.success(request, f'{approved_count} membership application(s) approved. Approval emails follow the existing membership signal.')
+            return redirect(redirect_url)
+
+        if action == 'reject':
+            rejection_reason = (request.POST.get('rejection_reason') or '').strip()
+            if not rejection_reason:
+                messages.error(request, 'Write a rejection reason before rejecting selected applications.')
+                return redirect(redirect_url)
+            rejected_count = 0
+            for member in selected_members.filter(approval_status='pending'):
+                member.approval_status = 'rejected'
+                member.rejected_at = timezone.now()
+                member.rejection_reason = rejection_reason
+                member.is_active_member = False
+                member.save(update_fields=['approval_status', 'rejected_at', 'rejection_reason', 'is_active_member', 'updated_at'])
+                dashboard_log_action(request, member, CHANGE, 'Rejected member from Membership Center dashboard.')
+                rejected_count += 1
+            messages.success(request, f'{rejected_count} membership application(s) rejected. Rejection emails follow the existing membership signal.')
+            return redirect(redirect_url)
+
+        if action == 'update_member':
+            member = get_object_or_404(Member.objects.select_related('user_profile', 'membership_type'), pk=request.POST.get('member_id'))
+            requested_status = request.POST.get('member_approval_status') or member.approval_status
+            if requested_status not in dict(Member.APPROVAL_STATUS_CHOICES):
+                requested_status = member.approval_status
+
+            if requested_status == 'rejected':
+                reason = (request.POST.get('member_rejection_reason') or member.rejection_reason or '').strip()
+                if not reason:
+                    messages.error(request, 'Add a rejection reason before marking a member as rejected.')
+                    return redirect(redirect_url)
+                member.rejection_reason = reason
+                member.rejected_at = member.rejected_at or timezone.now()
+                member.is_active_member = False
+            elif requested_status == 'approved':
+                member.approved_at = member.approved_at or timezone.now()
+
+            member.approval_status = requested_status
+            member.membership_type_id = request.POST.get('member_membership_type') or None
+            member.is_active_member = request.POST.get('member_is_active') == 'on'
+            member.subscription_start_date = _parse_dashboard_date(request.POST.get('member_start_date'))
+            member.subscription_expiry_date = _parse_dashboard_date(request.POST.get('member_expiry_date'))
+            try:
+                member.order = int(request.POST.get('member_order') or member.order or 0)
+            except (TypeError, ValueError):
+                member.order = member.order or 0
+            member.save(update_fields=[
+                'approval_status',
+                'approved_at',
+                'rejected_at',
+                'rejection_reason',
+                'membership_type',
+                'is_active_member',
+                'subscription_start_date',
+                'subscription_expiry_date',
+                'order',
+                'updated_at',
+            ])
+            dashboard_log_action(request, member, CHANGE, 'Updated member status from Membership Center dashboard.')
+            messages.success(request, f'{member.user_profile.name} membership details updated.')
+            return redirect(redirect_url)
+
+    members_queryset = filtered_members_queryset(force_approval='pending')
+    member_page = Paginator(members_queryset, 15).get_page(request.GET.get('page'))
+
+    approved_unpaid_queryset = Member.objects.filter(
+        approval_status='approved',
+        is_active_member=False,
+    ).select_related('user_profile', 'membership_type').order_by('-approved_at', '-updated_at')
+    if type_filter:
+        approved_unpaid_queryset = approved_unpaid_queryset.filter(membership_type_id=type_filter)
+    if search_query:
+        approved_unpaid_queryset = approved_unpaid_queryset.filter(
+            Q(user_profile__name__icontains=search_query)
+            | Q(user_profile__email__icontains=search_query)
+            | Q(user_profile__phone__icontains=search_query)
+            | Q(institution__icontains=search_query)
+            | Q(position__icontains=search_query)
+        )
+    approved_unpaid_page = Paginator(approved_unpaid_queryset, 15).get_page(request.GET.get('approved_unpaid_page'))
+
+    active_members_queryset = Member.objects.filter(
+        approval_status='approved',
+        is_active_member=True,
+    ).select_related('user_profile', 'membership_type').order_by('-updated_at')
+    if type_filter:
+        active_members_queryset = active_members_queryset.filter(membership_type_id=type_filter)
+    if active_filter == 'expired':
+        active_members_queryset = active_members_queryset.filter(subscription_expiry_date__lt=timezone.now().date())
+    if search_query:
+        active_members_queryset = active_members_queryset.filter(
+            Q(user_profile__name__icontains=search_query)
+            | Q(user_profile__email__icontains=search_query)
+            | Q(user_profile__phone__icontains=search_query)
+            | Q(institution__icontains=search_query)
+            | Q(position__icontains=search_query)
+        )
+    active_page = Paginator(active_members_queryset, 10).get_page(request.GET.get('active_page'))
+
+    shown_profile_ids = {
+        member.user_profile_id
+        for member in list(member_page.object_list) + list(approved_unpaid_page.object_list) + list(active_page.object_list)
+        if member.user_profile_id
+    }
+    latest_payment_by_profile = {}
+    if shown_profile_ids:
+        for payment in MembershipPayment.objects.filter(user_profile_id__in=shown_profile_ids).select_related('membership_type').order_by('user_profile_id', '-created_at'):
+            latest_payment_by_profile.setdefault(payment.user_profile_id, payment)
+    for member in list(member_page.object_list) + list(approved_unpaid_page.object_list) + list(active_page.object_list):
+        member.latest_membership_payment = latest_payment_by_profile.get(member.user_profile_id)
+
+    intent_queryset = PendingEventIntent.objects.select_related(
+        'user_profile',
+        'event',
+        'participant',
+    ).order_by('-created_at')
+    if search_query:
+        intent_queryset = intent_queryset.filter(
+            Q(user_profile__name__icontains=search_query)
+            | Q(user_profile__email__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+    intent_page = Paginator(intent_queryset, 8).get_page(request.GET.get('intent_page'))
+
+    today = timezone.now().date()
+    totals = {
+        'all': Member.objects.count(),
+        'pending': Member.objects.filter(approval_status='pending').count(),
+        'approved': Member.objects.filter(approval_status='approved').count(),
+        'approved_unpaid': Member.objects.filter(approval_status='approved', is_active_member=False).count(),
+        'rejected': Member.objects.filter(approval_status='rejected').count(),
+        'active': Member.objects.filter(approval_status='approved', is_active_member=True).count(),
+        'inactive': Member.objects.filter(approval_status='approved', is_active_member=False).count(),
+        'expired': Member.objects.filter(approval_status='approved', subscription_expiry_date__lt=today).count(),
+        'payment_open': MembershipPayment.objects.exclude(status='completed').count(),
+        'payment_completed': MembershipPayment.objects.filter(status='completed').count(),
+        'pending_intents': PendingEventIntent.objects.filter(status='pending').count(),
+    }
+
+    benefit_modal = MembershipBenefitModal.objects.prefetch_related('benefit_items').filter(is_active=True).first()
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'member_page': member_page,
+        'approved_unpaid_page': approved_unpaid_page,
+        'active_page': active_page,
+        'intent_page': intent_page,
+        'membership_types': MembershipType.objects.order_by('order', 'name'),
+        'benefit_modal': benefit_modal,
+        'benefit_items': MembershipBenefitItem.objects.filter(modal=benefit_modal, is_active=True).order_by('order', 'id') if benefit_modal else [],
+        'benefit_admin_url': admin_changelist_url(MembershipBenefitModal),
+        'membership_type_admin_url': admin_changelist_url(MembershipType),
+        'totals': totals,
+        'current_filters': {
+            'approval_status': approval_filter,
+            'active_status': active_filter,
+            'membership_type': str(type_filter or ''),
+            'q': search_query,
+            'panel': panel,
+            'event': '',
+        },
+        'query_string': urlencode(query_params),
+        'approval_choices': [('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('all', 'All applications')],
+        'active_choices': [('all', 'All status'), ('active', 'Active'), ('inactive', 'Inactive'), ('expired', 'Expired')],
+    }
+    return render(request, 'dashboard_membership_center.html', context)
 
 
 def _generate_event_payment_invoice(payment_record):

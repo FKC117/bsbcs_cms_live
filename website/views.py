@@ -822,18 +822,34 @@ def membership_payment_init(request):
         # Calculate amount
         amount = membership_type.amount * years
         
-        # Generate unique invoice number
-        invoice_number = f"MEM-{member.id}-{int(timezone.now().timestamp())}"
-        
-        # Create payment record
-        payment = MembershipPayment.objects.create(
+        payment = MembershipPayment.objects.filter(
             user_profile=member.user_profile,
-            membership_type=membership_type,
-            duration_years=years,
-            amount=amount,
-            merchant_invoice_number=invoice_number,
-            status='initiated'
-        )
+        ).exclude(status='completed').order_by('-created_at').first()
+        if payment:
+            payment.membership_type = membership_type
+            payment.duration_years = years
+            payment.amount = amount
+            payment.status = 'initiated'
+            if not payment.merchant_invoice_number:
+                payment.merchant_invoice_number = f"MEM-{member.id}-{int(timezone.now().timestamp())}"
+            payment.save(update_fields=[
+                'membership_type',
+                'duration_years',
+                'amount',
+                'status',
+                'merchant_invoice_number',
+                'updated_at',
+            ])
+        else:
+            invoice_number = f"MEM-{member.id}-{int(timezone.now().timestamp())}"
+            payment = MembershipPayment.objects.create(
+                user_profile=member.user_profile,
+                membership_type=membership_type,
+                duration_years=years,
+                amount=amount,
+                merchant_invoice_number=invoice_number,
+                status='initiated'
+            )
         _log_membership_payment('info', 'payment_record_created', request, payment=payment, member=member, extra={
             'duration_years': years,
             'membership_type_id': membership_type.id,
