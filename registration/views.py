@@ -5865,10 +5865,21 @@ def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
             | Q(event__name__icontains=query_text)
         )
 
-    uploaded_abstract_ids = set()
+    latest_assignment_keys = set()
     for upload in uploads:
         if upload.abstract_submission_id:
-            uploaded_abstract_ids.add(upload.abstract_submission_id)
+            assignment_key = ('abstract', upload.abstract_submission_id)
+        elif upload.session_item_id:
+            assignment_key = ('session_item', upload.session_item_id, upload.program_person_id or upload.user_id)
+        elif upload.session_id:
+            assignment_key = ('session', upload.session_id, upload.program_person_id or upload.user_id)
+        else:
+            assignment_key = ('upload', upload.id)
+
+        if assignment_key in latest_assignment_keys:
+            continue
+        latest_assignment_keys.add(assignment_key)
+
         rows.append({
             'kind': 'upload',
             'source_key': f"upload:{upload.id}",
@@ -5884,41 +5895,6 @@ def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
             'uploaded_at': upload.uploaded_at,
             'file': upload.file,
         })
-
-    if source_filter in ('all', PresentationUpload.SOURCE_ABSTRACT):
-        legacy_abstracts = (
-            AbstractSubmission.objects.filter(presentation_file__isnull=False)
-            .exclude(presentation_file='')
-            .select_related('event', 'user')
-            .order_by('-updated_at')
-        )
-        if uploaded_abstract_ids:
-            legacy_abstracts = legacy_abstracts.exclude(id__in=uploaded_abstract_ids)
-        if event_filter:
-            legacy_abstracts = legacy_abstracts.filter(event_id=event_filter)
-        if query_text:
-            legacy_abstracts = legacy_abstracts.filter(
-                Q(title__icontains=query_text)
-                | Q(authors__icontains=query_text)
-                | Q(user__email__icontains=query_text)
-                | Q(event__name__icontains=query_text)
-            )
-        for abstract in legacy_abstracts:
-            rows.append({
-                'kind': 'abstract',
-                'source_key': f"abstract:{abstract.id}",
-                'id': abstract.id,
-                'event': abstract.event,
-                'event_label': f"{abstract.event.name} {abstract.event.year}",
-                'title': abstract.title,
-                'presenter': abstract.user.get_full_name() or abstract.user.email,
-                'email': abstract.user.email,
-                'source_type': PresentationUpload.SOURCE_ABSTRACT,
-                'source_label': 'Abstract submission',
-                'role_label': 'Legacy abstract file',
-                'uploaded_at': abstract.updated_at,
-                'file': abstract.presentation_file,
-            })
 
     rows.sort(key=lambda row: row.get('uploaded_at') or timezone.now(), reverse=True)
     return rows
@@ -5966,11 +5942,17 @@ def dashboard_presentation_center(request):
         return response
 
     page_obj = Paginator(rows, 15).get_page(request.GET.get('page'))
+    event_ids = {row['event'].id for row in rows if row.get('event')}
+    presenter_keys = {
+        (row.get('email') or row.get('presenter') or '').strip().lower()
+        for row in rows
+        if row.get('email') or row.get('presenter')
+    }
     totals = {
         'all': len(rows),
-        'abstract': sum(1 for row in rows if row['source_type'] == PresentationUpload.SOURCE_ABSTRACT),
-        'program': sum(1 for row in rows if row['source_type'] != PresentationUpload.SOURCE_ABSTRACT),
         'files': sum(1 for row in rows if _presentation_file_exists(row.get('file'))),
+        'presenters': len(presenter_keys),
+        'events': len(event_ids),
     }
 
     return render(request, 'dashboard_presentation_center.html', {
