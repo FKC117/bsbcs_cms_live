@@ -350,6 +350,10 @@
             <div class="flex min-h-0 flex-1 flex-col">
                 <div class="shrink-0 space-y-2 p-3 sm:p-4">
                     <div id="qr-scanner-status" class="rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-bsbcs-blue ring-1 ring-blue-100">Preparing camera...</div>
+                    <details id="qr-camera-debug" class="hidden rounded-xl border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                        <summary class="cursor-pointer text-bsbcs-blue">Camera technical details</summary>
+                        <pre id="qr-camera-debug-text" class="mt-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-slate-700"></pre>
+                    </details>
                     <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <select id="qr-camera-select" class="workflow-select" aria-label="Choose camera">
                         <option value="">Detecting cameras...</option>
@@ -395,15 +399,32 @@
         const manualQrCode = document.getElementById('qr-manual-code');
         const submitManualQrCode = document.getElementById('submit-manual-qr-code');
         const scanCurrentFrameButton = document.getElementById('scan-current-frame');
+        const cameraDebug = document.getElementById('qr-camera-debug');
+        const cameraDebugText = document.getElementById('qr-camera-debug-text');
+        const ENVIRONMENT_CAMERA_VALUE = '__environment__';
         let scanner = null;
         let frameDecoder = null;
         let scannerRunning = false;
+        let scannerStarting = false;
         let submitting = false;
         let cameraDevices = [];
         let scanHelpTimer = null;
         let frameScanTimer = null;
         let frameScanRunning = false;
         let activeCameraLabel = '';
+
+        const setDebug = (message = '') => {
+            if (!cameraDebug || !cameraDebugText) return;
+            cameraDebugText.textContent = message;
+            cameraDebug.classList.toggle('hidden', !message);
+        };
+
+        const describeError = (error) => {
+            if (!error) return 'Unknown camera error';
+            const name = error.name || error.constructor?.name || 'CameraError';
+            const message = error.message || String(error);
+            return `${name}: ${message}`;
+        };
 
         const setStatus = (message, tone = 'blue') => {
             status.textContent = message;
@@ -445,7 +466,16 @@
                     console.debug('Scanner stop skipped:', error);
                 }
             }
+            if (scanner) {
+                try {
+                    scanner.clear();
+                } catch (error) {
+                    console.debug('Scanner clear skipped:', error);
+                }
+            }
+            scanner = null;
             scannerRunning = false;
+            scannerStarting = false;
             frameScanRunning = false;
             if (hideModal) {
                 modal.classList.add('hidden');
@@ -469,9 +499,16 @@
         const loadCameras = async () => {
             cameraDevices = await Html5Qrcode.getCameras();
             cameraSelect.innerHTML = '';
+
+            const environmentOption = document.createElement('option');
+            environmentOption.value = ENVIRONMENT_CAMERA_VALUE;
+            environmentOption.textContent = 'Back camera auto';
+            cameraSelect.appendChild(environmentOption);
+
             if (!cameraDevices.length) {
-                cameraSelect.innerHTML = '<option value="">No camera found</option>';
-                return null;
+                cameraSelect.value = ENVIRONMENT_CAMERA_VALUE;
+                setDebug('No device labels were returned yet. Browser will try facingMode=environment.');
+                return ENVIRONMENT_CAMERA_VALUE;
             }
             const isRearCamera = (camera) => /back|rear|environment/i.test(camera.label);
             const isWideCamera = (camera) => /dual|ultra|wide|0\.5/i.test(camera.label);
@@ -489,11 +526,14 @@
                 cameraSelect.appendChild(option);
             });
             const preferred = sortedCameras[0];
-            cameraSelect.value = preferred.id;
-            return preferred.id;
+            const debugLines = sortedCameras.map((camera, index) => `${index + 1}. ${camera.label || 'Unnamed camera'} | ${camera.id}`);
+            setDebug(`Available cameras:\n${debugLines.join('\n')}`);
+            cameraSelect.value = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? ENVIRONMENT_CAMERA_VALUE : preferred.id;
+            return cameraSelect.value;
         };
 
         const getCameraLabel = (cameraId) => {
+            if (cameraId === ENVIRONMENT_CAMERA_VALUE) return 'Back camera auto';
             const selectedCamera = cameraDevices.find((camera) => camera.id === cameraId);
             return selectedCamera ? selectedCamera.label : '';
         };
@@ -596,7 +636,18 @@
             return true;
         };
 
+        const makeScanner = () => {
+            return new Html5Qrcode('kit-qr-reader', {
+                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true,
+                },
+                verbose: false,
+            });
+        };
+
         const startScanner = async () => {
+            if (scannerStarting) return;
             if (!window.Html5Qrcode) {
                 setStatus('QR scanner library could not load. Use manual code entry.', 'pink');
                 return;
@@ -606,14 +657,9 @@
                 return;
             }
             await stopScanner(false);
+            scannerStarting = true;
             await waitForLayout();
-            if (!scanner) scanner = new Html5Qrcode('kit-qr-reader', {
-                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true,
-                },
-                verbose: false,
-            });
+            scanner = makeScanner();
             setStatus('Detecting available cameras...');
             try {
                 const selectedCameraId = cameraSelect.value || await loadCameras();
@@ -623,25 +669,34 @@
                 }
                 activeCameraLabel = getCameraLabel(selectedCameraId);
                 setStatus('Starting the selected camera...');
+                const cameraIdOrConfig = selectedCameraId === ENVIRONMENT_CAMERA_VALUE
+                    ? {facingMode: 'environment'}
+                    : selectedCameraId;
                 const scannerConfig = {
-                    fps: 20,
+                    fps: 12,
                     qrbox: getQrBox(),
                     disableFlip: false,
-                    videoConstraints: {
-                        width: {ideal: 1920},
-                        height: {ideal: 1080},
-                    },
                 };
                 await scanner.start(
-                    selectedCameraId,
+                    cameraIdOrConfig,
                     scannerConfig,
                     submitDecodedCode,
                     () => {}
                 );
                 scannerRunning = true;
+                scannerStarting = false;
                 await verifyLivePreview();
             } catch (error) {
-                setStatus('Camera could not start. Check permission or scan a saved QR image.', 'pink');
+                scannerRunning = false;
+                scannerStarting = false;
+                const details = describeError(error);
+                setStatus(`Camera could not start. ${details}`, 'pink');
+                setDebug([
+                    `Selected camera: ${activeCameraLabel || cameraSelect.value || 'None'}`,
+                    `Secure context: ${window.isSecureContext ? 'yes' : 'no'}`,
+                    `Error: ${details}`,
+                    `Browser: ${navigator.userAgent}`,
+                ].join('\n'));
                 console.error(error);
             }
         };
