@@ -19,6 +19,8 @@ class UserProfileForm(forms.ModelForm):
         model = UserProfile
         fields = ['phone', 'country', 'name', 'email']
 
+
+
     def clean_email(self):
         email = self.cleaned_data.get('email')
         if User.objects.filter(email=email).exists():
@@ -43,6 +45,12 @@ class UserProfileForm(forms.ModelForm):
         if commit:
             user_profile.save()
         return user_profile
+
+
+class CorporateAccountEditForm(forms.ModelForm):
+    class Meta:
+        model = CorporateAccount
+        fields = ['company_name', 'contact_name', 'contact_designation', 'email', 'phone', 'company_logo']
 
 
 class CorporateAccountRequestForm(forms.ModelForm):

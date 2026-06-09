@@ -152,7 +152,7 @@
                 </div>
             </div>
 
-            <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <button type="button" data-workflow-tab="access" class="workflow-tab is-active rounded-2xl border border-line bg-white p-4 text-left transition hover:border-bsbcs-blue">
                     <div class="flex items-start justify-between gap-3">
                         <div>
@@ -191,6 +191,15 @@
                             <p class="mt-1 text-sm font-semibold text-slate-600">Suspend or reactivate corporate access.</p>
                         </div>
                         <span class="rounded-xl bg-green-50 px-3 py-1 text-2xl font-black text-bsbcs-green">{{ totals.approved_accounts }}</span>
+                    </div>
+                </button>
+                <button type="button" data-workflow-tab="quotas" class="workflow-tab rounded-2xl border border-line bg-white p-4 text-left transition hover:border-bsbcs-blue">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-wide text-slate-500">Limits</div>
+                            <div class="mt-1 text-lg font-black text-ink">Complementary</div>
+                            <p class="mt-1 text-sm font-semibold text-slate-600">Set free registration quotas per event.</p>
+                        </div>
                     </div>
                 </button>
             </div>
@@ -313,21 +322,26 @@
                         <h2 class="mt-1 text-2xl font-black text-ink">Event bookings and invoice creation</h2>
                         <p class="mt-1 text-sm font-semibold text-slate-600">Create invoices after attendee rows are approved. Final payment updates stay in Payment Center.</p>
                     </div>
-                    <button name="corporate_action" value="create_invoice" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Create invoice for selected</button>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{% url 'dashboard_payment_center' %}" class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 shadow-sm">Manage corporate payments</a>
+                        <button name="corporate_action" value="create_invoice" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy shadow-sm">Create invoice for selected</button>
+                    </div>
                 </div>
 
                 <div class="mt-3 grid gap-3">
                     {% for corporate_registration in registration_page_obj %}
                         <article class="rounded-2xl border border-line bg-slate-50/70 p-4">
                             <div class="flex flex-wrap items-start justify-between gap-3">
-                                <label class="flex min-w-0 items-start gap-3">
-                                    <input type="checkbox" name="registration_ids" value="{{ corporate_registration.id }}" class="mt-1">
+                                <div class="flex min-w-0 items-start gap-3">
                                     <span class="min-w-0">
                                         <span class="block text-lg font-black text-ink">{{ corporate_registration.corporate_account.company_name }}</span>
                                         <span class="block text-sm font-semibold text-slate-600">{{ corporate_registration.event.name }} {{ corporate_registration.event.year }}</span>
                                     </span>
                                 </label>
-                                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ corporate_registration.get_status_display }}</span>
+                                <div class="flex gap-2 items-center">
+                                    <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200 uppercase">{{ corporate_registration.get_registration_type_display|default:"Regular" }}</span>
+                                    <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ corporate_registration.get_status_display }}</span>
+                                </div>
                             </div>
                             <div class="mt-3 grid gap-2 sm:grid-cols-4">
                                 <div class="rounded-xl bg-white p-3 ring-1 ring-line">
@@ -346,6 +360,53 @@
                                     <div class="text-xs font-black uppercase tracking-wide text-slate-500">Invoices</div>
                                     <div class="mt-1 text-xl font-black text-bsbcs-blue">{{ corporate_registration.invoice_count }}</div>
                                     <div class="text-xs font-bold text-slate-500">{{ corporate_registration.open_invoice_count }} open</div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 border-t border-slate-200 pt-3">
+                                <div class="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500 mb-2">Attendees ({{ corporate_registration.attendees.all|length }})</div>
+                                <div class="desktop-table overflow-hidden rounded-xl border border-line">
+                                    <table class="soft-table text-sm">
+                                        <thead>
+                                            <tr>
+                                                <th class="w-10"></th>
+                                                <th>Attendee</th>
+                                                <th>Organization</th>
+                                                <th>Member / fee</th>
+                                                <th>Review</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for attendee in corporate_registration.attendees.all %}
+                                                <tr>
+                                                    <td>
+                                                        {% if attendee.review_status == 'approved' %}
+                                                            <input type="checkbox" name="invoice_attendee_ids" value="{{ attendee.id }}">
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <div class="font-bold text-ink">{{ attendee.name }}</div>
+                                                        <div class="text-xs text-slate-500">{{ attendee.email }} · {{ attendee.phone }}</div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="font-semibold">{{ attendee.registration.corporate_account.company_name }}</div>
+                                                        <div class="text-xs text-slate-500">{{ attendee.organization|default:"Organization not provided" }}</div>
+                                                    </td>
+                                                    <td class="text-xs font-bold text-slate-600">
+                                                        <div>{{ attendee.member_match_label }}</div>
+                                                        <div>{{ attendee.applied_fee_label }}</div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="shrink-0 rounded px-2 py-0.5 text-[10px] font-black uppercase {% if attendee.review_status == 'approved' %}bg-green-50 text-green-700{% elif attendee.review_status == 'denied' %}bg-pink-50 text-pink-700{% else %}bg-amber-50 text-amber-700{% endif %}">
+                                                            {{ attendee.get_review_status_display }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            {% empty %}
+                                                <tr><td colspan="5" class="py-4 text-center text-sm text-slate-500">No attendees uploaded yet.</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </article>
@@ -543,6 +604,63 @@
                         {% endif %}
                     </div>
                 </div>
+            {% endif %}
+        </section>
+
+        <section data-workflow-panel="quotas" class="workflow-panel mt-4 rounded-3xl border border-line bg-white p-4 shadow-quiet">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Complementary Quotas</div>
+                    <h2 class="mt-1 text-2xl font-black text-ink">Manage free registrations per event</h2>
+                    <p class="mt-1 text-sm font-semibold text-slate-600">Select an event from the top filter to set quotas for all approved corporate accounts.</p>
+                </div>
+            </div>
+
+            {% if not current_filters.event %}
+                <div class="mt-4 rounded-2xl bg-amber-50 p-5 text-sm font-semibold text-bsbcs-amber">
+                    Please select an event from the filter above to manage quotas.
+                </div>
+            {% else %}
+                <form method="post" class="mt-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="event" value="{{ current_filters.event }}">
+                    <input type="hidden" name="panel" value="quotas">
+
+                    <div class="desktop-table overflow-hidden rounded-2xl border border-line">
+                        <table class="soft-table">
+                            <thead>
+                                <tr>
+                                    <th>Organization</th>
+                                    <th>Contact</th>
+                                    <th class="w-48">Complementary Quota</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in quota_accounts %}
+                                    <tr>
+                                        <td>
+                                            <div class="font-black text-ink">{{ account.company_name }}</div>
+                                            <div class="text-xs text-slate-500">{{ account.email }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="font-semibold">{{ account.contact_name }}</div>
+                                            <div class="text-xs text-slate-500">{{ account.phone }}</div>
+                                        </td>
+                                        <td>
+                                            <input type="number" name="quota_{{ account.id }}" value="{{ account.current_quota|default:0 }}" min="0" class="workflow-input w-24 text-center">
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr><td colspan="3" class="py-10 text-center text-sm font-semibold text-slate-500">No approved corporate accounts found.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4 flex justify-end">
+                        <button name="corporate_action" value="set_quotas" class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white shadow-sm hover:bg-bsbcs-navy">Save Quotas</button>
+                    </div>
+                </form>
             {% endif %}
         </section>
     </main>

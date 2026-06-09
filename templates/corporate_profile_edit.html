@@ -1,0 +1,187 @@
+{% load static %}
+{% load crispy_forms_tags %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Corporate Profile | {{ site_settings.site_name|default:"BSBCS" }}</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    {% if site_settings and site_settings.favicon %}
+        <link rel="icon" href="{{ site_settings.favicon.url }}">
+    {% endif %}
+    <style>
+        body {
+            margin: 0;
+            background: #f5f8fb;
+            color: #172033;
+            font-family: "Source Sans Pro", Arial, sans-serif;
+        }
+        .topbar {
+            border-bottom: 1px solid #dce3ec;
+            background: #fff;
+        }
+        .topbar-inner {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .brand img,
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+        }
+        .brand img {
+            object-fit: contain;
+            border: 1px solid #dce3ec;
+            padding: 4px;
+        }
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #e3f2fd;
+            color: #1565c0;
+            font-weight: 900;
+        }
+        .brand strong {
+            display: block;
+            color: #1565c0;
+            font-size: 18px;
+            line-height: 1.1;
+        }
+        .brand small {
+            color: #5f6b7a;
+        }
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            border-radius: 10px;
+            padding: 0 16px;
+            font-weight: 900;
+            text-decoration: none;
+            border: 0;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .button-primary {
+            background: #1565c0;
+            color: #fff;
+        }
+        .button-secondary {
+            border: 1px solid #dce3ec;
+            color: #172033;
+            background: #fff;
+        }
+        .logout {
+            background: #102033;
+            color: #fff;
+        }
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 48px 16px;
+        }
+        .card {
+            border: 1px solid #dce3ec;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 12px 30px rgba(21, 41, 72, 0.07);
+            padding: 32px;
+        }
+        h1 {
+            margin: 0 0 24px;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 28px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #334155;
+        }
+        .form-control {
+            width: 100%;
+            min-height: 44px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: #1565c0;
+            box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.1);
+        }
+        .help-block {
+            margin-top: 6px;
+            font-size: 13px;
+            color: #64748b;
+        }
+        .actions-row {
+            margin-top: 32px;
+            display: flex;
+            gap: 12px;
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a href="{% url 'corporate_dashboard' %}" class="brand">
+                {% if site_settings and site_settings.logo %}
+                    <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }} logo">
+                {% else %}
+                    <span class="brand-mark">B</span>
+                {% endif %}
+                <span>
+                    <strong>{{ site_settings.site_name|default:"BSBCS" }}</strong>
+                    <small>Corporate Registration</small>
+                </span>
+            </a>
+            <div class="nav-actions">
+                <a href="{% url 'corporate_dashboard' %}" class="button button-secondary">Cancel</a>
+                <a href="{% url 'logout' %}" class="button logout">Logout</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="page">
+        <div class="card">
+            <h1>Edit Corporate Profile</h1>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {{ form|crispy }}
+                
+                <div class="actions-row">
+                    <button type="submit" class="button button-primary">Save Changes</button>
+                    <a href="{% url 'corporate_dashboard' %}" class="button button-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</body>
+</html>

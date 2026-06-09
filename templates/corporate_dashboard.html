@@ -338,6 +338,9 @@
                 <aside class="card">
                     <h2>Account Contact</h2>
                     <p><strong>{{ corporate_account.contact_name }}</strong><br>{{ corporate_account.contact_designation|default:"Corporate coordinator" }}<br>{{ corporate_account.email }}<br>{{ corporate_account.phone }}</p>
+                    <div style="margin-top: 14px;">
+                        <a href="{% url 'corporate_profile_edit' %}" class="button button-secondary" style="width: 100%; justify-content: center; min-height: 38px;">Edit Profile</a>
+                    </div>
                 </aside>
             </section>
 

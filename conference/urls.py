@@ -80,6 +80,7 @@ urlpatterns = [
     path('corporate-access/received/', views.corporate_account_request_done, name='corporate_account_request_done'),
     path('corporate/login/', views.corporate_login, name='corporate_login'),
     path('corporate/dashboard/', views.corporate_dashboard, name='corporate_dashboard'),
+    path('corporate/profile/edit/', views.corporate_profile_edit, name='corporate_profile_edit'),
     path('corporate/events/<int:event_id>/registration/', views.corporate_event_registration, name='corporate_event_registration'),
     path('corporate/events/<int:event_id>/template.csv', views.corporate_event_template_csv, name='corporate_event_template_csv'),
     path('corporate/payments/<int:payment_id>/', views.corporate_payment, name='corporate_payment'),

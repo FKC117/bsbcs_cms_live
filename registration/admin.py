@@ -588,7 +588,7 @@ def update_corporate_registration_status(corporate_registration):
     corporate_registration.save(update_fields=['status', 'total_attendees', 'updated_at'])
 
 
-def create_corporate_payment_for_registration(corporate_registration, request=None):
+def create_corporate_payment_for_registration(corporate_registration, request=None, selected_attendee_ids=None):
     approved_attendees = CorporateEventAttendee.objects.filter(
         registration=corporate_registration,
         review_status='approved',
@@ -597,9 +597,16 @@ def create_corporate_payment_for_registration(corporate_registration, request=No
         corporate_payments__status__in=['unpaid', 'initiated', 'pending', 'completed', 'paid']
     ).select_related('participant', 'registration__event').distinct()
 
+    if selected_attendee_ids is not None:
+        approved_attendees = approved_attendees.filter(id__in=selected_attendee_ids)
+
     invoice_attendees = []
     total_amount = 0
+    is_complementary = (corporate_registration.registration_type == 'complementary')
+
     for attendee in approved_attendees:
+        payable_amount = 0 if is_complementary else attendee.participant.get_payable_amount()
+
         payment_status = PaymentStatus.objects.filter(
             participant=attendee.participant,
             event=corporate_registration.event,
@@ -609,13 +616,18 @@ def create_corporate_payment_for_registration(corporate_registration, request=No
                 participant=attendee.participant,
                 event=corporate_registration.event,
                 merchant_invoice_number=f"CORPFREE-{corporate_registration.event_id}-{attendee.participant_id}-{int(time.time())}",
-                amount=attendee.participant.get_payable_amount(),
-                status='completed' if not attendee.participant.get_payable_amount() else 'unpaid',
+                amount=payable_amount,
+                status='completed' if not payable_amount else 'unpaid',
             )
+        elif is_complementary and payment_status.status == 'unpaid':
+            payment_status.amount = 0
+            payment_status.status = 'completed'
+            payment_status.save(update_fields=['amount', 'status'])
+
         if payment_status.status in ['completed', 'paid'] and payment_status.amount and payment_status.amount > 0:
             continue
 
-        amount = payment_status.amount if payment_status.amount is not None else attendee.participant.get_payable_amount()
+        amount = payment_status.amount if payment_status.amount is not None else payable_amount
         invoice_attendees.append(attendee)
         if amount and amount > 0:
             total_amount += amount
@@ -733,7 +745,13 @@ def approve_corporate_attendees(request, queryset):
         event = attendee.registration.event
         department_name = (attendee.department or 'Not specified').strip()[:50] or 'Not specified'
         department, _ = Department.objects.get_or_create(event=event, name=department_name)
-        registration_type = 'member' if attendee.matched_member else 'regular'
+        
+        corp_reg_type = attendee.registration.registration_type
+        if corp_reg_type in ['company_person', 'complementary']:
+            registration_type = corp_reg_type
+        else:
+            registration_type = 'member' if attendee.matched_member else 'regular'
+
         password = None
         include_password = False
 

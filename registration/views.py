@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.models import User
@@ -871,6 +872,26 @@ def corporate_login(request):
         return redirect(dashboard_url)
 
     return render(request, 'corporate_login.html', {'form': form, 'dashboard_url': dashboard_url})
+@login_required
+def corporate_profile_edit(request):
+    from .forms import CorporateAccountEditForm
+    corporate_account = CorporateAccount.objects.filter(user=request.user).first()
+    if not corporate_account:
+        return redirect('corporate_dashboard')
+
+    if request.method == 'POST':
+        form = CorporateAccountEditForm(request.POST, request.FILES, instance=corporate_account)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Corporate profile updated successfully.')
+            return redirect('corporate_dashboard')
+    else:
+        form = CorporateAccountEditForm(instance=corporate_account)
+
+    return render(request, 'corporate_profile_edit.html', {
+        'form': form,
+        'corporate_account': corporate_account,
+    })
 
 
 @login_required
@@ -4792,23 +4813,31 @@ def dashboard_corporate_center(request):
                     messages.success(request, f'{denied_count} attendee(s) denied.')
 
             elif action == 'create_invoice':
-                registration_ids = request.POST.getlist('registration_ids')
-                if not registration_ids:
-                    messages.error(request, 'Select at least one corporate event registration first.')
+                invoice_attendee_ids = request.POST.getlist('invoice_attendee_ids')
+                if not invoice_attendee_ids:
+                    messages.error(request, 'Select at least one approved attendee first to generate an invoice.')
                     return redirect(redirect_url)
+                
                 from registration.admin import create_corporate_payment_for_registration
+                
+                attendees = CorporateEventAttendee.objects.filter(id__in=invoice_attendee_ids).select_related('registration__corporate_account', 'registration__event')
+                registration_map = {}
+                for att in attendees:
+                    registration_map.setdefault(att.registration, []).append(att.id)
 
                 created = 0
                 skipped = 0
-                for corporate_registration in CorporateEventRegistration.objects.filter(pk__in=registration_ids):
-                    corporate_payment, was_created, reason = create_corporate_payment_for_registration(corporate_registration, request=request)
+                for corporate_registration, selected_ids in registration_map.items():
+                    corporate_payment, was_created, reason = create_corporate_payment_for_registration(
+                        corporate_registration, request=request, selected_attendee_ids=selected_ids
+                    )
                     if was_created:
                         dashboard_log_action(request, corporate_payment, ADDITION, 'Created corporate invoice from Corporate Center dashboard.')
                         created += 1
                     else:
                         skipped += 1
                         if reason:
-                            messages.warning(request, f'{corporate_registration}: {reason}')
+                            messages.warning(request, f'{corporate_registration.corporate_account.company_name}: {reason}')
                 messages.success(request, f'{created} corporate invoice(s) created. {skipped} skipped.')
 
             elif action == 'update_account':
@@ -4849,6 +4878,24 @@ def dashboard_corporate_center(request):
                 dashboard_log_action(request, corporate_account, CHANGE, 'Changed corporate account status from Corporate Center dashboard.')
                 messages.success(request, f'{corporate_account.company_name} marked {corporate_account.get_status_display().lower()}.')
 
+            elif action == 'set_quotas':
+                if not event_filter:
+                    messages.error(request, 'Select an event first to set complementary quotas.')
+                    return redirect(redirect_url)
+                
+                updated_count = 0
+                for account in CorporateAccount.objects.filter(status='approved'):
+                    quota_val_str = request.POST.get(f'quota_{account.id}')
+                    if quota_val_str is not None and quota_val_str.isdigit():
+                        quota_val = int(quota_val_str)
+                        CorporateEventComplementaryQuota.objects.update_or_create(
+                            corporate_account=account,
+                            event_id=event_filter,
+                            defaults={'allocated_count': quota_val}
+                        )
+                        updated_count += 1
+                messages.success(request, f'Complementary quotas updated for {updated_count} account(s).')
+
             else:
                 messages.error(request, 'Choose a valid corporate workflow action.')
         except Exception as exc:
@@ -4865,6 +4912,16 @@ def dashboard_corporate_center(request):
     if event_filter:
         registrations = registrations.filter(event_id=event_filter)
         attendees = attendees.filter(registration__event_id=event_filter)
+
+    # For the quotas tab, fetch all approved accounts and attach their quotas
+    quota_accounts = list(CorporateAccount.objects.filter(status='approved').order_by('company_name'))
+    if event_filter:
+        quotas_dict = {
+            q.corporate_account_id: q.allocated_count 
+            for q in CorporateEventComplementaryQuota.objects.filter(event_id=event_filter)
+        }
+        for acc in quota_accounts:
+            acc.current_quota = quotas_dict.get(acc.id, 0)
 
     if request_status != 'all':
         access_requests = access_requests.filter(status=request_status)
@@ -4928,6 +4985,7 @@ def dashboard_corporate_center(request):
         'account_page_obj': Paginator(accounts, 6).get_page(request.GET.get('accounts_page')),
         'registration_page_obj': registration_page,
         'attendee_page_obj': Paginator(attendees, 10).get_page(request.GET.get('attendees_page')),
+        'quota_accounts': quota_accounts,
         'totals': totals,
         'current_filters': {
             'event': event_filter or '',
