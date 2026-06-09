@@ -405,6 +405,9 @@ def create_profile(request):
         if existing_profile:
             return redirect(next_url or 'user_profile')
 
+        corporate_account = CorporateAccount.objects.filter(user=request.user).first()
+        is_corporate = corporate_account is not None
+
         if request.method == 'POST':
             name = (request.POST.get('name') or '').strip()
             email = (request.POST.get('email') or request.user.email or request.user.username or '').strip()
@@ -431,6 +434,12 @@ def create_profile(request):
                     phone=phone,
                     country=country,
                 )
+                if is_corporate:
+                    company_logo = request.FILES.get('company_logo')
+                    if company_logo:
+                        corporate_account.company_logo = company_logo
+                        corporate_account.save(update_fields=['company_logo', 'updated_at'])
+
                 messages.success(request, "Your personal BSBCS profile has been created.")
                 return redirect(next_url or 'user_profile')
 
@@ -442,6 +451,7 @@ def create_profile(request):
             'form': form,
             'next_url': next_url,
             'completing_existing_profile': True,
+            'is_corporate': is_corporate,
         })
 
     if request.method == 'POST':
@@ -868,7 +878,21 @@ def corporate_dashboard(request):
     corporate_account = CorporateAccount.objects.filter(user=request.user).first()
     has_personal_profile = UserProfile.objects.filter(user=request.user).exists()
     matching_requests = CorporateAccountRequest.objects.filter(email__iexact=request.user.email).order_by('-created_at')
-    open_events = Event.objects.filter(event_status='active', registration='Open').order_by('start_date')
+    
+    open_events_base = Event.objects.filter(event_status='active', registration='Open').order_by('start_date')
+    open_events = []
+    from .models import CorporateEventComplementaryQuota
+    for event in open_events_base:
+        if corporate_account:
+            quota_obj = CorporateEventComplementaryQuota.objects.filter(corporate_account=corporate_account, event=event).first()
+            remaining_quota = quota_obj.get_remaining_count() if quota_obj else 0
+        else:
+            remaining_quota = 0
+        open_events.append({
+            'event': event,
+            'remaining_quota': remaining_quota
+        })
+
     corporate_payments = CorporatePayment.objects.filter(corporate_account=corporate_account).select_related('event', 'corporate_registration')[:8] if corporate_account else []
     corporate_registrations = (
         CorporateEventRegistration.objects.filter(corporate_account=corporate_account)
@@ -1059,7 +1083,28 @@ def corporate_event_registration(request, event_id):
         return redirect('corporate_dashboard')
 
     event = get_object_or_404(Event, id=event_id, event_status='active', registration='Open')
-    regular_fee = event.amount if event.payment_required else 0
+    
+    # Determine registration type from query params or POST
+    reg_type = request.POST.get('registration_type') or request.GET.get('reg_type') or 'regular'
+    
+    # Validate complementary quota
+    remaining_quota = 0
+    from .models import CorporateEventComplementaryQuota
+    quota_obj = CorporateEventComplementaryQuota.objects.filter(corporate_account=corporate_account, event=event).first()
+    if quota_obj:
+        remaining_quota = quota_obj.get_remaining_count()
+        
+    if reg_type == 'complementary' and remaining_quota <= 0:
+        messages.error(request, 'You do not have any remaining complementary spots for this event.')
+        return redirect('corporate_dashboard')
+
+    if reg_type == 'company_person':
+        regular_fee = event.company_person_registration_fee or 0
+    elif reg_type == 'complementary':
+        regular_fee = 0
+    else:
+        regular_fee = event.amount if event.payment_required else 0
+        
     member_fee = event.member_registration_fee if event.member_registration_fee is not None else 0
     recent_submissions = CorporateEventRegistration.objects.filter(
         corporate_account=corporate_account,
@@ -1079,11 +1124,18 @@ def corporate_event_registration(request, event_id):
                     messages.error(request, f'{len(upload_errors) - 8} more row error(s) were found. Please correct the CSV and upload again.')
             else:
                 accepted_rows, skipped_rows = _split_corporate_attendee_rows(event, attendee_rows)
+                
+                # Check quota specifically for complementary
+                if reg_type == 'complementary' and len(accepted_rows) > remaining_quota:
+                    messages.error(request, f'You can only submit up to {remaining_quota} complementary attendees. You attempted to submit {len(accepted_rows)}.')
+                    accepted_rows = []
+                    
                 if accepted_rows:
                     with transaction.atomic():
                         registration = CorporateEventRegistration.objects.create(
                             corporate_account=corporate_account,
                             event=event,
+                            registration_type=reg_type,
                             submission_mode='csv',
                             status='submitted',
                             total_attendees=len(accepted_rows),
@@ -1100,7 +1152,7 @@ def corporate_event_registration(request, event_id):
                         reason_counts[skipped['reason']] = reason_counts.get(skipped['reason'], 0) + 1
                     summary = '; '.join(f'{count} {reason}' for reason, count in reason_counts.items())
                     messages.warning(request, f'{len(skipped_rows)} row(s) skipped: {summary}.')
-                return redirect('corporate_event_registration', event_id=event.id)
+                return redirect(f"{reverse('corporate_event_registration', args=[event.id])}?reg_type={reg_type}")
 
     elif request.method == 'POST':
         name = (request.POST.get('name') or '').strip()
@@ -1109,10 +1161,13 @@ def corporate_event_registration(request, event_id):
 
         if not name or not email or not phone:
             messages.error(request, 'Name, email, and phone are required for manual attendee submission.')
+        elif reg_type == 'complementary' and remaining_quota < 1:
+            messages.error(request, 'You have no remaining complementary spots.')
         else:
             registration = CorporateEventRegistration.objects.create(
                 corporate_account=corporate_account,
                 event=event,
+                registration_type=reg_type,
                 submission_mode='manual',
                 status='submitted',
                 total_attendees=1,
@@ -1130,11 +1185,13 @@ def corporate_event_registration(request, event_id):
                 'notes': (request.POST.get('notes') or '').strip(),
             })
             messages.success(request, f'{name} has been submitted for BSBCS admin review.')
-            return redirect('corporate_event_registration', event_id=event.id)
+            return redirect(f"{reverse('corporate_event_registration', args=[event.id])}?reg_type={reg_type}")
 
     return render(request, 'corporate_event_registration.html', {
         'corporate_account': corporate_account,
         'event': event,
+        'reg_type': reg_type,
+        'remaining_quota': remaining_quota,
         'regular_fee': regular_fee,
         'member_fee': member_fee,
         'recent_submissions': recent_submissions,

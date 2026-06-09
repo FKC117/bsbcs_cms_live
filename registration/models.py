@@ -85,6 +85,7 @@ class CorporateAccount(models.Model):
     contact_designation = models.CharField(max_length=120, blank=True, null=True)
     email = models.EmailField()
     phone = models.CharField(max_length=30)
+    company_logo = models.ImageField(upload_to='images/corporate_logos/', blank=True, null=True)
     status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default='approved')
     approved_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -95,6 +96,29 @@ class CorporateAccount(models.Model):
 
     class Meta:
         ordering = ['company_name']
+
+
+class CorporateEventComplementaryQuota(models.Model):
+    corporate_account = models.ForeignKey(CorporateAccount, on_delete=models.CASCADE, related_name='complementary_quotas')
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='complementary_quotas')
+    allocated_count = models.PositiveIntegerField(default=0, help_text="Number of free registrations granted.")
+    
+    def get_used_count(self):
+        return CorporateEventAttendee.objects.filter(
+            registration__corporate_account=self.corporate_account,
+            registration__event=self.event,
+            registration__registration_type='complementary',
+        ).exclude(review_status='denied').count()
+
+    def get_remaining_count(self):
+        return max(0, self.allocated_count - self.get_used_count())
+
+    class Meta:
+        unique_together = ('corporate_account', 'event')
+        verbose_name_plural = "Corporate Complementary Quotas"
+
+    def __str__(self):
+        return f"{self.corporate_account.company_name} - {self.event.name} Quota: {self.allocated_count}"
 
 
 class CorporateEventRegistration(models.Model):
@@ -109,9 +133,15 @@ class CorporateEventRegistration(models.Model):
         ('partially_approved', 'Partially approved'),
         ('rejected', 'Rejected'),
     ]
+    REGISTRATION_TYPE_CHOICES = [
+        ('regular', 'Regular Attendee'),
+        ('company_person', 'Company Person'),
+        ('complementary', 'Complementary'),
+    ]
 
     corporate_account = models.ForeignKey(CorporateAccount, on_delete=models.CASCADE, related_name='event_registrations')
     event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='corporate_registrations')
+    registration_type = models.CharField(max_length=30, choices=REGISTRATION_TYPE_CHOICES, default='regular')
     submission_mode = models.CharField(max_length=20, choices=SUBMISSION_MODE_CHOICES, default='manual')
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='submitted')
     total_attendees = models.PositiveIntegerField(default=0)
@@ -171,6 +201,11 @@ class CorporateEventAttendee(models.Model):
 
     @property
     def applied_fee_label(self):
+        if self.registration.registration_type == 'complementary':
+            return 'Complementary: Free'
+        if self.registration.registration_type == 'company_person':
+            fee = self.registration.event.company_person_registration_fee or 0
+            return 'Company Person: Free' if not fee else f'Company Person: BDT {fee}'
         if self.matched_member:
             member_fee = self.registration.event.member_registration_fee or 0
             return 'Member fee: Free' if not member_fee else f'Member fee: BDT {member_fee}'
@@ -261,6 +296,17 @@ class Event(models.Model):
         blank=True,
         null=True,
         help_text='Optional member-only event fee. Leave blank or set 0 for free member attendance.'
+    )
+    company_person_registration_enabled = models.BooleanField(
+        default=False,
+        help_text='Allow company people registration for this event.'
+    )
+    company_person_registration_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text='Optional company person registration fee.'
     )
     show_publication_tab = models.BooleanField(default=False, help_text="Show or hide the Publication tab on the event page.")
     slug = models.SlugField(unique=True, blank=True)
@@ -356,6 +402,8 @@ class Participant(models.Model):
     REGISTRATION_TYPE_CHOICES = [
         ('regular', 'Regular'),
         ('member', 'Member'),
+        ('company_person', 'Company Person'),
+        ('complementary', 'Complementary'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -382,6 +430,10 @@ class Participant(models.Model):
         return self.name
 
     def get_payable_amount(self):
+        if self.registration_type == 'complementary':
+            return 0
+        if self.registration_type == 'company_person':
+            return self.event.company_person_registration_fee or 0
         if self.registration_type == 'member' and (
             self.event.member_registration_enabled
             or self.event.registration_audience == 'members_only'

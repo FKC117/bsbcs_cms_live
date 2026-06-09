@@ -81,6 +81,8 @@ class DashboardEventForm(forms.ModelForm):
             'amount',
             'member_registration_enabled',
             'member_registration_fee',
+            'company_person_registration_enabled',
+            'company_person_registration_fee',
             'show_publication_tab',
             'event_logo',
             'event_hero_image',
@@ -104,6 +106,7 @@ class DashboardEventForm(forms.ModelForm):
             'registration_audience': forms.Select(attrs={'class': 'workflow-input'}),
             'amount': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': '0.00'}),
             'member_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
+            'company_person_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
             'event_logo': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
             'event_hero_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
             'modal_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
@@ -117,7 +120,7 @@ class DashboardEventForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field_name in ('payment_required', 'member_registration_enabled', 'show_publication_tab'):
+        for field_name in ('payment_required', 'member_registration_enabled', 'company_person_registration_enabled', 'show_publication_tab'):
             self.fields[field_name].widget.attrs.setdefault(
                 'class',
                 'h-5 w-5 rounded border-line text-bsbcs-blue focus:ring-bsbcs-blue/20',
@@ -131,6 +134,8 @@ class DashboardEventForm(forms.ModelForm):
         amount = cleaned_data.get('amount')
         member_registration_enabled = cleaned_data.get('member_registration_enabled')
         member_registration_fee = cleaned_data.get('member_registration_fee')
+        company_person_registration_enabled = cleaned_data.get('company_person_registration_enabled')
+        company_person_registration_fee = cleaned_data.get('company_person_registration_fee')
 
         if start_date and end_date and end_date < start_date:
             self.add_error('end_date', 'End date cannot be before the start date.')
@@ -146,6 +151,12 @@ class DashboardEventForm(forms.ModelForm):
 
         if not member_registration_enabled:
             cleaned_data['member_registration_fee'] = None
+
+        if company_person_registration_fee is not None and company_person_registration_fee < 0:
+            self.add_error('company_person_registration_fee', 'Company person registration fee cannot be negative.')
+
+        if not company_person_registration_enabled:
+            cleaned_data['company_person_registration_fee'] = None
 
         return cleaned_data
 

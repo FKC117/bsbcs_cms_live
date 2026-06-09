@@ -439,7 +439,7 @@
 
         <section class="hero">
             <div class="card">
-                <p class="eyebrow">Selected Event</p>
+                <p class="eyebrow">Selected Event - {% if reg_type == 'regular' %}Regular Attendee Registration{% elif reg_type == 'company_person' %}Company Staff Registration{% else %}Complementary Registration{% endif %}</p>
                 <h1>{{ event.name }} {{ event.year }}</h1>
                 <p>{{ event.slogan }}</p>
                 <span class="status">Registration Open</span>
@@ -451,6 +451,7 @@
             </aside>
         </section>
 
+        {% if reg_type == 'regular' %}
         <section class="fee-grid">
             <article class="fee-box">
                 <h3>Regular participant fee</h3>
@@ -463,6 +464,23 @@
                 <p class="muted">Applied only when the attendee matches an approved active BSBCS member and this event allows member benefits.</p>
             </article>
         </section>
+        {% elif reg_type == 'company_person' %}
+        <section class="fee-grid" style="grid-template-columns: 1fr;">
+            <article class="fee-box">
+                <h3>Company Person fee</h3>
+                <strong>BDT {{ regular_fee|default:"0" }}</strong>
+                <p class="muted">This fixed fee applies to all submitted company staff attendees.</p>
+            </article>
+        </section>
+        {% elif reg_type == 'complementary' %}
+        <section class="fee-grid" style="grid-template-columns: 1fr;">
+            <article class="fee-box">
+                <h3>Complementary</h3>
+                <strong>Free</strong>
+                <p class="muted">You have {{ remaining_quota }} free spot(s) remaining for this event.</p>
+            </article>
+        </section>
+        {% endif %}
 
         <section class="upload-section">
             <article class="card">
@@ -474,6 +492,7 @@
                 <form class="upload-drop" method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="hidden" name="submission_type" value="csv">
+                    <input type="hidden" name="registration_type" value="{{ reg_type }}">
                     <strong>Upload completed CSV</strong>
                     <p class="muted">CSV upload is active now. XLSX import can be added after the preview step.</p>
                     <input type="file" name="attendee_file" accept=".csv,text/csv" required>
@@ -521,6 +540,7 @@
             <p>For one or two attendees, the corporate user can fill the same fields directly and submit the attendee for BSBCS admin review.</p>
             <form id="manual-attendee-form" class="entry-grid" method="post">
                 {% csrf_token %}
+                <input type="hidden" name="registration_type" value="{{ reg_type }}">
                 <div class="field">
                     <label for="attendee-name">Name</label>
                     <input type="text" id="attendee-name" name="name" autocomplete="name" required>

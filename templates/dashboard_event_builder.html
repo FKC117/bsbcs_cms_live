@@ -237,6 +237,20 @@
                             {{ form.member_registration_fee }}
                             {% if form.member_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.member_registration_fee.errors }}</div>{% endif %}
                         </div>
+                        <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-3 lg:col-span-2">
+                            <label class="flex items-start gap-3 text-sm font-bold text-ink">
+                                {{ form.company_person_registration_enabled }}
+                                <span>
+                                    Enable company people registration
+                                    <span class="mt-1 block text-xs font-semibold leading-5 text-slate-600">Allow companies to register their people and set a specific fee.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.company_person_registration_fee.id_for_label }}">Company person fee</label>
+                            {{ form.company_person_registration_fee }}
+                            {% if form.company_person_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.company_person_registration_fee.errors }}</div>{% endif %}
+                        </div>
                     </div>
                 </section>
 
@@ -272,8 +286,30 @@
                     </div>
                 </section>
 
+                <section class="mt-4 rounded-2xl border border-purple-100 bg-purple-50/50 p-4">
+                    <div class="mb-4 flex items-center gap-2">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-white text-sm font-black text-purple-600 ring-1 ring-purple-100">4</span>
+                        <div>
+                            <h3 class="text-lg font-black text-ink">Post-registration communication</h3>
+                            <p class="text-xs font-semibold text-slate-500">Thank-you email subject and body sent upon successful registration.</p>
+                        </div>
+                    </div>
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <div>
+                            <label class="compact-label" for="{{ form.email_subject.id_for_label }}">Thank-you email subject</label>
+                            {{ form.email_subject }}
+                            {% if form.email_subject.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_subject.errors }}</div>{% endif %}
+                        </div>
+                        <div>
+                            <label class="compact-label" for="{{ form.email_body.id_for_label }}">Thank-you email body</label>
+                            {{ form.email_body }}
+                            {% if form.email_body.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_body.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </section>
+
                 <details class="mt-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50/30 p-4">
-                    <summary class="cursor-pointer text-sm font-black text-bsbcs-blue">Optional SEO and thank-you email text</summary>
+                    <summary class="cursor-pointer text-sm font-black text-bsbcs-blue">Optional SEO text</summary>
                     <div class="mt-4 grid gap-4 lg:grid-cols-2">
                         <div>
                             <label class="compact-label" for="{{ form.keywords.id_for_label }}">Keywords</label>
@@ -284,16 +320,6 @@
                             <label class="compact-label" for="{{ form.author.id_for_label }}">Author</label>
                             {{ form.author }}
                             {% if form.author.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.author.errors }}</div>{% endif %}
-                        </div>
-                        <div>
-                            <label class="compact-label" for="{{ form.email_subject.id_for_label }}">Thank-you email subject</label>
-                            {{ form.email_subject }}
-                            {% if form.email_subject.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_subject.errors }}</div>{% endif %}
-                        </div>
-                        <div>
-                            <label class="compact-label" for="{{ form.email_body.id_for_label }}">Thank-you email body</label>
-                            {{ form.email_body }}
-                            {% if form.email_body.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.email_body.errors }}</div>{% endif %}
                         </div>
                     </div>
                 </details>

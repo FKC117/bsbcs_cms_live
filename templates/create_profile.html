@@ -341,7 +341,7 @@
                 {% endfor %}
             {% endif %}
 
-            <form method="POST" action="{% url 'create_profile' %}">
+            <form method="POST" action="{% url 'create_profile' %}" enctype="multipart/form-data">
                 {% csrf_token %}
                 {% if next_url %}
                     <input type="hidden" name="next" value="{{ next_url }}">
@@ -390,6 +390,13 @@
                         {% if form.password.errors %}
                             <div class="field-error">{{ form.password.errors }}</div>
                         {% endif %}
+                    </div>
+                {% endif %}
+
+                {% if is_corporate %}
+                    <div class="form-group">
+                        <label for="company_logo">Company Logo (PNG format)</label>
+                        <input type="file" name="company_logo" id="company_logo" accept="image/png" class="auth-input" style="padding: 9px 13px;">
                     </div>
                 {% endif %}
 

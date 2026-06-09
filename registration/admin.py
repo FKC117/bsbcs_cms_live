@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -233,17 +233,23 @@ class CorporateEventAttendeeInline(admin.TabularInline):
     applied_fee.short_description = 'Fee category'  # type: ignore
 
 
+@admin.register(CorporateEventComplementaryQuota)
+class CorporateEventComplementaryQuotaAdmin(admin.ModelAdmin):
+    list_display = ('corporate_account', 'event', 'allocated_count', 'get_used_count', 'get_remaining_count')
+    list_filter = ('event',)
+    search_fields = ('corporate_account__company_name',)
+
 @admin.register(CorporateEventRegistration)
 class CorporateEventRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('corporate_account', 'event', 'submission_mode', 'status', 'total_attendees', 'created_at')
-    list_filter = ('status', 'submission_mode', 'event')
+    list_display = ('corporate_account', 'event', 'registration_type', 'submission_mode', 'status', 'total_attendees', 'created_at')
+    list_filter = ('registration_type', 'status', 'submission_mode', 'event')
     search_fields = ('corporate_account__company_name', 'event__name', 'attendees__name', 'attendees__email', 'attendees__phone')
     readonly_fields = ('created_at', 'updated_at')
     inlines = [CorporateEventAttendeeInline]
     actions = ['approve_all_pending_attendees', 'create_corporate_payment_invoice']
     fieldsets = (
         ('Step 1 - Corporate submission', {
-            'fields': ('corporate_account', 'event', 'submission_mode', 'status', 'total_attendees')
+            'fields': ('corporate_account', 'event', 'registration_type', 'submission_mode', 'status', 'total_attendees')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at')
@@ -434,10 +440,10 @@ class ModeratorAdmin(admin.ModelAdmin):
 admin.site.register(Moderator, ModeratorAdmin)
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee')
-    list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled')
+    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
+    list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled', 'company_person_registration_enabled')
     search_fields = ('name',)
-    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee')
+    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
 admin.site.register(Event, EventAdmin)
 
 import os
