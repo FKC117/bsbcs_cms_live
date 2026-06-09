@@ -1,13 +1,16 @@
 {% load static %}
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Certificate of Participation</title>
-  {% if base_url %}<base href="{{ base_url }}">{% endif %}
+  {% if base_url %}
+  <base href="{{ base_url }}">{% endif %}
   <link rel="stylesheet" href="{% static 'css/certificate_design.css' %}?v=20260519-42">
 </head>
+
 <body>
   <main class="certificate-page{% if capture_mode %} certificate-capture{% endif %}">
     <section class="certificate" aria-label="Certificate of participation">
@@ -28,50 +31,52 @@
       <div class="paper">
         <div class="brand-logos">
           {% if certificate and certificate.organizer_logo %}
-            <span class="logo-slot"><img src="{{ certificate.organizer_logo.url }}" alt="Organizer logo"></span>
+          <span class="logo-slot"><img src="{{ certificate.organizer_logo.url }}" alt="Organizer logo"></span>
           {% elif site_settings and site_settings.logo %}
-            <span class="logo-slot"><img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'Organizer' }} logo"></span>
+          <span class="logo-slot"><img src="{{ site_settings.logo.url }}"
+              alt="{{ site_settings.site_name|default:'Organizer' }} logo"></span>
           {% else %}
-            <span class="logo-slot logo-placeholder">BSBCS</span>
+          <span class="logo-slot logo-placeholder">BSBCS</span>
           {% endif %}
 
           {% if certificate and certificate.co_organizer_logo %}
-            <span class="logo-slot"><img src="{{ certificate.co_organizer_logo.url }}" alt="Co-organizer logo"></span>
+          <span class="logo-slot"><img src="{{ certificate.co_organizer_logo.url }}" alt="Co-organizer logo"></span>
           {% endif %}
         </div>
 
         {% if certificate and certificate.event_logo %}
-          <span class="event-logo"><img src="{{ certificate.event_logo.url }}" alt="Event logo"></span>
+        <span class="event-logo"><img src="{{ certificate.event_logo.url }}" alt="Event logo"></span>
         {% elif event and event.event_logo %}
-          <span class="event-logo"><img src="{{ event.event_logo.url }}" alt="{{ event.name }} logo"></span>
+        <span class="event-logo"><img src="{{ event.event_logo.url }}" alt="{{ event.name }} logo"></span>
         {% else %}
-          <span class="event-logo logo-placeholder">5<sup>th</sup> BBCC</span>
+        <span class="event-logo logo-placeholder">5<sup>th</sup> BBCC</span>
         {% endif %}
 
         <div class="certificate-content">
           <h1>Certificate of Participation</h1>
           <p class="acknowledged">This Certificate Is Acknowledged To</p>
 
-          <div class="recipient-name" data-fit-text data-max-size="45" data-min-size="18">{{ participant_name|default:"" }}</div>
+          <div class="recipient-name" data-fit-text data-max-size="45" data-min-size="18">{{ participant_name|default:"Sample Participant" }}</div>
 
           <div class="name-line"></div>
 
           <p class="event-copy">
             {% if event %}
-              <span>For Participating In The {{ event.name }} {{ event.year }}</span>
-              <span>{{ event.start_date|date:"j F Y" }}{% if event.location %}, {{ event.location }}{% endif %}.</span>
+            <span>For Participating In The {{ event.name }} {{ event.year }}</span>
+            <span>{{ event.start_date|date:"j F Y" }}{% if event.location %}, {{ event.location }}{% endif %}.</span>
             {% else %}
-              <span>For Participating In The 5<sup>th</sup> Bangladesh Breast Cancer Conference 2025</span>
-              <span>28 February 2025, Pan Pacific Sonargaon, Dhaka, Bangladesh.</span>
+            <span>For Participating In The 5<sup>th</sup> Bangladesh Breast Cancer Conference 2025</span>
+            <span>28 February 2025, Pan Pacific Sonargaon, Dhaka, Bangladesh.</span>
             {% endif %}
           </p>
 
-          <div class="signatures signature-count-{{ signature_count|default:2 }}" style="--signature-count: {{ signature_count|default:2 }};">
+          <div class="signatures signature-count-{{ signature_count|default:2 }}"
+            style="--signature-count: {{ signature_count|default:2 }};">
             {% for signatory in signatories %}
             <div class="signature-block">
               <div class="signature-image-slot">
                 {% if signatory.signature_url %}
-                  <img src="{{ signatory.signature_url }}" alt="">
+                <img src="{{ signatory.signature_url }}" alt="">
                 {% endif %}
               </div>
               <div class="signature-line"></div>
@@ -148,4 +153,5 @@
     })();
   </script>
 </body>
+
 </html>

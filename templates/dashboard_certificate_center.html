@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Certificate Center</title>
     <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <script src="{% static 'js/htmx.js' %}"></script>
     <style>
         body { margin: 0; background: #EEF6FB; }
         .workflow-input,
@@ -264,7 +265,7 @@
                         <h2 class="mt-1 text-xl font-black text-ink">Certificate signature block</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Add one signatory at a time. Each signatory is saved immediately. Use the order field to control how multiple signatures appear on the certificate.</p>
                     </div>
-                    <form method="post" enctype="multipart/form-data" class="grid gap-2">
+                    <form hx-post="{% url 'dashboard_certificate_center' %}" hx-encoding="multipart/form-data" hx-target="#signatories" hx-select="#signatories" hx-swap="outerHTML" class="grid gap-2">
                         {% csrf_token %}
                         <input type="hidden" name="certificate_action" value="add_signatory">
                         <input type="hidden" name="event" value="{{ selected_event.id }}">
@@ -304,7 +305,7 @@
                                 </div>
                                 <div class="flex flex-wrap justify-end gap-2">
                                     {% if signatory.signature %}
-                                        <form method="post">
+                                        <form hx-post="{% url 'dashboard_certificate_center' %}" hx-target="#signatories" hx-select="#signatories" hx-swap="outerHTML">
                                             {% csrf_token %}
                                             <input type="hidden" name="certificate_action" value="clear_signatory_signature">
                                             <input type="hidden" name="event" value="{{ selected_event.id }}">
@@ -313,7 +314,7 @@
                                             <button class="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-black text-bsbcs-amber hover:bg-amber-50">Remove image</button>
                                         </form>
                                     {% endif %}
-                                    <form method="post">
+                                    <form hx-post="{% url 'dashboard_certificate_center' %}" hx-target="#signatories" hx-select="#signatories" hx-swap="outerHTML">
                                         {% csrf_token %}
                                         <input type="hidden" name="certificate_action" value="delete_signatory">
                                         <input type="hidden" name="event" value="{{ selected_event.id }}">
