@@ -864,7 +864,20 @@ def approve_corporate_attendees(request, queryset):
         approved_count += 1
 
     for registration_id in touched_registrations:
-        update_corporate_registration_status(CorporateEventRegistration.objects.get(pk=registration_id))
+        corporate_registration = CorporateEventRegistration.objects.get(pk=registration_id)
+        update_corporate_registration_status(corporate_registration)
+
+        corporate_payment, created, reason = create_corporate_payment_for_registration(
+            corporate_registration,
+            request=request,
+        )
+        if corporate_payment:
+            if created:
+                if send_corporate_invoice_email(corporate_payment, request):
+                    write_admin_audit_log(request, corporate_payment, CHANGE, 'Auto-created and emailed corporate invoice after attendee approval.')
+            elif not corporate_payment.email_sent:
+                if send_corporate_invoice_email(corporate_payment, request):
+                    write_admin_audit_log(request, corporate_payment, CHANGE, 'Auto-emailed existing corporate invoice after attendee approval.')
 
     return approved_count
 
