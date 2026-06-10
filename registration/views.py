@@ -53,6 +53,7 @@ from .bulk_email_services import (
 )
 from .tasks import (
     participant_email_log_table_ready,
+    send_email_task,
     send_manual_participant_account_email,
     send_participant_approval_email,
     send_pending_bulk_email_campaign,
@@ -1599,16 +1600,18 @@ def registration_message(request, event_id):
 # Email sending function
 def send_registration_form_submission_email(participant):
     subject = 'Registration Confirmation'
-    # Render the email template with context
     html_content = render_to_string('registration_submitted.html', {'participant': participant})
     text_content = strip_tags(html_content)
     from_email = os.getenv("EMAIL_HOST_USER")
     recipient_list = [participant.email]
 
-    # Create the email
-    email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-    email.attach_alternative(html_content, "text/html")
-    email.send()
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=from_email,
+        recipient_list=recipient_list,
+        html_message=html_content,
+    )
 
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -1627,11 +1630,15 @@ def send_approval_email(participant, event):
         from_email = os.getenv("EMAIL_HOST_USER")
         recipient_list = [participant.email]
 
-        email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-        email.attach_alternative(html_content, "text/html")
-        email.send()
+        send_email_task.delay(
+            subject=subject,
+            body=text_content,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            html_message=html_content,
+        )
     except Exception as e:
-        logger.exception("Error sending approval email: %s", e)
+        logger.exception("Error queueing approval email: %s", e)
 
 
 from django.core.mail import EmailMultiAlternatives
@@ -1655,11 +1662,15 @@ def send_payment_link_email(participant, event):
         from_email = os.getenv("EMAIL_HOST_USER")
         recipient_list = [participant.email]
 
-        email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-        email.attach_alternative(html_content, "text/html")
-        email.send()
+        send_email_task.delay(
+            subject=subject,
+            body=text_content,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            html_message=html_content,
+        )
     except Exception as e:
-        logger.exception("Error sending payment link email: %s", e)
+        logger.exception("Error queueing payment link email: %s", e)
 
 # #### Registration process, registration mail Ends ----------------------------------###
 
@@ -1782,16 +1793,18 @@ def submission_success(request, event_id):
 
 def send_abstract_submission_email(participant):
     subject = 'Abstract Submission Confirmation'
-    # Render the email template with context
     html_content = render_to_string('submission_success.html', {'participant': participant})
     text_content = strip_tags(html_content)
-    from_email = os.getenv("EMAIL_HOST_USER")  # Replace with your sender email
+    from_email = os.getenv("EMAIL_HOST_USER")
     recipient_list = [participant.email]
 
-    # Create the email
-    email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-    email.attach_alternative(html_content, "text/html")
-    email.send()
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=from_email,
+        recipient_list=recipient_list,
+        html_message=html_content,
+    )
 
 # ### Abstract Submission process, abstract submission mail Ends ----------------------------------###
 
@@ -2661,6 +2674,7 @@ def corporate_payment_failure(request, payment_id):
 
 # Invoice Generation Start ----------------------------------------------------------------#
 from django.core.mail import EmailMessage
+
 def send_invoice_email(participant, event, payment_status, invoice_path):
     subject = f"Payment done and Invoice for {event.name}"
     message = (
@@ -2671,18 +2685,20 @@ def send_invoice_email(participant, event, payment_status, invoice_path):
     )
     recipient = participant.email
 
-    # Create Email
-    email = EmailMessage(subject, message, to=[recipient])
-    email.attach_file(invoice_path)
-    
     try:
-        email.send()
+        send_email_task.delay(
+            subject=subject,
+            body=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+            attachment_paths=[invoice_path] if invoice_path else None,
+        )
         payment_status.email_sent = True
         payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
         payment_status.save()
-        logger.info("Email sent to %s", recipient)
+        logger.info("Invoice email queued to %s", recipient)
     except Exception as e:
-        logger.exception("Error sending email: %s", e)
+        logger.exception("Error queueing invoice email: %s", e)
 
 
 def send_corporate_participant_invoice_email(participant, event, payment_status, invoice_path, corporate_account):
@@ -2696,18 +2712,22 @@ def send_corporate_participant_invoice_email(participant, event, payment_status,
         "Best regards,\n"
         "BSBCS Team"
     )
-    email = EmailMessage(subject, message, to=[participant.email])
-    email.attach_file(invoice_path)
 
     try:
-        email.send()
+        send_email_task.delay(
+            subject=subject,
+            body=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[participant.email],
+            attachment_paths=[invoice_path] if invoice_path else None,
+        )
         payment_status.email_sent = True
         payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
         payment_status.save(update_fields=['email_sent', 'invoice', 'updated_at'])
-        logger.info("Corporate participant invoice sent to %s", participant.email)
+        logger.info("Corporate participant invoice queued for %s", participant.email)
         return True
     except Exception as exc:
-        logger.exception("Could not send corporate participant invoice to %s: %s", participant.email, exc)
+        logger.exception("Could not queue corporate participant invoice to %s: %s", participant.email, exc)
         return False
 
 
@@ -3602,9 +3622,13 @@ def _send_abstract_approval_email(abstract, approval_type):
     if not recipient_email:
         return False
 
-    email = EmailMultiAlternatives(subject, text_content, from_email, [recipient_email])
-    email.attach_alternative(html_content, "text/html")
-    email.send()
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=from_email,
+        recipient_list=[recipient_email],
+        html_message=html_content,
+    )
     return True
 
 
@@ -3632,14 +3656,13 @@ def _send_dashboard_participant_payment_email(request, participant, password=Non
 
     html_content = render_to_string('consolidated_email.html', context)
     text_content = strip_tags(html_content)
-    email = EmailMultiAlternatives(
-        f'Your Registration for {event.name} {event.year} is Approved!',
-        text_content,
-        os.getenv("EMAIL_HOST_USER"),
-        [participant.email],
+    send_email_task.delay(
+        subject=f'Your Registration for {event.name} {event.year} is Approved!',
+        body=text_content,
+        from_email=os.getenv("EMAIL_HOST_USER"),
+        recipient_list=[participant.email],
+        html_message=html_content,
     )
-    email.attach_alternative(html_content, "text/html")
-    email.send()
 
 
 def _send_dashboard_free_event_confirmation(participant, password=None, include_password=False):
@@ -3653,14 +3676,13 @@ def _send_dashboard_free_event_confirmation(participant, password=None, include_
 
     html_content = render_to_string('free_event_confirmation_email.html', context)
     text_content = strip_tags(html_content)
-    email = EmailMultiAlternatives(
-        f'Registration Confirmed for {event.name} {event.year}',
-        text_content,
-        os.getenv("EMAIL_HOST_USER"),
-        [participant.email],
+    send_email_task.delay(
+        subject=f'Registration Confirmed for {event.name} {event.year}',
+        body=text_content,
+        from_email=os.getenv("EMAIL_HOST_USER"),
+        recipient_list=[participant.email],
+        html_message=html_content,
     )
-    email.attach_alternative(html_content, "text/html")
-    email.send()
 
 
 def _queue_dashboard_participant_email(request, participant, email_type, password=None, include_password=False, payment_url=None):
@@ -4564,8 +4586,6 @@ def _generate_event_payment_invoice(payment_record):
 
 
 def _send_event_payment_invoice_email(payment_record):
-    from django.core.mail import EmailMessage
-
     if not payment_record.invoice:
         _generate_event_payment_invoice(payment_record)
 
@@ -4575,14 +4595,14 @@ def _send_event_payment_invoice_email(payment_record):
         f"Please find your invoice for {payment_record.event.name} {payment_record.event.year} attached.\n\n"
         "Best regards,\nBSBCS Team"
     )
-    email = EmailMessage(
+
+    send_email_task.delay(
         subject=subject,
         body=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[payment_record.participant.email],
+        recipient_list=[payment_record.participant.email],
+        attachment_paths=[payment_record.invoice.path] if getattr(payment_record, 'invoice', None) else None,
     )
-    email.attach_file(payment_record.invoice.path)
-    email.send()
     payment_record.email_sent = True
     payment_record.save(update_fields=['email_sent', 'updated_at'])
 
@@ -4637,7 +4657,6 @@ def _build_dashboard_absolute_url(request, path):
 
 
 def _send_dashboard_corporate_approval_email(request, access_request, corporate_account, created_user):
-    from django.core.mail import send_mail
     from django.contrib.auth.tokens import default_token_generator
     from django.utils.encoding import force_bytes
     from django.utils.http import urlsafe_base64_encode
@@ -4663,19 +4682,16 @@ def _send_dashboard_corporate_approval_email(request, access_request, corporate_
         'created_user': created_user,
     }
     html_message = render_to_string('emails/corporate_account_approved.html', context)
-    send_mail(
+    send_email_task.delay(
         subject=f"{context['site_name']} Corporate Access Approved",
-        message=strip_tags(html_message),
+        body=strip_tags(html_message),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[access_request.email],
         html_message=html_message,
-        fail_silently=False,
     )
 
 
 def _send_dashboard_corporate_rejection_email(access_request):
-    from django.core.mail import send_mail
-
     context = {
         'contact_name': access_request.contact_name,
         'company_name': access_request.company_name,
@@ -4684,13 +4700,12 @@ def _send_dashboard_corporate_rejection_email(access_request):
         'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
     }
     html_message = render_to_string('emails/corporate_account_rejected.html', context)
-    send_mail(
+    send_email_task.delay(
         subject=f"{context['site_name']} Corporate Access Request Update",
-        message=strip_tags(html_message),
+        body=strip_tags(html_message),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[access_request.email],
         html_message=html_message,
-        fail_silently=False,
     )
 
 
@@ -5678,16 +5693,15 @@ def _prepare_bulk_email_recipients(bulk_email):
 
 
 def _send_bulk_email_recipient(request, bulk_email, recipient):
-    email = EmailMessage(
-        subject=bulk_email.subject,
-        body=bulk_email.body,
-        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
-        to=[recipient.email],
-    )
-    if bulk_email.attachment:
-        email.attach_file(bulk_email.attachment.path)
     try:
-        email.send()
+        from registration.tasks import send_bulk_email_recipient_task
+
+        send_bulk_email_recipient_task.delay(
+            bulk_email.id,
+            recipient.id,
+            sent_by_user_id=request.user.id if request.user.is_authenticated else None,
+        )
+        return True
     except Exception as exc:
         recipient.status = BulkEmailRecipient.STATUS_FAILED
         recipient.error_message = str(exc)
@@ -5701,19 +5715,6 @@ def _send_bulk_email_recipient(request, bulk_email, recipient):
             sent_by=request.user,
         )
         return False
-
-    recipient.status = BulkEmailRecipient.STATUS_SENT
-    recipient.error_message = ''
-    recipient.sent_at = timezone.now()
-    recipient.save(update_fields=['status', 'error_message', 'sent_at'])
-    BulkEmailSendLog.objects.create(
-        bulk_email=bulk_email,
-        recipient=recipient,
-        email=recipient.email,
-        status=BulkEmailRecipient.STATUS_SENT,
-        sent_by=request.user,
-    )
-    return True
 
 
 @staff_member_required

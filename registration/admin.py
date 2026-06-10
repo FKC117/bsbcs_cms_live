@@ -10,6 +10,7 @@ from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from django.core.mail import EmailMessage, send_mail
 from .resources import ParticipantResource, AbstractSubmissionResource, TimeSlotResource, PaymentStatusResource, RegistrationKitResource
+from .tasks import send_email_task
 # SchedulingResource
 from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
 from django.http import HttpResponse, HttpResponseRedirect
@@ -169,13 +170,12 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
             'created_user': created_user,
         }
         html_message = render_to_string('emails/corporate_account_approved.html', context)
-        send_mail(
+        send_email_task.delay(
             subject=f"{context['site_name']} Corporate Access Approved",
-            message=strip_tags(html_message),
+            body=strip_tags(html_message),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[obj.email],
             html_message=html_message,
-            fail_silently=False,
         )
 
     def _send_corporate_rejection_email(self, request, obj):
@@ -187,13 +187,12 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
             'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
         }
         html_message = render_to_string('emails/corporate_account_rejected.html', context)
-        send_mail(
+        send_email_task.delay(
             subject=f"{context['site_name']} Corporate Access Request Update",
-            message=strip_tags(html_message),
+            body=strip_tags(html_message),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[obj.email],
             html_message=html_message,
-            fail_silently=False,
         )
 
 
@@ -513,11 +512,15 @@ def send_consolidated_email(request, participant, password, include_password):
         from_email = os.getenv("EMAIL_HOST_USER")
         recipient_list = [participant.email]
 
-        email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-        email.attach_alternative(html_content, "text/html")
-        email.send()
+        send_email_task.delay(
+            subject=subject,
+            body=text_content,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            html_message=html_content,
+        )
     except Exception as e:
-        print(f"Error sending consolidated email: {e}")
+        print(f"Error queueing consolidated email: {e}")
 
 def send_free_event_confirmation_email(participant, event, password=None, include_password=False):
     """Send confirmation email for free events"""
@@ -534,14 +537,13 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
     html_content = render_to_string('free_event_confirmation_email.html', context)
     text_content = strip_tags(html_content)
     
-    email = EmailMultiAlternatives(
-        subject, 
-        text_content, 
-        os.getenv("EMAIL_HOST_USER"),
-        [participant.email]
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=os.getenv("EMAIL_HOST_USER"),
+        recipient_list=[participant.email],
+        html_message=html_content,
     )
-    email.attach_alternative(html_content, "text/html")
-    email.send()
 
 
 def send_corporate_attendee_approval_email(participant, event, corporate_account, payable_amount, password=None, include_password=False):
@@ -560,14 +562,13 @@ def send_corporate_attendee_approval_email(participant, event, corporate_account
     html_content = render_to_string('corporate_attendee_approval_email.html', context)
     text_content = strip_tags(html_content)
 
-    email = EmailMultiAlternatives(
-        subject,
-        text_content,
-        os.getenv("EMAIL_HOST_USER"),
-        [participant.email]
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=os.getenv("EMAIL_HOST_USER"),
+        recipient_list=[participant.email],
+        html_message=html_content,
     )
-    email.attach_alternative(html_content, "text/html")
-    email.send()
 
 
 def update_corporate_registration_status(corporate_registration):
@@ -719,22 +720,16 @@ def send_corporate_invoice_email(corporate_payment, request=None):
         "BSBCS Team"
     )
 
-    email = EmailMessage(
+    send_email_task.delay(
         subject=subject,
         body=message,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[account.email],
+        recipient_list=[account.email],
+        attachment_paths=[invoice_path] if invoice_path and os.path.exists(invoice_path) else None,
     )
-    if invoice_path and os.path.exists(invoice_path):
-        email.attach_file(invoice_path)
-
-    try:
-        email.send()
-        corporate_payment.email_sent = True
-        corporate_payment.save(update_fields=['email_sent', 'updated_at'])
-        return True
-    except Exception:
-        return False
+    corporate_payment.email_sent = True
+    corporate_payment.save(update_fields=['email_sent', 'updated_at'])
+    return True
 
 
 def approve_corporate_attendees(request, queryset):
@@ -1098,10 +1093,13 @@ def send_approval_email(abstract, approval_type):
     from_email = os.getenv("EMAIL_HOST_USER")
     recipient_list = [abstract.user.email]
 
-    # Create and send the email
-    email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-    email.attach_alternative(html_content, "text/html")
-    email.send()
+    send_email_task.delay(
+        subject=subject,
+        body=text_content,
+        from_email=from_email,
+        recipient_list=recipient_list,
+        html_message=html_content,
+    )
 # Abstracts approval email END-----------------------------------------------------------------------------#
 # Program Schedule admin view START------------------------------------------------------------------------------#
 from .pdf_utils import generate_schedule_pdf
@@ -1135,21 +1133,20 @@ class ProgramScheduleAdmin(admin.ModelAdmin):
             html_content = render_to_string('schedule_mail.html', context)
             text_content = strip_tags(html_content)
 
-            email = EmailMultiAlternatives(
+            send_email_task.delay(
                 subject=subject,
                 body=text_content,
-                from_email= os.getenv("EMAIL_HOST_USER"),
-                to=participants
+                from_email=os.getenv("EMAIL_HOST_USER"),
+                recipient_list=participants,
+                html_message=html_content,
             )
-            email.attach_alternative(html_content, "text/html")
             try:
-                email.send()
                 schedule.email_sent = True
                 schedule.save()
-                self.log_change(request, schedule, "Sent program schedule email from admin action.")
-                self.message_user(request, f"Email sent to participant for schedule: {schedule.title}")
+                self.log_change(request, schedule, "Queued program schedule email from admin action.")
+                self.message_user(request, f"Schedule email queued for {schedule.title}")
             except Exception as e:
-                messages.error(request, f"Failed to send email for schedule: {schedule.title}. Error: {e}")
+                messages.error(request, f"Failed to queue email for schedule: {schedule.title}. Error: {e}")
     send_schedule_email.short_description = "Send Schedule Email to Participants"
     def export_schedule_pdf(self, request, queryset):
         if queryset.count() == 0:
@@ -1928,39 +1925,12 @@ class BulkEmailAdmin(admin.ModelAdmin):
     prepare_recipients_from_audience.short_description = "Step 1 - Prepare recipients from selected audience"
 
     def _send_one_recipient(self, request, bulk_email, recipient):
-        email = EmailMessage(
+        send_email_task.delay(
             subject=bulk_email.subject,
             body=bulk_email.body,
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
-            to=[recipient.email],
-        )
-        if bulk_email.attachment:
-            email.attach_file(bulk_email.attachment.path)
-        try:
-            email.send()
-        except Exception as exc:
-            recipient.status = BulkEmailRecipient.STATUS_FAILED
-            recipient.error_message = str(exc)
-            recipient.save(update_fields=['status', 'error_message'])
-            BulkEmailSendLog.objects.create(
-                bulk_email=bulk_email,
-                recipient=recipient,
-                email=recipient.email,
-                status=BulkEmailRecipient.STATUS_FAILED,
-                message=str(exc),
-                sent_by=request.user,
-            )
-            return False
-        recipient.status = BulkEmailRecipient.STATUS_SENT
-        recipient.error_message = ''
-        recipient.sent_at = timezone.now()
-        recipient.save(update_fields=['status', 'error_message', 'sent_at'])
-        BulkEmailSendLog.objects.create(
-            bulk_email=bulk_email,
-            recipient=recipient,
-            email=recipient.email,
-            status=BulkEmailRecipient.STATUS_SENT,
-            sent_by=request.user,
+            recipient_list=[recipient.email],
+            attachment_paths=[bulk_email.attachment.path] if bulk_email.attachment else None,
         )
         return True
 
@@ -1993,28 +1963,28 @@ class BulkEmailAdmin(admin.ModelAdmin):
         active_users = User.objects.filter(is_active=True)
         recipients = [user.email for user in active_users if user.email]  # Ensure email is not blank
 
-        # Send the email using BCC
-        email = EmailMessage(
+        # Queue the email using BCC
+        send_email_task.delay(
             subject=bulk_email.subject,
             body=bulk_email.body,
             from_email='info.bsbcs@gmail.com',
-            bcc=recipients,  # Use BCC for privacy
+            recipient_list=[],
+            bcc=recipients,
         )
         if bulk_email.attachment:
-            email.attach_file(bulk_email.attachment.path)
-        email.send()
+            # Attachments are not currently supported for BCC queue through this helper
+            self.message_user(request, "Warning: attachments are not attached for bulk BCC queued email.", level=messages.WARNING)
 
-        # Automatically log the sent email
         BulkEmailsReporting.objects.create(
             subject=bulk_email.subject,
             body=bulk_email.body,
             recipients=', '.join(recipients),  # Convert recipient list to comma-separated string
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )
-        self.log_change(request, bulk_email, "Sent bulk email to active users from admin action.")
+        self.log_change(request, bulk_email, "Queued bulk email to active users from admin action.")
 
         # Notify admin of success
-        self.message_user(request, f"Email sent to {len(recipients)} active users and logged successfully.")
+        self.message_user(request, f"Bulk email to {len(recipients)} active users queued successfully.")
 
     mail_to_active_users.short_description = "Mail to Active Users"
 
@@ -2036,16 +2006,15 @@ class BulkEmailAdmin(admin.ModelAdmin):
                 self.message_user(request, "Group not found.", level='error')
                 return
 
-            # Send email and log...
-            email = EmailMessage(
+            send_email_task.delay(
                 subject=bulk_email.subject,
                 body=bulk_email.body,
-                from_email= os.getenv("EMAIL_HOST_USER"),
+                from_email=os.getenv("EMAIL_HOST_USER"),
+                recipient_list=[],
                 bcc=emails,
             )
             if bulk_email.attachment:
-                email.attach_file(bulk_email.attachment.path)
-            email.send()
+                self.message_user(request, "Warning: attachments are not attached for queued email groups.", level=messages.WARNING)
 
             BulkEmailsReporting.objects.create(
                 subject=bulk_email.subject,
@@ -2054,7 +2023,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
                 attachment=bulk_email.attachment,
             )
 
-            self.log_change(request, bulk_email, f"Sent bulk email to email group: {group.name}.")
+            self.log_change(request, bulk_email, f"Queued bulk email to email group: {group.name}.")
             self.message_user(request, f"Email sent to group '{group.name}'.")
             return HttpResponseRedirect(request.get_full_path())
 
@@ -2220,16 +2189,20 @@ class PendingPaymentReminderAdmin(admin.ModelAdmin):
                 from_email = os.getenv("EMAIL_HOST_USER")
                 recipient_list = [reminder.participant.email]
 
-                # Send email
-                email = EmailMultiAlternatives(subject, text_content, from_email, recipient_list)
-                email.attach_alternative(html_content, "text/html")
-                email.send()
+                # Queue the payment reminder email
+                send_email_task.delay(
+                    subject=subject,
+                    body=text_content,
+                    from_email=from_email,
+                    recipient_list=recipient_list,
+                    html_message=html_content,
+                )
 
                 # Update reminder details
                 reminder.reminder_count += 1
                 reminder.last_reminder_sent = now()
                 reminder.save()
-                self.log_change(request, reminder, "Sent payment reminder from admin action.")
+                self.log_change(request, reminder, "Queued payment reminder from admin action.")
                 success_count += 1
 
             except Exception as e:

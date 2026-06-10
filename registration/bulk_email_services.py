@@ -161,7 +161,7 @@ def prepare_bulk_email_recipients(bulk_email):
     return added
 
 
-def send_bulk_email_recipient(bulk_email, recipient, sent_by=None):
+def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
     email = EmailMessage(
         subject=bulk_email.subject,
         body=bulk_email.body,
@@ -201,6 +201,31 @@ def send_bulk_email_recipient(bulk_email, recipient, sent_by=None):
     return True
 
 
+def send_bulk_email_recipient(bulk_email, recipient, sent_by=None):
+    try:
+        from .tasks import send_bulk_email_recipient_task
+
+        send_bulk_email_recipient_task.delay(
+            bulk_email.id,
+            recipient.id,
+            sent_by_user_id=sent_by.id if sent_by else None,
+        )
+        return True
+    except Exception as exc:
+        recipient.status = BulkEmailRecipient.STATUS_FAILED
+        recipient.error_message = str(exc)
+        recipient.save(update_fields=['status', 'error_message'])
+        BulkEmailSendLog.objects.create(
+            bulk_email=bulk_email,
+            recipient=recipient,
+            email=recipient.email,
+            status=BulkEmailRecipient.STATUS_FAILED,
+            message=str(exc),
+            sent_by=sent_by,
+        )
+        return False
+
+
 def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
     bulk_email = BulkEmail.objects.filter(pk=bulk_email_id).first()
     if not bulk_email:
@@ -215,31 +240,34 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
         prepare_bulk_email_recipients(bulk_email)
 
     pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
-    sent = 0
+    queued = 0
     failed = 0
+    queued_emails = []
     bulk_email.status = BulkEmail.STATUS_SENDING
     bulk_email.save(update_fields=['status', 'updated_at'])
 
     for recipient in pending_recipients.iterator():
         if send_bulk_email_recipient(bulk_email, recipient, sent_by=sent_by):
-            sent += 1
+            queued += 1
+            queued_emails.append(recipient.email)
         else:
             failed += 1
 
     bulk_email.refresh_from_db()
-    bulk_email.status = BulkEmail.STATUS_PARTIAL if bulk_email.failed_count else BulkEmail.STATUS_SENT
+    if queued and not failed:
+        bulk_email.status = BulkEmail.STATUS_SENDING
+    elif queued and failed:
+        bulk_email.status = BulkEmail.STATUS_PARTIAL
+    elif failed:
+        bulk_email.status = BulkEmail.STATUS_PARTIAL
     bulk_email.save(update_fields=['status', 'updated_at'])
 
-    if sent:
+    if queued_emails:
         BulkEmailsReporting.objects.create(
             subject=bulk_email.subject,
             body=bulk_email.body,
-            recipients=', '.join(
-                bulk_email.recipients
-                .filter(status=BulkEmailRecipient.STATUS_SENT)
-                .values_list('email', flat=True)
-            ),
+            recipients=', '.join(queued_emails),
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )
 
-    return {'sent': sent, 'failed': failed, 'campaign_id': bulk_email.id}
+    return {'queued': queued, 'failed': failed, 'campaign_id': bulk_email.id}

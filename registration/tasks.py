@@ -3,7 +3,7 @@ import os
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMessage, EmailMultiAlternatives
 from django.db import connection
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -14,12 +14,142 @@ from .bulk_email_services import send_pending_bulk_email_recipients
 from .models import Participant, ParticipantEmailLog
 
 
+def _send_email(
+    subject,
+    body,
+    from_email,
+    recipient_list,
+    html_message=None,
+    attachment_paths=None,
+    cc=None,
+    bcc=None,
+    reply_to=None,
+    headers=None,
+):
+    if html_message:
+        body_text = body or strip_tags(html_message)
+        email = EmailMultiAlternatives(
+            subject,
+            body_text,
+            from_email,
+            recipient_list,
+            cc=cc or [],
+            bcc=bcc or [],
+            reply_to=reply_to or [],
+            headers=headers or {},
+        )
+        email.attach_alternative(html_message, 'text/html')
+    else:
+        email = EmailMessage(
+            subject,
+            body or '',
+            from_email,
+            recipient_list,
+            cc=cc or [],
+            bcc=bcc or [],
+            reply_to=reply_to or [],
+            headers=headers or {},
+        )
+
+    if attachment_paths:
+        for attachment_path in attachment_paths:
+            if attachment_path and os.path.exists(attachment_path):
+                email.attach_file(attachment_path)
+
+    return email.send()
+
+
+@shared_task(bind=True)
+def send_email_task(
+    self,
+    subject,
+    body,
+    from_email,
+    recipient_list,
+    html_message=None,
+    attachment_paths=None,
+    cc=None,
+    bcc=None,
+    reply_to=None,
+    headers=None,
+):
+    return _send_email(
+        subject=subject,
+        body=body,
+        from_email=from_email,
+        recipient_list=recipient_list,
+        html_message=html_message,
+        attachment_paths=attachment_paths,
+        cc=cc,
+        bcc=bcc,
+        reply_to=reply_to,
+        headers=headers,
+    )
+
+
+@shared_task(bind=True)
+def send_thank_you_email_task(self, thank_you_email_id):
+    from .models import ThankYouEmail
+
+    try:
+        thank_you_email = ThankYouEmail.objects.select_related(
+            'registration_kit__payment_status__participant'
+        ).get(pk=thank_you_email_id)
+    except ThankYouEmail.DoesNotExist:
+        return {'status': 'missing'}
+
+    if thank_you_email.email_sent or thank_you_email.registration_kit.status != 'issued':
+        return {'status': 'skipped'}
+
+    participant = thank_you_email.registration_kit.payment_status.participant
+    if not participant or not participant.email:
+        return {'status': 'missing_recipient'}
+
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv('EMAIL_HOST_USER')
+    result = _send_email(
+        subject=thank_you_email.subject,
+        body=thank_you_email.body,
+        from_email=from_email,
+        recipient_list=[participant.email],
+    )
+
+    if result:
+        thank_you_email.email_sent = True
+        thank_you_email.sent_at = timezone.now()
+        thank_you_email.save(update_fields=['email_sent', 'sent_at'])
+
+    return {'status': 'sent' if result else 'failed', 'result': result}
+
+
 @shared_task(bind=True)
 def send_pending_bulk_email_campaign(self, bulk_email_id, sent_by_user_id=None):
     return send_pending_bulk_email_recipients(
         bulk_email_id=bulk_email_id,
         sent_by_user_id=sent_by_user_id,
     )
+
+
+@shared_task(bind=True)
+def send_bulk_email_recipient_task(self, bulk_email_id, recipient_id, sent_by_user_id=None):
+    from .bulk_email_services import _send_bulk_email_recipient_direct
+    from .models import BulkEmail, BulkEmailRecipient, User
+
+    bulk_email = BulkEmail.objects.filter(pk=bulk_email_id).first()
+    recipient = BulkEmailRecipient.objects.filter(pk=recipient_id).first()
+    if not bulk_email or not recipient:
+        return {
+            'status': 'missing',
+            'bulk_email_id': bulk_email_id,
+            'recipient_id': recipient_id,
+        }
+
+    sent_by = User.objects.filter(pk=sent_by_user_id).first() if sent_by_user_id else None
+    result = _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=sent_by)
+    return {
+        'status': 'sent' if result else 'failed',
+        'bulk_email_id': bulk_email_id,
+        'recipient_id': recipient_id,
+    }
 
 
 @shared_task(bind=True)

@@ -1,0 +1,16 @@
+file,location,method,queued
+registration/tasks.py,send_pending_bulk_email_campaign,EmailMultiAlternatives + .send(),yes
+registration/tasks.py,send_manual_participant_account_email,EmailMultiAlternatives + .send(),yes
+registration/tasks.py,send_participant_approval_email,EmailMultiAlternatives + .send(),yes
+registration/views.py,_send_dashboard_participant_payment_email,EmailMultiAlternatives + .send(),no
+registration/views.py,_send_dashboard_free_event_confirmation,EmailMultiAlternatives + .send(),no
+registration/views.py,_queue_dashboard_participant_email,send_participant_approval_email.delay(...),yes
+registration/views.py,manual participant account create path,send_manual_participant_account_email.delay(...),yes
+registration/views.py,bulk email send action,send_pending_bulk_email_campaign.delay(...),yes
+registration/bulk_email_services.py,send_bulk_email_recipient,EmailMessage.send() (called by Celery task),no
+registration/program_emails.py,send_program_assignment_email,send_mail(),no
+registration/models.py,ThankYouEmail.send_email,send_mail(),no
+registration/admin.py,_send_corporate_approval_email,send_mail(),no
+registration/admin.py,_send_corporate_rejection_email,send_mail(),no
+website/signals.py,send_member_approval_email,send_mail(),no
+website/utils_membership.py,send_membership_invoice_email,EmailMessage.send(),no

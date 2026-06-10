@@ -17,9 +17,9 @@ def registration_qr_payload(payment_status):
 def registration_qr_filename(payment_status):
     participant = payment_status.participant
     event_slug = slugify(f'{payment_status.event.name}-{payment_status.event.year}') or f'event-{payment_status.event_id}'
-    participant_name = slugify(participant.name) or f'participant-{participant.id}'
+    participant_name = slugify(participant.name or f'participant-{participant.id}')
     readable_email = (participant.email or '').replace('@', '-at-').replace('.', '-')
-    participant_email = slugify(readable_email) or f'participant-{participant.id}'
+    participant_email = slugify(readable_email or f'user-{participant.id}')
     token_suffix = str(payment_status.qr_token).split('-')[0]
     return f'{event_slug}/{participant_name}__{participant_email}__{token_suffix}.png'
 

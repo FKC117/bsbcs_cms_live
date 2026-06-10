@@ -1,10 +1,11 @@
 from datetime import time as empty_time
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.html import strip_tags
+
+from registration.tasks import send_email_task
 
 
 def build_program_assignment_summary(person, event=None):
@@ -103,12 +104,11 @@ def send_program_assignment_email(person, event=None):
         'support_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
     }
     html_message = render_to_string('emails/program_person_assignment_email.html', context)
-    send_mail(
+    send_email_task.delay(
         subject=program_assignment_email_subject(assignments),
-        message=strip_tags(html_message),
+        body=strip_tags(html_message),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[person.email],
         html_message=html_message,
-        fail_silently=False,
     )
     return True, assignments

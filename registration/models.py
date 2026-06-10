@@ -332,7 +332,6 @@ class Event(models.Model):
 
 # Thank You Mail Model Starts Here----------------------------------------------------------------------------#
 from django.db import models
-from django.core.mail import send_mail
 from django.utils.timezone import now
 import os
 
@@ -348,19 +347,12 @@ class ThankYouEmail(models.Model):
     sent_at = models.DateTimeField(blank=True, null=True)
 
     def send_email(self):
-        """Send thank-you email and mark it as sent."""
+        """Queue the thank-you email via Celery and mark it when sent."""
         if self.registration_kit.status == 'issued' and not self.email_sent:
-            recipient_email = self.registration_kit.payment_status.participant.email  
-            send_mail(
-                subject=self.subject,
-                message=self.body,
-                from_email= os.getenv("EMAIL_HOST_USER"),
-                recipient_list=[recipient_email],
-                fail_silently=False,
-            )
-            self.email_sent = True
-            self.sent_at = now()
-            self.save()
+            from registration.tasks import send_thank_you_email_task
+
+            send_thank_you_email_task.delay(self.id)
+            return True
 
     def __str__(self):
         return f"Thank You Email for {self.registration_kit.payment_status.participant.name}"

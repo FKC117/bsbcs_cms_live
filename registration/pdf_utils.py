@@ -199,23 +199,13 @@ def generate_invoice(participant, event, payment_status):
         f"Location: {event.location}"
     ]
     
+    detail_start_y = content_top - 30
     for i, detail in enumerate(details):
-        c.drawString(margin, content_top - 30 - (i * section_height), detail)
+        c.drawString(margin, detail_start_y - (i * section_height), detail)
 
-    if qr_path and os.path.exists(qr_path):
-        qr_size = 1.25 * inch
-        qr_x = letter[0] - margin - qr_size
-        participant_name_y = content_top - 30
-        qr_top = participant_name_y + 8
-        qr_y = qr_top - qr_size
-        c.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, preserveAspectRatio=True, mask='auto')
-        c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 10, "SCAN AT REGISTRATION DESK")
-        c.setFont("Helvetica", 7)
-        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 20, f"{participant.name[:32]}")
-    
-    # Add a bottom border for the section
-    c.line(margin, content_top - 60 - (i * section_height), letter[0] - margin, content_top - 60 - (i * section_height))
+    details_bottom_y = detail_start_y - ((len(details) - 1) * section_height)
+    # Add a bottom border for the details section
+    c.line(margin, details_bottom_y - 20, letter[0] - margin, details_bottom_y - 20)
 
     # Add space before the table
     content_top -= 1  # Move content down before table
@@ -246,13 +236,25 @@ def generate_invoice(participant, event, payment_status):
     c.setFont("Helvetica-Bold", 12)
     c.drawString(letter[0] - margin - 150, content_top - 250, f"Total: BDT {invoice_amount}")
 
+    # Bottom-left QR code block above the footer
+    if qr_path and os.path.exists(qr_path):
+        qr_size = 1.25 * inch
+        qr_x = margin
+        qr_y = margin + 70
+        c.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, preserveAspectRatio=True, mask='auto')
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 10, "SCAN AT REGISTRATION DESK")
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 20, f"{participant.name[:32]}")
+
     # Footer Section with Thank You and Signature Message
+    footer_y = margin + 45
     c.setFont("Helvetica", 10)
-    c.drawString(margin, content_top - 280, "Thank you for registering!")
-    c.drawString(margin, content_top - 300, "This is a computer-generated invoice and does not need any signature.")
+    c.drawString(margin, footer_y, "Thank you for registering!")
+    c.drawString(margin, footer_y - 20, "This is a computer-generated invoice and does not need any signature.")
 
     # Add a bottom border for the footer section
-    c.line(margin, content_top - 350, letter[0] - margin, content_top - 350)
+    c.line(margin, footer_y - 30, letter[0] - margin, footer_y - 30)
 
     # Save the PDF file
     c.save()
@@ -283,6 +285,9 @@ def _get_site_invoice_logo_path():
 
 
 def generate_corporate_invoice(corporate_payment):
+    from .qr_utils import ensure_registration_qr
+    from .models import PaymentStatus
+
     event = corporate_payment.event
     account = corporate_payment.corporate_account
     is_paid = corporate_payment.status in ['completed', 'paid']
@@ -468,13 +473,56 @@ def generate_corporate_invoice(corporate_payment):
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
     ]))
+
+    qr_path = None
+    for attendee in attendees:
+        if not attendee.participant:
+            continue
+        participant_payment = PaymentStatus.objects.filter(
+            participant=attendee.participant,
+            event=event,
+        ).first()
+        if not participant_payment:
+            continue
+        temp_path = ensure_registration_qr(participant_payment)
+        if temp_path and os.path.exists(temp_path):
+            qr_path = temp_path
+            break
+
     elements.extend([
         attendee_table,
         Spacer(1, 16),
         Paragraph(f"Total payable: {_format_bdt(corporate_payment.amount)}", styles['RightTotal']),
         Spacer(1, 24),
-        Paragraph("This is a computer-generated invoice and does not need any signature.", styles['SmallMuted']),
     ])
+
+    if qr_path:
+        qr_image = Image(qr_path, width=1.5 * inch, height=1.5 * inch)
+        qr_block = Table(
+            [[
+                Paragraph("This is a computer-generated invoice and does not need any signature.", styles['SmallMuted']),
+                qr_image,
+            ]],
+            colWidths=[360, 108],
+            hAlign='LEFT'
+        )
+        qr_block.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.extend([
+            Spacer(1, 24),
+            qr_block,
+            Spacer(1, 12),
+        ])
+    else:
+        elements.extend([
+            Paragraph("This is a computer-generated invoice and does not need any signature.", styles['SmallMuted']),
+        ])
 
     doc.build(elements)
     corporate_payment.invoice.name = f"media/corporate_invoices/{file_name}"

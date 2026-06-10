@@ -1,7 +1,7 @@
 import os
 from io import BytesIO
 from django.conf import settings
-from django.core.mail import EmailMessage
+from registration.tasks import send_email_task
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, inch
@@ -161,22 +161,20 @@ def send_membership_invoice_email(payment):
     message = f"Dear {payment.user_profile.name},\n\nThank you for your membership subscription. Please find your invoice attached.\n\nBest regards,\nBSBCS Team"
     recipient_list = [payment.user_profile.email]
     
-    email = EmailMessage(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        recipient_list
-    )
-    
     if os.path.exists(payment.invoice.path):
-        email.attach_file(payment.invoice.path)
         try:
-            email.send()
+            send_email_task.delay(
+                subject=subject,
+                body=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[payment.user_profile.email],
+                attachment_paths=[payment.invoice.path],
+            )
             return True
         except Exception as e:
             import logging
             logger = logging.getLogger('django')
-            logger.error(f"Failed to send membership invoice email: {str(e)}")
+            logger.error(f"Failed to queue membership invoice email: {str(e)}")
             return False
     return False
 

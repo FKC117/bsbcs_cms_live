@@ -6,11 +6,11 @@ when a Member's approval_status changes.
 
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils.html import strip_tags
 from .models import Member
+from registration.tasks import send_email_task
 import logging
 
 logger = logging.getLogger(__name__)
@@ -143,18 +143,17 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
         plain_message = strip_tags(html_message)
         logger.info(f"[MEMBER SIGNAL] Template rendered successfully")
         
-        logger.info(f"[MEMBER SIGNAL] Sending {instance.approval_status} email to {user_email}")
-        send_mail(
+        logger.info(f"[MEMBER SIGNAL] Queueing {instance.approval_status} email to {user_email} via Celery")
+        send_email_task.delay(
             subject=subject,
-            message=plain_message,
+            body=plain_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user_email],
             html_message=html_message,
-            fail_silently=False,
         )
-        logger.info(f"[MEMBER SIGNAL] Email sent successfully to {user_email}")
+        logger.info(f"[MEMBER SIGNAL] Email task queued successfully for {user_email}")
     except Exception as e:
-        logger.error(f"[MEMBER SIGNAL] Failed to send email to {user_email}: {str(e)}", exc_info=True)
+        logger.error(f"[MEMBER SIGNAL] Failed to queue email to {user_email}: {str(e)}", exc_info=True)
         # Print to console for debugging (no unicode to avoid cp1252 encoding issues on Windows)
         import traceback
         print("\n" + "="*60)
