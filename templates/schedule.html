@@ -3,84 +3,278 @@
 {% block title %}Schedule{% endblock %}
 
 {% block content %}
-<style>
-    .custom-max-width {
-        max-width: 95rem; /* Custom width between 7xl and 8xl */
-        margin-left: auto;
-        margin-right: auto;
-    }
-</style>
-<div class="relative bg-gradient-to-br from-pink-500 to-red-500 text-white pt-20 pb-10">
-    <div class="mx-auto max-w-full text-center px-4">
-        <h1 class="text-4xl sm:text-6xl font-extrabold md-10">Program Schedule of the {{ event.name }} {{ event.year }}</h1>
-        <p class="mt-4 text-lg">{{ event.slogan }}</p>
-    </div>
-</div>
-<section id="schedule" class="py-10">
-    <div class="custom-max-width px-4 overflow-x-auto py-6">
-        <!-- Condition to display the uploaded image if available -->
-        {% if program_schedule_pdf and program_schedule_pdf.schedule_image %}
-            <div class="text-center">
-                <img src="{{ program_schedule_pdf.schedule_image.url }}" alt="Schedule Image" class="mx-auto max-w-full h-auto">
+<section id="schedule" class="bg-background py-16">
+    <div class="container-custom space-y-12 px-4">
+        <!-- Header Section -->
+        <div class="rounded-lg px-6 py-8 shadow-sm" style="background: linear-gradient(to bottom right, #ffe4e6, #fce7f3); border: 1px solid #fbcfe8;">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <p class="text-sm font-semibold uppercase tracking-wide" style="color: #be185d;">Scientific Program</p>
+                    <h1 class="mt-3 text-3xl font-bold tracking-tight text-gray-900">{{ event.name }} {{ event.year }}</h1>
+                    {% if event.slogan %}
+                        <p class="mt-3 max-w-2xl text-sm leading-6 text-gray-700">{{ event.slogan }}</p>
+                    {% endif %}
+                </div>
+                <div class="rounded-lg px-5 py-2 text-center" style="background-color: white; border: 1px solid #fbcfe8;">
+                    <p class="text-sm font-semibold" style="color: #be185d;">
+                        {% if session_days %}
+                            {{ session_days|length }} day{{ session_days|length|pluralize }}
+                        {% else %}
+                            {{ program_schedules|length }} session{{ program_schedules|length|pluralize }}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        {% if session_days %}
+            <!-- Days Loop -->
+            <div class="space-y-12">
+                {% for group in session_days %}
+                    <div class="overflow-hidden rounded-lg shadow-sm" style="background-color: white; border: 1px solid #fbcfe8;">
+                        <!-- Day Header -->
+                        <div class="px-6 py-6" style="background: linear-gradient(to right, #be185d, #d1118f);">
+                            <h2 class="text-2xl font-bold text-white">{{ group.day.name }}</h2>
+                            <p class="mt-2 text-sm" style="color: #ffe4e6;">{{ group.day.date|date:"l, F j, Y" }}</p>
+                            <p class="mt-2 text-xs font-semibold" style="color: #ffe4e6;">{{ group.rows|length }} block{{ group.rows|length|pluralize }}</p>
+                        </div>
+
+                        <!-- Desktop Timeline Layout -->
+                        <div class="hidden lg:block relative bg-white">
+                            <div class="p-6 space-y-6">
+                                {% for row in group.rows %}
+                                    {% if row.type == 'slot' %}
+                                        <!-- Break/Meal/Ceremony Slot -->
+                                        <div class="relative">
+                                            <div class="absolute left-0 top-0 w-1 h-full" style="{% if row.slot.slot_type == 'tea_break' %}background-color: #f59e0b;{% elif row.slot.slot_type == 'lunch' %}background-color: #10b981;{% elif row.slot.slot_type == 'dinner' %}background-color: #a855f7;{% elif row.slot.slot_type == 'ceremony' %}background-color: #3b82f6;{% else %}background-color: #9ca3af;{% endif %}"></div>
+                                            <div class="ml-6 rounded-lg p-3 hover:shadow-md transition-shadow" style="{% if row.slot.slot_type == 'tea_break' %}background-color: #fef3c7; border: 1px solid #fcd34d;{% elif row.slot.slot_type == 'lunch' %}background-color: #d1fae5; border: 1px solid #6ee7b7;{% elif row.slot.slot_type == 'dinner' %}background-color: #ede9fe; border: 1px solid #ddd6fe;{% elif row.slot.slot_type == 'ceremony' %}background-color: #dbeafe; border: 1px solid #93c5fd;{% else %}background-color: #f3f4f6; border: 1px solid #d1d5db;{% endif %}">
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-xs font-semibold uppercase tracking-wide" style="{% if row.slot.slot_type == 'tea_break' %}color: #b45309;{% elif row.slot.slot_type == 'lunch' %}color: #047857;{% elif row.slot.slot_type == 'dinner' %}color: #7e22ce;{% elif row.slot.slot_type == 'ceremony' %}color: #1e40af;{% else %}color: #4b5563;{% endif %}">{{ row.slot.start_time|time:"g:i A" }} – {{ row.slot.end_time|time:"g:i A" }}</p>
+                                                        <h3 class="mt-1.5 text-base font-semibold" style="{% if row.slot.slot_type == 'tea_break' %}color: #78350f;{% elif row.slot.slot_type == 'lunch' %}color: #065f46;{% elif row.slot.slot_type == 'dinner' %}color: #581c87;{% elif row.slot.slot_type == 'ceremony' %}color: #0c2340;{% else %}color: #0f172a;{% endif %}">{{ row.slot.label|default:row.slot.get_slot_type_display }}</h3>
+                                                        <p class="mt-1 text-xs" style="{% if row.slot.slot_type == 'tea_break' %}color: #b45309;{% elif row.slot.slot_type == 'lunch' %}color: #047857;{% elif row.slot.slot_type == 'dinner' %}color: #7e22ce;{% elif row.slot.slot_type == 'ceremony' %}color: #1e40af;{% else %}color: #4b5563;{% endif %}">{{ row.slot.hall_room.name }}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <!-- Session Block -->
+                                        <div class="relative">
+                                            <div class="absolute left-0 top-4 w-1 h-full bg-rose-500"></div>
+                                            <div class="ml-6">
+                                                <div class="rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow overflow-hidden" style="border: 1px solid #fbcfe8;">
+                                                    <!-- Session Header -->
+                                                    <div class="px-5 py-4 border-b" style="background-color: #ffe4e6; border-color: #fbcfe8;">
+                                                        <div class="flex items-start justify-between gap-4">
+                                                            <div class="flex-1 min-w-0">
+                                                                <div class="flex flex-wrap items-center gap-3">
+                                                                    <p class="text-xs font-semibold uppercase tracking-wide" style="color: #be185d;">{{ row.session.start_time|time:"g:i A" }} – {{ row.session.end_time|time:"g:i A" }} • {{ row.session.hall_room.name }}</p>
+                                                                    {% if row.session.parallel_sessions|default:0 > 1 %}
+                                                                        <span class="text-xs font-semibold uppercase rounded-full px-2 py-1" style="background-color: #fde2f0; color: #b91c6b; letter-spacing: 0.2em; display: inline-block;">PARALLEL ({{ row.session.parallel_sessions }})</span>
+                                                                    {% endif %}
+                                                                </div>
+                                                                <h3 class="mt-1.5 text-lg font-bold text-gray-900">{{ row.session.title }}</h3>
+                                                                {% if row.session.description %}
+                                                                    <p class="mt-1.5 text-xs text-gray-600 leading-relaxed">{{ row.session.description }}</p>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Roles Grid -->
+                                                    {% if row.session.grouped_faculty_roles %}
+                                                        <div class="px-5 py-4 border-b" style="background: linear-gradient(to right, #ffe4e6, #fce7f3); border-color: #fbcfe8;">
+                                                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                                {% for role_type, role_names in row.session.grouped_faculty_roles.items %}
+                                                                    {% if role_names %}
+                                                                        <div class="space-y-1.5">
+                                                                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: #be185d;">
+                                                                                {{ role_type }}
+                                                                            </p>
+                                                                            <ul class="space-y-1">
+                                                                                {% for name in role_names %}
+                                                                                    <li class="text-sm text-gray-900">{{ name }}</li>
+                                                                                {% endfor %}
+                                                                            </ul>
+                                                                        </div>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+
+                                                    <!-- Topics & Speakers -->
+                                                    {% if row.session.items.exists %}
+                                                        <div class="px-5 py-4 bg-white">
+                                                            <p class="text-xs font-semibold uppercase tracking-wide mb-3" style="color: #be185d;">Topics & Speakers</p>
+                                                            <div class="space-y-2">
+                                                                {% for item in row.session.items.all %}
+                                                                    <div class="rounded-lg p-3 hover:shadow-sm transition-colors" style="background: linear-gradient(to bottom right, #ffe4e6, #fce7f3); border: 1px solid #fbcfe8;">
+                                                                        <div>
+                                                                            <p class="font-semibold text-sm text-gray-900">{{ item.display_title }}</p>
+                                                                            {% if item.start_time and item.end_time %}
+                                                                                <p class="text-xs text-gray-600 mt-1">{{ item.start_time|time:"g:i A" }} - {{ item.end_time|time:"g:i A" }}</p>
+                                                                            {% endif %}
+                                                                            {% if item.speaker_presenter_label %}
+                                                                                <p class="text-xs font-semibold mt-1.5" style="color: #be185d;">{{ item.speaker_presenter_label }}</p>
+                                                                            {% endif %}
+                                                                        </div>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Tablet/Mobile Card Layout -->
+                        <div class="lg:hidden space-y-3 bg-white p-4">
+                            {% for row in group.rows %}
+                                {% if row.type == 'slot' %}
+                                    <!-- Mobile Break/Meal/Ceremony -->
+                                    <div class="rounded-lg p-3" style="{% if row.slot.slot_type == 'tea_break' %}background-color: #fef3c7; border: 1px solid #fcd34d;{% elif row.slot.slot_type == 'lunch' %}background-color: #d1fae5; border: 1px solid #6ee7b7;{% elif row.slot.slot_type == 'dinner' %}background-color: #ede9fe; border: 1px solid #ddd6fe;{% elif row.slot.slot_type == 'ceremony' %}background-color: #dbeafe; border: 1px solid #93c5fd;{% else %}background-color: #f3f4f6; border: 1px solid #d1d5db;{% endif %}">
+                                        <div class="flex items-start gap-3">
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-xs font-semibold uppercase tracking-wide" style="{% if row.slot.slot_type == 'tea_break' %}color: #b45309;{% elif row.slot.slot_type == 'lunch' %}color: #047857;{% elif row.slot.slot_type == 'dinner' %}color: #7e22ce;{% elif row.slot.slot_type == 'ceremony' %}color: #1e40af;{% else %}color: #4b5563;{% endif %}">{{ row.slot.start_time|time:"g:i A" }} – {{ row.slot.end_time|time:"g:i A" }}</p>
+                                                <h3 class="text-base font-semibold mt-1" style="{% if row.slot.slot_type == 'tea_break' %}color: #78350f;{% elif row.slot.slot_type == 'lunch' %}color: #065f46;{% elif row.slot.slot_type == 'dinner' %}color: #581c87;{% elif row.slot.slot_type == 'ceremony' %}color: #0c2340;{% else %}color: #0f172a;{% endif %}">{{ row.slot.label|default:row.slot.get_slot_type_display }}</h3>
+                                                <p class="text-xs mt-1" style="{% if row.slot.slot_type == 'tea_break' %}color: #b45309;{% elif row.slot.slot_type == 'lunch' %}color: #047857;{% elif row.slot.slot_type == 'dinner' %}color: #7e22ce;{% elif row.slot.slot_type == 'ceremony' %}color: #1e40af;{% else %}color: #4b5563;{% endif %}">{{ row.slot.hall_room.name }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <!-- Mobile Session Card -->
+                                    <div class="rounded-lg bg-white shadow-sm overflow-hidden" style="border: 1px solid #fbcfe8;">
+                                        <!-- Card Header -->
+                                        <div class="px-4 py-3 border-b" style="background-color: #ffe4e6; border-color: #fbcfe8;">
+                                            <div class="flex flex-wrap items-center gap-3">
+                                                <p class="text-xs font-semibold uppercase tracking-wide" style="color: #be185d;">{{ row.session.start_time|time:"g:i A" }} – {{ row.session.end_time|time:"g:i A" }}</p>
+                                                {% if row.session.parallel_sessions|default:0 > 1 %}
+                                                    <span class="text-xs font-semibold uppercase rounded-full px-2 py-1" style="background-color: #fde2f0; color: #b91c6b; letter-spacing: 0.2em; display: inline-block;">PARALLEL ({{ row.session.parallel_sessions }})</span>
+                                                {% endif %}
+                                            </div>
+                                            <h3 class="mt-1.5 text-base font-bold text-gray-900 line-clamp-2">{{ row.session.title }}</h3>
+                                            <p class="text-xs text-gray-600 mt-1">{{ row.session.hall_room.name }}</p>
+                                            {% if row.session.description %}
+                                                <p class="text-xs text-gray-700 mt-1.5">{{ row.session.description|truncatewords:20 }}</p>
+                                            {% endif %}
+                                        </div>
+
+                                        <!-- Mobile Roles -->
+                                        {% if row.session.grouped_faculty_roles %}
+                                            <div class="px-4 py-3 border-b space-y-2" style="background: linear-gradient(to right, #ffe4e6, #fce7f3); border-color: #fbcfe8;">
+                                                {% for role_type, role_names in row.session.grouped_faculty_roles.items %}
+                                                    {% if role_names %}
+                                                        <div>
+                                                            <p class="text-xs font-semibold uppercase tracking-wide" style="color: #be185d;">
+                                                                {{ role_type }}
+                                                            </p>
+                                                            <ul class="mt-1 space-y-0.5">
+                                                                {% for name in role_names %}
+                                                                    <li class="text-sm text-gray-900">{{ name }}</li>
+                                                                {% endfor %}
+                                                            </ul>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+
+                                        <!-- Mobile Topics -->
+                                        {% if row.session.items.exists %}
+                                            <div class="px-4 py-3 space-y-2">
+                                                <p class="text-xs font-semibold uppercase tracking-wide" style="color: #be185d;">Topics</p>
+                                                {% for item in row.session.items.all %}
+                                                    <div class="rounded-lg p-2.5" style="background: linear-gradient(to bottom right, #ffe4e6, #fce7f3); border: 1px solid #fbcfe8;">
+                                                        <p class="text-sm font-semibold text-gray-900">{{ item.display_title }}</p>
+                                                        {% if item.start_time and item.end_time %}
+                                                            <p class="text-xs text-gray-600 mt-1">{{ item.start_time|time:"g:i A" }} - {{ item.end_time|time:"g:i A" }}</p>
+                                                        {% endif %}
+                                                        {% if item.speaker_presenter_label %}
+                                                            <p class="text-xs font-semibold mt-1.5" style="color: #be185d;">{{ item.speaker_presenter_label }}</p>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% elif program_schedule_pdf and program_schedule_pdf.schedule_image %}
+            <div class="rounded-3xl border border-slate-200 bg-white p-8 shadow-lg">
+                <img src="{{ program_schedule_pdf.schedule_image.url }}" alt="Schedule Image" class="mx-auto max-w-full h-auto rounded-2xl">
             </div>
         {% else %}
-            <!-- Fallback to the table if no image is available -->
-            <table class="min-w-full divide-y divide-gray-200 bg-white table-auto">
-                <thead>
-                    <tr class="bg-pink-300">
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Day</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Time</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Title</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Presenter</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Hall Room</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Chairperson</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Panelist</strong></th>
-                        <th class="py-3 px-4 text-center text-xs font-medium text-black uppercase tracking-wider"><strong>Moderator</strong></th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-400">
-                    {% for schedule in program_schedules %}
-                    {% for slot in schedule.time_slots.all %}
-                    <tr hx-get="{% url 'registration:session_detail' event.id schedule.abstract_submission.id %}" hx-target="#session-details" hx-trigger="click">
-                        <td class="py-4 px-4 whitespace-nowrap text-center">{{ slot.program_day }}</td>
-                        <td class="py-4 px-4 whitespace-nowrap text-center">{{ slot.start_time|time:"P" }} - {{ slot.end_time|time:"P" }}</td>
-                        <td class="py-4 px-4 text-center">{{ schedule.title }}</td>
-                        <td class="py-4 px-4 text-center">{{ schedule.presenter }}</td>
-                        <td class="py-4 px-4 text-center">{{ slot.hall_room }}</td>
-                        <td class="py-4 px-4 text-center">{{ schedule.chairperson }}</td>
-                        <td class="py-4 px-4 text-center">
-                            {% for panelist in schedule.panelist.all %}
-                                {{ panelist.name }}{% if not forloop.last %}, {% endif %}
+            <div class="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-lg">
+                <table class="min-w-full divide-y divide-slate-200 text-left">
+                    <thead class="bg-gradient-to-r from-slate-100 to-slate-50">
+                        <tr>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Day</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Time</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Title</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Presenter</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Room</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Chairperson</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Panelist</th>
+                            <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-700">Moderator</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 bg-white">
+                        {% for schedule in program_schedules %}
+                            {% for slot in schedule.time_slots.all %}
+                                <tr class="hover:bg-pink-50 transition-colors">
+                                    <td class="px-4 py-4 align-top text-sm font-medium text-text-primary">{{ slot.program_day }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ slot.start_time|time:"P" }} - {{ slot.end_time|time:"P" }}</td>
+                                    <td class="px-4 py-4 align-top text-sm font-semibold text-text-primary">{{ schedule.title }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.presenter }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ slot.hall_room }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.chairperson }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">
+                                        {% for panelist in schedule.panelist.all %}
+                                            {{ panelist.name }}{% if not forloop.last %}, {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.moderator }}</td>
+                                </tr>
                             {% endfor %}
-                        </td>
-                        <td class="py-4 px-4 text-center">{{ schedule.moderator }}</td>
-                    </tr>
-                    {% endfor %}
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="py-4 text-center">No scheduled sessions available</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="px-4 py-8 text-center text-sm text-text-secondary">No scheduled sessions available</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% endif %}
-    </div>
-        <div class="text-center mt-8">
-            <!-- Check if a PDF is available and update the download button -->
-            {% if program_schedule_pdf and program_schedule_pdf.schedule_pdf %}
-                <a href="{{ program_schedule_pdf.schedule_pdf.url }}" download class="inline-block px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">
-                    Download Schedule as PDF
-                </a>
-            {% else %}
-                <!-- Fallback to the existing dynamic PDF generation -->
-                <a href="{% url 'registration:download_schedule_pdf' event.id %}" class="inline-block px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">
-                    Download Schedule as PDF
-                </a>
-            {% endif %}
+
+        <!-- Download Button -->
+        {% if session_days or program_schedules %}
+            <div class="pt-3 text-center">
+                {% if program_schedule_pdf and program_schedule_pdf.schedule_pdf %}
+                    <a href="{{ program_schedule_pdf.schedule_pdf.url }}" download class="inline-flex items-center gap-2 justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white transition hover:shadow-lg active:scale-95" style="background: linear-gradient(to right, #be185d, #d1118f); border: 1px solid #d1118f;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8m0 8l-6-4m6 4l6-4"></path></svg>
+                        <span>Download Schedule</span>
+                    </a>
+                {% else %}
+                    <a href="{% url 'registration:download_schedule_pdf' event.id %}" class="inline-flex items-center gap-2 justify-center rounded-lg px-6 py-3 text-sm font-semibold text-white transition hover:shadow-lg active:scale-95" style="background: linear-gradient(to right, #be185d, #d1118f); border: 1px solid #d1118f;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8m0 8l-6-4m6 4l6-4"></path></svg>
+                        <span>Download Schedule</span>
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <div id="session-details" class="mx-auto max-w-6xl px-4 mt-8">
+            <!-- Details will be loaded here via HTMX -->
         </div>
-   
-    <div id="session-details" class="mx-auto max-w-6xl px-4 mt-8">
-        <!-- Details will be loaded here via HTMX -->
     </div>
 </section>
 {% endblock %}

@@ -1,0 +1,230 @@
+{% extends "gene_base.html" %}
+
+{% block title %}Schedule{% endblock %}
+
+{% block content %}
+<section id="schedule" class="bg-background py-16">
+    <div class="container-custom space-y-8 px-4">
+        <div class="rounded-3xl border border-slate-200 bg-surface px-6 py-8 shadow-sm">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-text-secondary">Scientific Program</p>
+                    <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{{ event.name }} {{ event.year }}</h1>
+                    {% if event.slogan %}
+                        <p class="mt-3 max-w-2xl text-sm leading-6 text-text-tertiary">{{ event.slogan }}</p>
+                    {% endif %}
+                </div>
+                <div class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-text-primary shadow-sm">
+                    {% if session_days %}
+                        {{ session_days|length }} day{{ session_days|length|pluralize }} scheduled
+                    {% else %}
+                        {{ program_schedules|length }} legacy schedule item{{ program_schedules|length|pluralize }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if session_days %}
+            <div class="space-y-6">
+                {% for group in session_days %}
+                    <section class="overflow-hidden rounded-3xl border border-slate-200 shadow-sm">
+                        <div class="bg-pink-500 px-6 py-4">
+                            <h2 class="text-xl font-bold text-white">{{ group.day.name }}{% if group.day.date %} - {{ group.day.date|date:"d M, Y" }}{% endif %}</h2>
+                        </div>
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white px-6 py-4 border-b border-slate-200">
+                            <div>
+                                <p class="text-sm font-semibold text-text-primary">{{ group.day.date|date:"F j, Y" }}</p>
+                            </div>
+                            <span class="inline-flex items-center rounded-full border border-slate-200 bg-background px-3 py-1 text-sm font-semibold text-text-secondary">
+                                {{ group.rows|length }} schedule block{{ group.rows|length|pluralize }}
+                            </span>
+                        </div>
+
+                        <div class="hidden md:block bg-white">
+                            <table class="min-w-full divide-y divide-slate-200 text-left">
+                                <thead class="bg-pink-100">
+                                    <tr>
+                                        <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-900">Time</th>
+                                        <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-900">Session / Title</th>
+                                        <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-900">Room</th>
+                                        <th class="px-4 py-4 text-xs font-bold uppercase tracking-[0.24em] text-slate-900">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 bg-white">
+                                    {% for row in group.rows %}
+                                    {% if row.type == 'slot' %}
+                                        <tr class="hover:bg-slate-50 bg-slate-50">
+                                            <td class="px-4 py-5 align-top text-sm text-text-primary">{{ row.slot.start_time|time:"g:i A" }} - {{ row.slot.end_time|time:"g:i A" }}</td>
+                                            <td class="px-4 py-5 align-top">
+                                                <div class="text-sm font-semibold text-text-primary">{{ row.slot.label|default:row.slot.get_slot_type_display }}</div>
+                                                <div class="mt-2 text-sm text-text-secondary">{{ row.slot.hall_room.name }}</div>
+                                            </td>
+                                            <td class="px-4 py-5 align-top text-sm text-text-secondary">{{ row.slot.hall_room.name }}</td>
+                                            <td class="px-4 py-5 align-top text-sm text-text-secondary">{{ row.slot.get_slot_type_display }}</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="px-4 py-5 align-top text-sm text-text-primary">{{ row.session.start_time|time:"g:i A" }} - {{ row.session.end_time|time:"g:i A" }}</td>
+                                            <td class="px-4 py-5 align-top">
+                                                <div class="text-sm font-semibold text-text-primary">{{ row.session.title }}</div>
+                                                {% if row.session.description %}
+                                                    <div class="mt-2 text-sm text-text-secondary line-clamp-2">{{ row.session.description }}</div>
+                                                {% endif %}
+                                                {% for role_type, role_names in row.session.grouped_faculty_roles.items %}
+                                                    {% if role_names %}
+                                                        <div class="mt-3 text-sm">
+                                                            <span class="font-semibold text-text-primary">{{ role_type }}:</span>
+                                                            <div class="ml-2 text-text-secondary">
+                                                                {% for name in role_names %}
+                                                                    <div>{{ name }}</div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </td>
+                                            <td class="px-4 py-5 align-top text-sm text-text-secondary">{{ row.session.hall_room.name }}</td>
+                                            <td class="px-4 py-5 align-top text-sm text-text-secondary space-y-2">
+                                                {% if row.session.items.exists %}
+                                                    {% for item in row.session.items.all %}
+                                                        <div>
+                                                            <span class="font-semibold text-text-primary">{{ item.display_title }}</span>{% if item.start_time and item.end_time %} • {{ item.start_time|time:"g:i A" }} - {{ item.end_time|time:"g:i A" }}{% endif %}
+                                                            {% if item.speaker_presenter_label %}
+                                                                <div class="mt-1 text-xs text-text-secondary">{{ item.speaker_presenter_label }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="md:hidden space-y-4 bg-white p-4">
+                            {% for row in group.rows %}
+                                {% if row.type == 'slot' %}
+                                    <div class="rounded-3xl border border-slate-200 bg-background p-4 shadow-sm">
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <div class="text-xs uppercase tracking-[0.24em] text-text-secondary">{{ row.slot.hall_room.name }}</div>
+                                                <h3 class="mt-2 text-lg font-bold text-text-primary">{{ row.slot.label|default:row.slot.get_slot_type_display }}</h3>
+                                            </div>
+                                            <div class="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-text-secondary">
+                                                {{ row.slot.start_time|time:"g:i A" }} - {{ row.slot.end_time|time:"g:i A" }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="rounded-3xl border border-slate-200 bg-background p-4 shadow-sm">
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div class="flex-1">
+                                                <div class="text-xs uppercase tracking-[0.24em] text-text-secondary">{{ row.session.hall_room.name }}</div>
+                                                <h3 class="mt-2 text-lg font-bold text-text-primary">{{ row.session.title }}</h3>
+                                                {% for role_type, role_names in row.session.grouped_faculty_roles.items %}
+                                                    {% if role_names %}
+                                                        <div class="mt-3 text-sm">
+                                                            <span class="font-semibold text-text-primary">{{ role_type }}:</span>
+                                                            <div class="ml-2 text-text-secondary">
+                                                                {% for name in role_names %}
+                                                                    <div>{{ name }}</div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            <div class="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-text-secondary">
+                                                {{ row.session.start_time|time:"g:i A" }} - {{ row.session.end_time|time:"g:i A" }}
+                                            </div>
+                                        </div>
+                                        {% if row.session.description %}
+                                            <p class="mt-3 text-sm text-text-secondary">{{ row.session.description }}</p>
+                                        {% endif %}
+                                        {% if row.session.items.exists %}
+                                            <div class="mt-4 space-y-3">
+                                                <div class="text-xs font-semibold uppercase text-text-primary">Topics & Speakers:</div>
+                                                {% for item in row.session.items.all %}
+                                                    <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                                                        <div class="font-semibold text-text-primary">{{ item.display_title }}</div>
+                                                        {% if item.start_time and item.end_time %}
+                                                            <div class="mt-1 text-xs text-text-secondary">{{ item.start_time|time:"g:i A" }} - {{ item.end_time|time:"g:i A" }}</div>
+                                                        {% endif %}
+                                                        {% if item.speaker_presenter_label %}
+                                                            <div class="mt-2 text-xs text-text-secondary">{{ item.speaker_presenter_label }}</div>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+
+                    </section>
+                {% endfor %}
+            </div>
+        {% elif program_schedule_pdf and program_schedule_pdf.schedule_image %}
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <img src="{{ program_schedule_pdf.schedule_image.url }}" alt="Schedule Image" class="mx-auto max-w-full h-auto rounded-3xl">
+            </div>
+        {% else %}
+            <div class="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <table class="min-w-full divide-y divide-slate-200 text-left">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Day</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Time</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Title</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Presenter</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Room</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Chairperson</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Panelist</th>
+                            <th class="px-4 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-secondary">Moderator</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 bg-background">
+                        {% for schedule in program_schedules %}
+                            {% for slot in schedule.time_slots.all %}
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-4 py-4 align-top text-sm text-text-primary">{{ slot.program_day }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ slot.start_time|time:"P" }} - {{ slot.end_time|time:"P" }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-primary">{{ schedule.title }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.presenter }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ slot.hall_room }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.chairperson }}</td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">
+                                        {% for panelist in schedule.panelist.all %}
+                                            {{ panelist.name }}{% if not forloop.last %}, {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td class="px-4 py-4 align-top text-sm text-text-secondary">{{ schedule.moderator }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="px-4 py-6 text-center text-sm text-text-secondary">No scheduled sessions available</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
+        <div class="text-center">
+            {% if program_schedule_pdf and program_schedule_pdf.schedule_pdf %}
+                <a href="{{ program_schedule_pdf.schedule_pdf.url }}" download class="inline-flex items-center justify-center rounded-full border border-pink-500 bg-pink-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-pink-600">Download Schedule PDF</a>
+            {% else %}
+                <a href="{% url 'registration:download_schedule_pdf' event.id %}" class="inline-flex items-center justify-center rounded-full border border-pink-500 bg-pink-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-pink-600">Download Schedule PDF</a>
+            {% endif %}
+        </div>
+
+        <div id="session-details" class="mx-auto max-w-6xl px-4 mt-8">
+            <!-- Details will be loaded here via HTMX -->
+        </div>
+    </div>
+</section>
+{% endblock %}

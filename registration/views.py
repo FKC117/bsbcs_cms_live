@@ -4,7 +4,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.models import User
 from django.utils.crypto import get_random_string
 from django.urls import reverse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
 from django.core.exceptions import ValidationError
@@ -38,6 +38,7 @@ import io
 import os
 import zipfile
 from decimal import Decimal, InvalidOperation
+from collections import defaultdict
 from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
@@ -1815,22 +1816,114 @@ def invitation(request, event_id):
     return render(request, 'invitation.html', {'invitations': invitations, 'event': event})
 
 
-from django.shortcuts import render, get_object_or_404
-from .models import ProgramSchedulePdf, Event
 def schedule(request, event_id):
     event = get_object_or_404(Event, id=event_id)
+    program_sessions = ProgramSession.objects.filter(event=event).select_related(
+        'program_day',
+        'hall_room',
+        'time_slot',
+    ).prefetch_related(
+        'faculty_roles__person',
+        'items__abstract_submission',
+        'items__talk_slot',
+        'items__faculty_roles__person',
+    ).order_by('program_day__date', 'start_time', 'order')
+
+    program_days = ProgramDay.objects.filter(event=event).order_by('date', 'name')
+    program_schedule_pdf = ProgramSchedulePdf.objects.filter(event=event).first()
     program_schedules = ProgramSchedule.objects.filter(event=event)\
         .select_related('abstract_submission')\
         .prefetch_related('time_slots')\
         .order_by('time_slots__program_day', 'time_slots__start_time')
-    
-    # Fetch the uploaded PDF from the ProgramSchedulePdf model
-    program_schedule_pdf = ProgramSchedulePdf.objects.filter(event=event).first()
-    
+
+    time_slots = TimeSlot.objects.filter(event=event).select_related(
+        'program_day',
+        'hall_room',
+    ).prefetch_related(
+        'program_sessions__faculty_roles__person',
+        'program_sessions__items__faculty_roles__person',
+        'program_sessions__items__abstract_submission',
+        'program_sessions__items__talk_slot',
+    ).order_by('program_day__date', 'start_time', 'hall_room__name')
+
+    def get_grouped_faculty_roles(session):
+        """Group session faculty roles by role type with person names."""
+        grouped = {}
+        for role in session.faculty_roles.all():
+            role_label = role.get_role_display()
+            if role_label not in grouped:
+                grouped[role_label] = []
+            grouped[role_label].append(role.person.name)
+        return grouped
+
+    def get_item_speaker_presenter_label(item):
+        """Get speaker or presenter names for an item, prioritizing speakers."""
+        speakers = []
+        presenters = []
+        for role in item.faculty_roles.all():
+            if role.role == ProgramItemFaculty.ROLE_SPEAKER and role.person.name not in speakers:
+                speakers.append(role.person.name)
+            elif role.role == ProgramItemFaculty.ROLE_PRESENTER and role.person.name not in presenters:
+                presenters.append(role.person.name)
+        if speakers:
+            return ', '.join(speakers)
+        if presenters:
+            return ', '.join(presenters)
+        return ''
+
+    session_days = []
+    if time_slots.exists() or program_sessions.exists():
+        slots_by_day = defaultdict(list)
+        for slot in time_slots:
+            slots_by_day[slot.program_day_id].append(slot)
+
+        sessions_by_slot = defaultdict(list)
+        sessions_by_time_window = defaultdict(list)
+        unassigned_sessions_by_day = defaultdict(list)
+        for session in program_sessions:
+            session.grouped_faculty_roles = get_grouped_faculty_roles(session)
+            for item in session.items.all():
+                item.speaker_presenter_label = get_item_speaker_presenter_label(item)
+            if session.time_slot_id:
+                sessions_by_slot[session.time_slot_id].append(session)
+            elif session.program_day_id:
+                unassigned_sessions_by_day[session.program_day_id].append(session)
+
+            time_window_key = (session.program_day_id, session.start_time, session.end_time)
+            sessions_by_time_window[time_window_key].append(session)
+
+        for day in program_days:
+            rows = []
+            for slot in slots_by_day.get(day.id, []):
+                if slot.slot_type == TimeSlot.SLOT_SESSION:
+                    slot_sessions = sessions_by_slot.get(slot.id, [])
+                    for session in slot_sessions:
+                        time_window_key = (session.program_day_id, session.start_time, session.end_time)
+                        window_sessions = sessions_by_time_window.get(time_window_key, [])
+                        session.parallel_sessions = len(window_sessions)
+                        session.is_parallel = len(window_sessions) > 1
+                        rows.append({'type': 'session', 'session': session})
+                else:
+                    rows.append({'type': 'slot', 'slot': slot})
+
+            for session in unassigned_sessions_by_day.get(day.id, []):
+                time_window_key = (session.program_day_id, session.start_time, session.end_time)
+                window_sessions = sessions_by_time_window.get(time_window_key, [])
+                session.parallel_sessions = len(window_sessions)
+                session.is_parallel = len(window_sessions) > 1
+                rows.append({'type': 'session', 'session': session})
+
+            session_days.append({
+                'day': day,
+                'rows': rows,
+            })
+
     return render(request, 'schedule.html', {
-        'program_schedules': program_schedules,
         'event': event,
-        'program_schedule_pdf': program_schedule_pdf,  # Pass the PDF object to the template
+        'program_sessions': program_sessions,
+        'session_days': session_days,
+        'program_schedule_pdf': program_schedule_pdf,
+        'program_schedules': program_schedules,
     })
 
 
