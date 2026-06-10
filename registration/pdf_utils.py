@@ -76,53 +76,181 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 
 def generate_schedule_pdf(event, schedules):
+    # New schedule renderer: build day -> rows (slot or session) similar to schedule.html
     custom_paper_size = (11 * inch, 17 * inch)
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(custom_paper_size),
                             rightMargin=0.5 * inch, leftMargin=0.5 * inch,
-                            topMargin=0.75 * inch, bottomMargin=0.75 * inch)
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch)
     styles = getSampleStyleSheet()
+    body = styles['BodyText']
+    title_style = styles['Title']
+    small_bold = ParagraphStyle('SmallBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=colors.HexColor('#102033'))
+    accent = colors.HexColor('#be185d')
+
     elements = []
 
-    # Define the Header
-    header = Paragraph(f"Program Schedule of {event.name} {event.year}", styles['Title'])
+    # Header block
+    header = Paragraph(f"{event.name} {event.year} — Program Schedule", title_style)
     elements.append(header)
-    elements.append(Spacer(1, 24))
+    elements.append(Spacer(1, 12))
 
-    data = [['Day', 'Time', 'Title', 'Presenter', 'Hall Room', 'Chairperson', 'Panelist', 'Moderator']]
+    # Build schedule data from provided schedules (legacy) for compatibility, but also try to derive slots & sessions
+    # We'll attempt to collect time slots and sessions similar to the HTML view.
+    from .models import TimeSlot, ProgramSession
+    from collections import defaultdict
 
-    for schedule in schedules:
-        for slot in schedule.time_slots.all():
-            day = Paragraph(str(slot.program_day), styles['BodyText'])
-            time = Paragraph(f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}", styles['BodyText'])
-            title = Paragraph(schedule.title, styles['BodyText'])
-            presenter = Paragraph(schedule.presenter, styles['BodyText'])
-            hall_room = Paragraph(slot.hall_room.name, styles['BodyText'])
+    # Collect time slots for the event
+    time_slots = TimeSlot.objects.filter(event=event).select_related('program_day', 'hall_room').order_by('program_day__date', 'start_time', 'hall_room__name')
+    program_sessions = ProgramSession.objects.filter(event=event).select_related('program_day', 'hall_room', 'time_slot').prefetch_related('faculty_roles__person', 'items__faculty_roles__person')
 
-            # Convert chairperson, panelist, and moderator to strings
-            chairperson = Paragraph(str(schedule.chairperson), styles['BodyText']) if schedule.chairperson else ""
-            panelist = Paragraph(', '.join([str(p) for p in schedule.panelist.all()]), styles['BodyText'])
-            moderator = Paragraph(str(schedule.moderator), styles['BodyText']) if schedule.moderator else ""
+    # Group slots by day
+    slots_by_day = defaultdict(list)
+    for slot in time_slots:
+        slots_by_day[slot.program_day_id].append(slot)
 
-            row = [day, time, title, presenter, hall_room, chairperson, panelist, moderator]
-            data.append(row)
+    # Group sessions by time-window so parallels are detected
+    sessions_by_slot = defaultdict(list)
+    sessions_by_time_window = defaultdict(list)
+    unassigned_sessions_by_day = defaultdict(list)
 
-    # Adjust column widths to fit within the landscape A4-sized page.
-    table = Table(data, colWidths=[1.5 * inch, 2 * inch, 3 * inch, 2.5 * inch, 1.5 * inch])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.pink),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-    ]))
+    for s in program_sessions:
+        if s.time_slot_id:
+            sessions_by_slot[s.time_slot_id].append(s)
+        elif s.program_day_id:
+            unassigned_sessions_by_day[s.program_day_id].append(s)
+        time_window = (s.program_day_id, s.start_time, s.end_time)
+        sessions_by_time_window[time_window].append(s)
 
-    elements.append(table)
+    # Organize by day and render blocks
+    from reportlab.lib.enums import TA_LEFT
+    para_style = ParagraphStyle('para', parent=styles['Normal'], alignment=TA_LEFT, fontSize=9, leading=11)
+
+    # Helper to render a session block as a two-column table (time/room | content)
+    def session_block(session):
+        time_text = f"{session.start_time.strftime('%I:%M %p')} — {session.end_time.strftime('%I:%M %p')}"
+        left = Paragraph(f"<b>{time_text}</b><br/><font size=8>{session.hall_room.name if session.hall_room else ''}</font>", para_style)
+
+        # Build right column HTML-like content
+        # Title and parallel badge
+        time_window = (session.program_day_id, session.start_time, session.end_time)
+        parallel_count = len(sessions_by_time_window.get(time_window, []))
+        badge = f" <font color='#b91c6b'><b>PARALLEL ({parallel_count})</b></font>" if parallel_count > 1 else ""
+        title_html = f"<b>{session.title}</b>{badge}"
+        parts = [Paragraph(title_html, small_bold)]
+        if getattr(session, 'description', None):
+            parts.append(Paragraph(session.description, para_style))
+
+        # Roles
+        # grouped by role label
+        try:
+            grouped = {}
+            for role in session.faculty_roles.all():
+                label = role.get_role_display()
+                grouped.setdefault(label, []).append(role.person.name)
+            for label, names in grouped.items():
+                parts.append(Paragraph(f"<font color='{accent.hexval()}'><b>{label}</b></font>", para_style))
+                parts.append(Paragraph(', '.join(names), para_style))
+        except Exception:
+            pass
+
+        # Items (topics & speakers)
+        try:
+            for item in session.items.all():
+                parts.append(Paragraph(f"<b>{item.display_title}</b>", para_style))
+                if getattr(item, 'start_time', None) and getattr(item, 'end_time', None):
+                    parts.append(Paragraph(f"<font size=8>{item.start_time.strftime('%I:%M %p')} - {item.end_time.strftime('%I:%M %p')}</font>", para_style))
+                # speaker/presenter label
+                sp = ''
+                try:
+                    speakers = [r.person.name for r in item.faculty_roles.all() if r.role == getattr(r, 'ROLE_SPEAKER', 'speaker')]
+                    presenters = [r.person.name for r in item.faculty_roles.all() if r.role == getattr(r, 'ROLE_PRESENTER', 'presenter')]
+                    sp = ', '.join(speakers) if speakers else ', '.join(presenters)
+                except Exception:
+                    sp = ''
+                if sp:
+                    parts.append(Paragraph(f"<font color='{accent.hexval()}' size=9>{sp}</font>", para_style))
+        except Exception:
+            pass
+
+        right = parts
+        tbl = Table([[left, right]], colWidths=[1.6 * inch, 9.4 * inch])
+        tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#fbcfe8')),
+        ]))
+        return tbl
+
+    def slot_block(slot):
+        # Break/meal/ceremony style
+        label = slot.label or slot.get_slot_type_display()
+        time_text = f"{slot.start_time.strftime('%I:%M %p')} — {slot.end_time.strftime('%I:%M %p')}"
+        content = Paragraph(f"<b>{label}</b><br/><font size=9>{slot.hall_room.name}</font>", para_style)
+        tbl = Table([[Paragraph(time_text, para_style), content]], colWidths=[1.6 * inch, 9.4 * inch])
+        # color accent based on slot type
+        color_map = {
+            'tea_break': colors.HexColor('#fef3c7'),
+            'lunch': colors.HexColor('#d1fae5'),
+            'dinner': colors.HexColor('#ede9fe'),
+            'ceremony': colors.HexColor('#dbeafe'),
+        }
+        bg = color_map.get(slot.slot_type, colors.whitesmoke)
+        tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), bg),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        return tbl
+
+    # Determine program days from time_slots (preserve order)
+    days = []
+    from registration.models import ProgramDay
+    pd_qs = ProgramDay.objects.filter(event=event).order_by('date', 'name')
+    for pd in pd_qs:
+        days.append(pd)
+
+    for day in days:
+        # Day header
+        day_header = Table([[Paragraph(f"<b>{day.name} - {day.date.strftime('%A, %B %d, %Y')}</b>", small_bold)]], colWidths=[11 * inch])
+        day_header.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), accent),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(day_header)
+        elements.append(Spacer(1, 6))
+
+        # rows: iterate through slots for that day
+        for slot in slots_by_day.get(day.id, []):
+            if slot.slot_type == TimeSlot.SLOT_SESSION:
+                # render each session assigned to this slot
+                slot_sessions = sessions_by_slot.get(slot.id, [])
+                for s in slot_sessions:
+                    elements.append(session_block(s))
+                    elements.append(Spacer(1, 6))
+            else:
+                elements.append(slot_block(slot))
+                elements.append(Spacer(1, 6))
+
+        # unassigned sessions for day
+        for s in unassigned_sessions_by_day.get(day.id, []):
+            elements.append(session_block(s))
+            elements.append(Spacer(1, 6))
+
+        elements.append(Spacer(1, 12))
+
     doc.build(elements)
     buffer.seek(0)
     return buffer
