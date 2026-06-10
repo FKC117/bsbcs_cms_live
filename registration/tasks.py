@@ -224,6 +224,28 @@ def send_participant_approval_email(
             'event': event,
         }
         template_name = 'free_event_confirmation_email.html'
+
+        # Ensure a free-event invoice is generated and attached for free approvals.
+        from .models import PaymentStatus
+        from .pdf_utils import generate_invoice
+
+        payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+        invoice_path = None
+        if payment_status:
+            existing_invoice_path = None
+            if payment_status.invoice:
+                try:
+                    existing_invoice_path = payment_status.invoice.path
+                except Exception:
+                    existing_invoice_path = None
+
+            if existing_invoice_path and os.path.exists(existing_invoice_path):
+                invoice_path = existing_invoice_path
+            else:
+                invoice_path = generate_invoice(participant, event, payment_status)
+                relative_invoice_path = os.path.relpath(invoice_path, settings.MEDIA_ROOT).replace('\\', '/')
+                payment_status.invoice = relative_invoice_path
+                payment_status.save(update_fields=['invoice'])
     else:
         message = f'Unknown participant email type: {email_type}'
         _update_participant_email_log(
@@ -247,7 +269,13 @@ def send_participant_approval_email(
             [participant.email],
         )
         email.attach_alternative(html_content, 'text/html')
+        if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and invoice_path:
+            if os.path.exists(invoice_path):
+                email.attach_file(invoice_path)
         email.send()
+        if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and payment_status:
+            payment_status.email_sent = True
+            payment_status.save(update_fields=['email_sent'])
     except Exception as exc:
         _update_participant_email_log(
             log_id,

@@ -58,7 +58,7 @@ from .tasks import (
     send_participant_approval_email,
     send_pending_bulk_email_campaign,
 )
-from .pdf_utils import generate_abstract_pdf
+from .pdf_utils import generate_abstract_pdf, generate_invoice
 
 
 # Payment logger (writes to payment.log via settings)
@@ -3674,6 +3674,28 @@ def _send_dashboard_free_event_confirmation(participant, password=None, include_
     if include_password and password:
         context['password'] = password
 
+    attachment_paths = []
+    try:
+        payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+        if payment_status:
+            invoice_path = None
+            if payment_status.invoice:
+                try:
+                    invoice_path = payment_status.invoice.path
+                except Exception:
+                    invoice_path = None
+
+            if not invoice_path or not os.path.exists(invoice_path):
+                invoice_path = generate_invoice(participant, event, payment_status)
+                relative_invoice_path = os.path.relpath(invoice_path, settings.MEDIA_ROOT).replace('\\', '/')
+                payment_status.invoice = relative_invoice_path
+                payment_status.save(update_fields=['invoice'])
+
+            if invoice_path and os.path.exists(invoice_path):
+                attachment_paths.append(invoice_path)
+    except Exception:
+        attachment_paths = []
+
     html_content = render_to_string('free_event_confirmation_email.html', context)
     text_content = strip_tags(html_content)
     send_email_task.delay(
@@ -3682,6 +3704,7 @@ def _send_dashboard_free_event_confirmation(participant, password=None, include_
         from_email=os.getenv("EMAIL_HOST_USER"),
         recipient_list=[participant.email],
         html_message=html_content,
+        attachment_paths=attachment_paths,
     )
 
 
