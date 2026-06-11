@@ -3352,47 +3352,168 @@ def build_attention_queue(events, event_filter=None, page_number=None, queue_typ
     return Paginator(entries, per_page).get_page(page_number), queue_type
 
 
-def build_staff_activity(page_number=None, per_page=8):
-    activity_rows = []
+def staff_activity_queryset(filters=None):
+    filters = filters or {}
     log_entries = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
 
-    for entry in log_entries[:80]:
-        model_class = entry.content_type.model_class() if entry.content_type else None
-        detail_url = ''
-        if model_class and entry.object_id and not entry.is_deletion():
-            try:
-                detail_url = reverse(
-                    f'admin:{entry.content_type.app_label}_{entry.content_type.model}_change',
-                    args=[entry.object_id],
-                )
-            except Exception:
-                detail_url = ''
+    search_query = (filters.get('q') or '').strip()
+    if search_query:
+        log_entries = log_entries.filter(
+            Q(user__username__icontains=search_query)
+            | Q(user__first_name__icontains=search_query)
+            | Q(user__last_name__icontains=search_query)
+            | Q(object_repr__icontains=search_query)
+            | Q(change_message__icontains=search_query)
+            | Q(content_type__model__icontains=search_query)
+            | Q(content_type__app_label__icontains=search_query)
+        )
 
-        if entry.is_addition():
-            action_label = 'Added'
-            tone = 'success'
-        elif entry.is_change():
-            action_label = 'Changed'
-            tone = 'info'
-        elif entry.is_deletion():
-            action_label = 'Deleted'
-            tone = 'danger'
-        else:
-            action_label = entry.get_action_flag_display()
-            tone = 'neutral'
+    staff_filter = filters.get('staff') or ''
+    if staff_filter:
+        log_entries = log_entries.filter(user_id=staff_filter)
 
-        activity_rows.append({
-            'staff': entry.user.get_full_name() or entry.user.get_username(),
-            'action': action_label,
-            'tone': tone,
-            'object': entry.object_repr,
-            'model': entry.content_type.name.title() if entry.content_type else 'Admin record',
-            'message': entry.get_change_message(),
-            'time': entry.action_time,
-            'detail_url': detail_url,
-        })
+    model_filter = filters.get('model') or ''
+    if model_filter:
+        try:
+            app_label, model_name = model_filter.split('.', 1)
+        except ValueError:
+            app_label, model_name = '', ''
+        if app_label and model_name:
+            log_entries = log_entries.filter(
+                content_type__app_label=app_label,
+                content_type__model=model_name,
+            )
+
+    action_filter = filters.get('action') or ''
+    if action_filter:
+        action_map = {
+            'added': ADDITION,
+            'changed': CHANGE,
+            'deleted': DELETION,
+        }
+        action_flag = action_map.get(action_filter)
+        if action_flag:
+            log_entries = log_entries.filter(action_flag=action_flag)
+
+    date_from = _parse_dashboard_date(filters.get('date_from'))
+    if date_from:
+        log_entries = log_entries.filter(action_time__date__gte=date_from)
+
+    date_to = _parse_dashboard_date(filters.get('date_to'))
+    if date_to:
+        log_entries = log_entries.filter(action_time__date__lte=date_to)
+
+    return log_entries
+
+
+def staff_activity_row(entry):
+    model_class = entry.content_type.model_class() if entry.content_type else None
+    detail_url = ''
+    if model_class and entry.object_id and not entry.is_deletion():
+        try:
+            detail_url = reverse(
+                f'admin:{entry.content_type.app_label}_{entry.content_type.model}_change',
+                args=[entry.object_id],
+            )
+        except Exception:
+            detail_url = ''
+
+    if entry.is_addition():
+        action_label = 'Added'
+        tone = 'success'
+    elif entry.is_change():
+        action_label = 'Changed'
+        tone = 'info'
+    elif entry.is_deletion():
+        action_label = 'Deleted'
+        tone = 'danger'
+    else:
+        action_label = entry.get_action_flag_display()
+        tone = 'neutral'
+
+    return {
+        'staff': entry.user.get_full_name() or entry.user.get_username(),
+        'action': action_label,
+        'tone': tone,
+        'object': entry.object_repr,
+        'model': entry.content_type.name.title() if entry.content_type else 'Admin record',
+        'model_key': f'{entry.content_type.app_label}.{entry.content_type.model}' if entry.content_type else '',
+        'message': entry.get_change_message(),
+        'time': entry.action_time,
+        'detail_url': detail_url,
+    }
+
+
+def build_staff_activity(page_number=None, per_page=8, filters=None):
+    activity_rows = []
+    log_entries = staff_activity_queryset(filters)[:500]
+    for entry in log_entries:
+        activity_rows.append(staff_activity_row(entry))
 
     return Paginator(activity_rows, per_page).get_page(page_number)
+
+
+def staff_activity_filter_context(filters):
+    model_choices = [
+        {
+            'value': f'{row["content_type__app_label"]}.{row["content_type__model"]}',
+            'label': row['content_type__model'].replace('_', ' ').title(),
+        }
+        for row in LogEntry.objects.filter(content_type__isnull=False)
+        .values('content_type__app_label', 'content_type__model')
+        .distinct()
+        .order_by('content_type__model')
+    ]
+    staff_choices = User.objects.filter(
+        pk__in=LogEntry.objects.values('user_id')
+    ).order_by('username')
+    return {
+        'filters': filters,
+        'model_choices': model_choices,
+        'staff_choices': staff_choices,
+        'action_choices': [
+            ('', 'All actions'),
+            ('added', 'Added'),
+            ('changed', 'Changed'),
+            ('deleted', 'Deleted'),
+        ],
+    }
+
+
+def get_staff_activity_filters(request):
+    return {
+        'q': (request.GET.get('activity_q') or '').strip(),
+        'staff': request.GET.get('activity_staff') or '',
+        'model': request.GET.get('activity_model') or '',
+        'action': request.GET.get('activity_action') or '',
+        'date_from': request.GET.get('activity_date_from') or '',
+        'date_to': request.GET.get('activity_date_to') or '',
+    }
+
+
+def staff_activity_query_params(request, filters=None):
+    filters = filters or get_staff_activity_filters(request)
+    query_params = {}
+    event_filter = request.GET.get('event')
+    event_status_filter = request.GET.get('event_status')
+    if event_filter:
+        query_params['event'] = event_filter
+    if event_status_filter:
+        query_params['event_status'] = event_status_filter
+
+    filter_param_map = {
+        'q': 'activity_q',
+        'staff': 'activity_staff',
+        'model': 'activity_model',
+        'action': 'activity_action',
+        'date_from': 'activity_date_from',
+        'date_to': 'activity_date_to',
+    }
+    for key, param_name in filter_param_map.items():
+        value = filters.get(key)
+        if value:
+            query_params[param_name] = value
+    return query_params
 
 
 def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None, queue_type='all'):
@@ -3595,6 +3716,7 @@ def global_dashboard(request):
     queue_page_number = request.GET.get('queue_page')
     activity_page_number = request.GET.get('activity_page')
     queue_type = request.GET.get('queue_type', 'all')
+    activity_filters = get_staff_activity_filters(request)
 
     events = Event.objects.all()
     if event_status_filter:
@@ -3638,7 +3760,7 @@ def global_dashboard(request):
         'page_obj': page_obj,
         'participant_totals': participant_totals,
         'organization_page_obj': organization_page_obj,
-        'staff_activity_page_obj': build_staff_activity(activity_page_number),
+        'staff_activity_page_obj': build_staff_activity(activity_page_number, filters=activity_filters),
         'dashboard_chart_data': {
             'event_metrics': build_event_metrics_chart_data(event_metrics),
             'participant_status': participant_chart_data,
@@ -3652,7 +3774,8 @@ def global_dashboard(request):
         'query_string': query_string,
         'event_query_string': query_string,
         'participant_query_string': query_string,
-        'activity_query_string': query_string,
+        'activity_query_string': urlencode(staff_activity_query_params(request, activity_filters)),
+        'activity_filter_context': staff_activity_filter_context(activity_filters),
     }
 
     if request.headers.get('HX-Request'):
@@ -6474,19 +6597,37 @@ def dashboard_participant_preview(request):
 
 @staff_member_required
 def dashboard_staff_activity(request):
-    event_filter = request.GET.get('event')
-    event_status_filter = request.GET.get('event_status')
     activity_page_number = request.GET.get('activity_page')
+    activity_filters = get_staff_activity_filters(request)
+    query_params = staff_activity_query_params(request, activity_filters)
 
-    query_params = {}
-    if event_filter:
-        query_params['event'] = event_filter
-    if event_status_filter:
-        query_params['event_status'] = event_status_filter
+    if request.GET.get('export') == 'csv':
+        timestamp = timezone.localtime().strftime('%Y%m%d_%H%M')
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="staff_activity_{timestamp}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Time', 'Staff', 'Action', 'Model', 'Record', 'Change', 'Admin URL'])
+        for entry in staff_activity_queryset(activity_filters)[:5000]:
+            row = staff_activity_row(entry)
+            writer.writerow([
+                timezone.localtime(row['time']).strftime('%Y-%m-%d %H:%M:%S'),
+                row['staff'],
+                row['action'],
+                row['model'],
+                row['object'],
+                row['message'] or '',
+                request.build_absolute_uri(row['detail_url']) if row['detail_url'] else '',
+            ])
+        return response
 
     return render(request, 'partials/dashboard_staff_activity.html', {
-        'staff_activity_page_obj': build_staff_activity(activity_page_number),
+        'staff_activity_page_obj': build_staff_activity(activity_page_number, filters=activity_filters),
         'activity_query_string': urlencode(query_params),
+        'activity_filter_context': staff_activity_filter_context(activity_filters),
+        'current_filters': {
+            'event': request.GET.get('event'),
+            'event_status': request.GET.get('event_status'),
+        },
     })
 
 

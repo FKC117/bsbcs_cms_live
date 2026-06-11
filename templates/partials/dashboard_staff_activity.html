@@ -1,3 +1,108 @@
+<style>
+  .audit-filter-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 900px) {
+    .audit-filter-grid {
+      align-items: end;
+      grid-template-columns: minmax(220px, 1.2fr) minmax(150px, 0.8fr) minmax(170px, 0.9fr) minmax(140px, 0.75fr);
+    }
+
+    .audit-filter-actions {
+      grid-column: span 2;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .audit-filter-grid {
+      grid-template-columns: minmax(240px, 1.2fr) minmax(150px, 0.8fr) minmax(170px, 0.9fr) minmax(140px, 0.75fr);
+    }
+
+    .audit-filter-actions {
+      grid-column: span 2;
+    }
+  }
+</style>
+
+<form
+  method="get"
+  class="audit-filter-grid mb-3 rounded-xl border border-line bg-slate-50 p-3"
+  hx-get="{% url 'dashboard_staff_activity' %}"
+  hx-target="#staff-activity-panel"
+  hx-swap="innerHTML">
+  {% if current_filters.event %}
+    <input type="hidden" name="event" value="{{ current_filters.event }}">
+  {% endif %}
+  {% if current_filters.event_status %}
+    <input type="hidden" name="event_status" value="{{ current_filters.event_status }}">
+  {% endif %}
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    Search
+    <input
+      type="search"
+      name="activity_q"
+      value="{{ activity_filter_context.filters.q }}"
+      placeholder="Staff, record, model, change"
+      class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+  </label>
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    Staff
+    <select name="activity_staff" class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+      <option value="">All staff</option>
+      {% for staff in activity_filter_context.staff_choices %}
+        <option value="{{ staff.pk }}" {% if activity_filter_context.filters.staff == staff.pk|stringformat:"s" %}selected{% endif %}>{{ staff.get_full_name|default:staff.username }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    Model
+    <select name="activity_model" class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+      <option value="">All models</option>
+      {% for model in activity_filter_context.model_choices %}
+        <option value="{{ model.value }}" {% if activity_filter_context.filters.model == model.value %}selected{% endif %}>{{ model.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    Action
+    <select name="activity_action" class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+      {% for value, label in activity_filter_context.action_choices %}
+        <option value="{{ value }}" {% if activity_filter_context.filters.action == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    From
+    <input type="date" name="activity_date_from" value="{{ activity_filter_context.filters.date_from }}" class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+  </label>
+
+  <label class="grid gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+    To
+    <input type="date" name="activity_date_to" value="{{ activity_filter_context.filters.date_to }}" class="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-bsbcs-blue focus:ring-2 focus:ring-blue-100">
+  </label>
+
+  <div class="audit-filter-actions flex items-end gap-2">
+    <button type="submit" class="h-10 rounded-lg bg-bsbcs-blue px-4 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+    <a
+      href="{% url 'dashboard_staff_activity' %}{% if current_filters.event or current_filters.event_status %}?{% if current_filters.event %}event={{ current_filters.event }}{% endif %}{% if current_filters.event and current_filters.event_status %}&{% endif %}{% if current_filters.event_status %}event_status={{ current_filters.event_status }}{% endif %}{% endif %}"
+      class="grid h-10 place-items-center rounded-lg border border-line px-3 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue"
+      hx-get="{% url 'dashboard_staff_activity' %}{% if current_filters.event or current_filters.event_status %}?{% if current_filters.event %}event={{ current_filters.event }}{% endif %}{% if current_filters.event and current_filters.event_status %}&{% endif %}{% if current_filters.event_status %}event_status={{ current_filters.event_status }}{% endif %}{% endif %}"
+      hx-target="#staff-activity-panel"
+      hx-swap="innerHTML">
+      Reset
+    </a>
+    <a href="{% url 'dashboard_staff_activity' %}?export=csv{% if activity_query_string %}&{{ activity_query_string }}{% endif %}" class="grid h-10 place-items-center rounded-lg border border-bsbcs-blue px-3 text-sm font-black text-bsbcs-blue hover:bg-blue-50">CSV</a>
+  </div>
+</form>
+
 <div class="overflow-x-auto rounded-xl border border-line">
   <table class="min-w-[980px] w-full text-left text-sm">
     <thead class="bg-slate-50">
