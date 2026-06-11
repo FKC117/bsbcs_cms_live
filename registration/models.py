@@ -1615,6 +1615,7 @@ class BulkEmail(models.Model):
     AUDIENCE_EMAIL_GROUP = 'email_group'
     AUDIENCE_EVENT_PARTICIPANTS = 'event_participants'
     AUDIENCE_EVENT_UNPAID = 'event_unpaid'
+    AUDIENCE_MEMBERSHIP_UNPAID = 'membership_unpaid'
     AUDIENCE_ABSTRACT_SUBMITTERS = 'abstract_submitters'
     AUDIENCE_CORPORATE_CONTACTS = 'corporate_contacts'
 
@@ -1624,6 +1625,7 @@ class BulkEmail(models.Model):
         (AUDIENCE_EMAIL_GROUP, 'Email group'),
         (AUDIENCE_EVENT_PARTICIPANTS, 'Event participants'),
         (AUDIENCE_EVENT_UNPAID, 'Approved event participants with pending payment'),
+        (AUDIENCE_MEMBERSHIP_UNPAID, 'Approved members with pending membership payment'),
         (AUDIENCE_ABSTRACT_SUBMITTERS, 'Abstract submitters'),
         (AUDIENCE_CORPORATE_CONTACTS, 'Corporate contacts'),
     ]
@@ -1676,6 +1678,7 @@ class BulkEmailRecipient(models.Model):
     SOURCE_USER = 'user'
     SOURCE_EMAIL_GROUP = 'email_group'
     SOURCE_PARTICIPANT = 'participant'
+    SOURCE_MEMBERSHIP = 'membership'
     SOURCE_ABSTRACT = 'abstract'
     SOURCE_CORPORATE = 'corporate'
 
@@ -1684,6 +1687,7 @@ class BulkEmailRecipient(models.Model):
         (SOURCE_USER, 'Website user'),
         (SOURCE_EMAIL_GROUP, 'Email group'),
         (SOURCE_PARTICIPANT, 'Participant'),
+        (SOURCE_MEMBERSHIP, 'Membership'),
         (SOURCE_ABSTRACT, 'Abstract submitter'),
         (SOURCE_CORPORATE, 'Corporate'),
     ]

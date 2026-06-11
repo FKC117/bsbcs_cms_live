@@ -158,7 +158,7 @@
         <div class="container-custom">
             <div id="memberGrid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for member in members %}
-                <div class="card hover-lift hover-shadow member-card" data-specialty="{% for s in member.specialties.all %}{{ s.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" data-location="{{ member.location|lower|default:'' }}" data-experience="{{ member.years_of_experience|default:'' }}" data-research="{% for ra in member.research_interest_areas.all %}{{ ra.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" style="{% if forloop.counter > 9 %}display: none;{% endif %}">
+                <div class="card hover-lift hover-shadow member-card" data-name="{{ member.user_profile.name|default:''|lower }}" data-specialty-label="{% for s in member.specialties.all %}{{ s.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}" data-specialty="{% for s in member.specialties.all %}{{ s.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" data-location="{{ member.location|lower|default:'' }}" data-experience="{{ member.years_of_experience|default:'' }}" data-recent="{{ member.created_at|date:'U' }}" data-research="{% for ra in member.research_interest_areas.all %}{{ ra.name|slugify }}{% if not forloop.last %} {% endif %}{% endfor %}" style="{% if forloop.counter > 9 %}display: none;{% endif %}">
                     <div class="flex items-start gap-4 mb-4">
                         {% if member.image %}
                             <img src="{{ member.image.url }}" alt="{{ member.user_profile.name }}{% if member.specialties.all %}, {% for s in member.specialties.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if member.years_of_experience %} with {{ member.years_of_experience }} years experience{% endif %}" class="w-20 h-20 rounded-full object-cover border-2 border-primary-200" loading="lazy">
@@ -400,6 +400,7 @@
         const filterCount = document.getElementById('filterCount');
         const searchInput = document.getElementById('searchInput');
         const memberCards = document.querySelectorAll('.member-card');
+        let orderedMemberCards = Array.from(memberCards);
         const resultCount = document.getElementById('resultCount');
         const loadMoreBtn = document.getElementById('loadMoreBtn');
         const specialtyFilter = document.getElementById('specialtyFilter');
@@ -415,7 +416,7 @@
         });
 
         function getVisibleMembers() {
-            return Array.from(memberCards).filter(card => {
+            return orderedMemberCards.filter(card => {
                 const text = card.textContent.toLowerCase();
                 const searchMatch = text.includes(searchInput.value.toLowerCase());
                 
@@ -454,7 +455,7 @@
             const visibleMembers = getVisibleMembers();
             
             // First, hide all cards
-            memberCards.forEach(card => {
+            orderedMemberCards.forEach(card => {
                 card.style.display = 'none';
             });
             
@@ -516,6 +517,7 @@
         specialtyFilter.addEventListener('change', applyFilterLogic);
         locationFilter.addEventListener('change', applyFilterLogic);
         experienceFilter.addEventListener('change', applyFilterLogic);
+        researchFilter.addEventListener('change', applyFilterLogic);
 
         applyFilters.addEventListener('click', () => {
             applyFilterLogic();
@@ -541,38 +543,38 @@
             updatePagination();
         });
 
-        // Sort Functionality
-        sortBy.addEventListener('change', (e) => {
-            const sortValue = e.target.value;
-            const cardsArray = Array.from(memberCards);
-
-            cardsArray.sort((a, b) => {
-                if (sortValue === 'name') {
-                    const nameA = a.querySelector('h3').textContent;
-                    const nameB = b.querySelector('h3').textContent;
-                    return nameA.localeCompare(nameB);
-                } else if (sortValue === 'specialty') {
-                    const specA = a.dataset.specialty;
-                    const specB = b.dataset.specialty;
-                    return specA.localeCompare(specB);
-                } else if (sortValue === 'experience') {
-                    const expA = parseInt(a.dataset.experience) || 0;
-                    const expB = parseInt(b.dataset.experience) || 0;
-                    return expB - expA;
-                } else if (sortValue === 'recent') {
-                    // Sort by card order (recent = appears first in HTML)
-                    return Array.from(memberCards).indexOf(a) - Array.from(memberCards).indexOf(b);
+        function sortMembers(sortValue) {
+            orderedMemberCards = Array.from(memberCards).sort((a, b) => {
+                if (sortValue === 'specialty') {
+                    const specA = a.dataset.specialtyLabel || '';
+                    const specB = b.dataset.specialtyLabel || '';
+                    return specA.localeCompare(specB) || (a.dataset.name || '').localeCompare(b.dataset.name || '');
                 }
-                return 0;
+                if (sortValue === 'experience') {
+                    const expA = parseInt(a.dataset.experience, 10) || 0;
+                    const expB = parseInt(b.dataset.experience, 10) || 0;
+                    return (expB - expA) || (a.dataset.name || '').localeCompare(b.dataset.name || '');
+                }
+                if (sortValue === 'recent') {
+                    const recentA = parseInt(a.dataset.recent, 10) || 0;
+                    const recentB = parseInt(b.dataset.recent, 10) || 0;
+                    return (recentB - recentA) || (a.dataset.name || '').localeCompare(b.dataset.name || '');
+                }
+                return (a.dataset.name || '').localeCompare(b.dataset.name || '');
             });
 
-            memberGrid.innerHTML = '';
-            cardsArray.forEach(card => memberGrid.appendChild(card));
+            orderedMemberCards.forEach(card => memberGrid.appendChild(card));
             currentPage = 1;
             updatePagination();
+        }
+
+        // Sort Functionality
+        sortBy.addEventListener('change', (e) => {
+            sortMembers(e.target.value);
         });
 
         // Initialize pagination on page load
+        sortMembers(sortBy.value);
         updatePagination();
     </script>
 {% endblock %}

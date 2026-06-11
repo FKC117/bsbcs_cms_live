@@ -5146,6 +5146,9 @@ def dashboard_payment_center(request):
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
     source_filter = source_filter or 'all'
     status_filter = status_filter or 'open'
+    event_filter_applies = source_filter in ('all', 'event', 'corporate')
+    if not event_filter_applies:
+        event_filter = ''
 
     query_params = {'source': source_filter, 'status': status_filter}
     if event_filter:
@@ -5428,19 +5431,22 @@ def dashboard_payment_center(request):
     payment_rows = sorted(event_rows + membership_rows + corporate_rows, key=lambda row: row['updated_at'] or timezone.now(), reverse=True)
     page_obj = Paginator(payment_rows, 15).get_page(request.GET.get('page'))
 
+    include_event_totals = source_filter in ('all', 'event')
+    include_membership_totals = source_filter in ('all', 'membership')
+    include_corporate_totals = source_filter in ('all', 'corporate')
     totals = {
-        'event_open': PaymentStatus.objects.filter(status__in=UNPAID_PAYMENT_STATUSES).count(),
-        'event_paid': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).count(),
-        'membership_open': MembershipPayment.objects.exclude(status='completed').count(),
-        'membership_paid': MembershipPayment.objects.filter(status='completed').count(),
-        'corporate_open': CorporatePayment.objects.filter(status__in=UNPAID_PAYMENT_STATUSES).count(),
-        'corporate_paid': CorporatePayment.objects.filter(status__in=['completed', 'paid']).count(),
-        'event_revenue': PaymentStatus.objects.filter(status__in=PAID_PAYMENT_STATUSES).aggregate(total=Sum('amount'))['total'] or 0,
-        'membership_revenue': MembershipPayment.objects.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0,
-        'corporate_revenue': CorporatePayment.objects.filter(status__in=['completed', 'paid']).aggregate(total=Sum('amount'))['total'] or 0,
-        'missing_event_invoices': PaymentStatus.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
-        'missing_membership_invoices': MembershipPayment.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
-        'missing_corporate_invoices': CorporatePayment.objects.filter(Q(invoice='') | Q(invoice__isnull=True)).count(),
+        'event_open': event_payments.filter(status__in=UNPAID_PAYMENT_STATUSES).count() if include_event_totals else 0,
+        'event_paid': event_payments.filter(status__in=PAID_PAYMENT_STATUSES).count() if include_event_totals else 0,
+        'membership_open': membership_payments.exclude(status='completed').count() if include_membership_totals else 0,
+        'membership_paid': membership_payments.filter(status='completed').count() if include_membership_totals else 0,
+        'corporate_open': corporate_payments.filter(status__in=UNPAID_PAYMENT_STATUSES).count() if include_corporate_totals else 0,
+        'corporate_paid': corporate_payments.filter(status__in=['completed', 'paid']).count() if include_corporate_totals else 0,
+        'event_revenue': (event_payments.filter(status__in=PAID_PAYMENT_STATUSES).aggregate(total=Sum('amount'))['total'] or 0) if include_event_totals else 0,
+        'membership_revenue': (membership_payments.filter(status='completed').aggregate(total=Sum('amount'))['total'] or 0) if include_membership_totals else 0,
+        'corporate_revenue': (corporate_payments.filter(status__in=['completed', 'paid']).aggregate(total=Sum('amount'))['total'] or 0) if include_corporate_totals else 0,
+        'missing_event_invoices': event_payments.filter(Q(invoice='') | Q(invoice__isnull=True)).count() if include_event_totals else 0,
+        'missing_membership_invoices': membership_payments.filter(Q(invoice='') | Q(invoice__isnull=True)).count() if include_membership_totals else 0,
+        'missing_corporate_invoices': corporate_payments.filter(Q(invoice='') | Q(invoice__isnull=True)).count() if include_corporate_totals else 0,
     }
     totals['revenue'] = totals['event_revenue'] + totals['membership_revenue'] + totals['corporate_revenue']
 
@@ -5455,6 +5461,9 @@ def dashboard_payment_center(request):
             'event': event_filter or '',
             'q': search_query,
         },
+        'event_filter_applies': event_filter_applies,
+        'show_event_stats': source_filter in ('all', 'event'),
+        'show_membership_stats': source_filter in ('all', 'membership'),
         'query_string': urlencode(query_params),
         'source_choices': [
             ('all', 'All sources'),
@@ -6240,8 +6249,12 @@ def dashboard_bulk_email_center(request):
                     body=body,
                     attachment=request.FILES.get('attachment'),
                     audience_type=audience_type,
-                    event=event,
-                    email_group=email_group,
+                    event=event if audience_type in [
+                        BulkEmail.AUDIENCE_EVENT_PARTICIPANTS,
+                        BulkEmail.AUDIENCE_EVENT_UNPAID,
+                        BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS,
+                    ] else None,
+                    email_group=email_group if audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP else None,
                     created_by=request.user,
                 )
                 redirect_campaign_id = campaign.id

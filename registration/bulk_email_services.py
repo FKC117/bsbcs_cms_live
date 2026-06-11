@@ -122,6 +122,28 @@ def prepare_bulk_email_recipients(bulk_email):
                     source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
                     participant=participant,
                 ))
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_MEMBERSHIP_UNPAID:
+        from website.models import MembershipPayment
+
+        payments = MembershipPayment.objects.filter(
+            user_profile__member__approval_status='approved',
+        ).exclude(
+            status='completed',
+        ).select_related(
+            'user_profile',
+            'user_profile__user',
+            'membership_type',
+        ).order_by('-updated_at')
+        for payment in payments:
+            profile = payment.user_profile
+            added += int(upsert_bulk_email_recipient(
+                bulk_email,
+                profile.email,
+                name=profile.name,
+                source_type=BulkEmailRecipient.SOURCE_MEMBERSHIP,
+                user=profile.user,
+                user_profile=profile,
+            ))
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS and bulk_email.event:
         abstracts = AbstractSubmission.objects.filter(event=bulk_email.event).select_related('user')
         for abstract in abstracts:

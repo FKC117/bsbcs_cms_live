@@ -1,0 +1,16 @@
+area,item,status,note
+event,payment page access logging,fixed,registration.views.payment logs access and user info
+event,payment-link ownership enforcement,fixed,blocks non-owner access in registration.views.payment
+event,finalize idempotency guard,fixed,registration.views.finalize_payment returns early if already completed
+event,handle bKash 2062,fixed,finalize_payment queries bKash and updates completed/pending correctly
+event,prevent completed-to-failed overwrite,fixed,code checks SUCCESS_PAYMENT_STATUSES before marking failed
+membership,payment page access logging,fixed,website.views.membership_payment_init logs access and payment creation
+membership,enforce approval before payment,fixed,blocks if member.approval_status != approved
+membership,finalize ownership check,fixed,membership_payment_finalize verifies request.user owns payment
+membership,finalize idempotency guard,fixed,returns existing success when status completed
+membership,handle bKash 2062,fixed,queries bKash and completes payment if confirmed
+membership,prevent completed-to-failed overwrite,fixed,skips overwrite when status already completed
+membership,completion respects approval,fixed,complete_membership_payment skips activation if member not approved
+payment,member-free event edge case,remaining,not implemented; needs explicit admin/user review workflow
+payment,membership-linked event intent handling,remaining,future improvement not present
+payment,full log field completeness,partial,most required fields are in context but verify runtime logs

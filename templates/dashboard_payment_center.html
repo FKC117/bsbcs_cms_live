@@ -23,6 +23,11 @@
             border-color: #1769C2;
             box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
         }
+        .workflow-select:disabled {
+            cursor: not-allowed;
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
         .compact-label {
             display: block;
             margin-bottom: 0.3rem;
@@ -81,7 +86,7 @@
                     </div>
                     <div>
                         <label class="compact-label" for="event">Event</label>
-                        <select id="event" name="event" class="workflow-select">
+                        <select id="event" name="event" class="workflow-select" {% if not event_filter_applies %}disabled{% endif %}>
                             <option value="">All events</option>
                             {% for event in events %}
                                 <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
@@ -112,22 +117,26 @@
         {% endif %}
 
         <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event open</div>
-                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.event_open }}</div>
-            </div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event paid</div>
-                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.event_paid }}</div>
-            </div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership open</div>
-                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.membership_open }}</div>
-            </div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership paid</div>
-                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.membership_paid }}</div>
-            </div>
+            {% if show_event_stats %}
+                <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event open</div>
+                    <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.event_open }}</div>
+                </div>
+                <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Event paid</div>
+                    <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.event_paid }}</div>
+                </div>
+            {% endif %}
+            {% if show_membership_stats %}
+                <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership open</div>
+                    <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.membership_open }}</div>
+                </div>
+                <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership paid</div>
+                    <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.membership_paid }}</div>
+                </div>
+            {% endif %}
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet md:col-span-2">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Revenue collected</div>
                 <div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.revenue }}</div>
@@ -301,5 +310,23 @@
         </div>
     </footer>
 </div>
+<script>
+    (function () {
+        const sourceSelect = document.getElementById('source');
+        const eventSelect = document.getElementById('event');
+        if (!sourceSelect || !eventSelect) return;
+
+        function syncEventFilter() {
+            const eventApplies = ['all', 'event', 'corporate'].includes(sourceSelect.value);
+            eventSelect.disabled = !eventApplies;
+            if (!eventApplies) {
+                eventSelect.value = '';
+            }
+        }
+
+        sourceSelect.addEventListener('change', syncEventFilter);
+        syncEventFilter();
+    })();
+</script>
 </body>
 </html>
