@@ -127,7 +127,9 @@
                     {% else %}
                         <a href="{% url 'website:homepage' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">Home</a>
                         <a href="{% url 'website:about' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">About</a>
-                        <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">Members</a>
+                        {% if user_is_active_member %}
+                            <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors font-medium">Members</a>
+                        {% endif %}
                     {% endif %}
                 </div>
 
@@ -194,7 +196,9 @@
                     {% else %}
                         <a href="{% url 'website:homepage' %}" class="text-text-secondary hover:text-primary transition-colors">Home</a>
                         <a href="{% url 'website:about' %}" class="text-text-secondary hover:text-primary transition-colors">About</a>
-                        <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors">Members</a>
+                        {% if user_is_active_member %}
+                            <a href="{% url 'website:member_directory' %}" class="text-text-secondary hover:text-primary transition-colors">Members</a>
+                        {% endif %}
                         <a href="{% url 'website:research_and_publications' %}" class="text-text-secondary hover:text-primary transition-colors">Research</a>
                         <a href="{% url 'website:knowledge_center' %}" class="text-text-secondary hover:text-primary transition-colors">Resources</a>
                         <a href="{% url 'website:events' %}" class="text-text-secondary hover:text-primary transition-colors">Events</a>
@@ -291,7 +295,9 @@
                         {% else %}
                             <li><a href="{% url 'website:homepage' %}" class="text-gray-400 hover:text-white transition-colors">Home</a></li>
                             <li><a href="{% url 'website:about' %}" class="text-gray-400 hover:text-white transition-colors">About</a></li>
-                            <li><a href="{% url 'website:member_directory' %}" class="text-gray-400 hover:text-white transition-colors">Members</a></li>
+                            {% if user_is_active_member %}
+                                <li><a href="{% url 'website:member_directory' %}" class="text-gray-400 hover:text-white transition-colors">Members</a></li>
+                            {% endif %}
                             <li><a href="{% url 'website:research_and_publications' %}" class="text-gray-400 hover:text-white transition-colors">Research</a></li>
                             <li><a href="{% url 'website:knowledge_center' %}" class="text-gray-400 hover:text-white transition-colors">Resources</a></li>
                             <li><a href="{% url 'website:events' %}" class="text-gray-400 hover:text-white transition-colors">Events</a></li>

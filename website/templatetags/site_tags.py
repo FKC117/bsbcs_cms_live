@@ -26,8 +26,37 @@ def get_site_settings():
     return settings
 
 
-@register.simple_tag
-def get_navigation_links():
+def _is_member_directory_link(label, url_name, url):
+    label = (label or '').strip().lower()
+    url_name = (url_name or '').strip()
+    url = (url or '').strip()
+
+    return (
+        label == 'members'
+        or url_name in {
+            'member_directory',
+            'member-directory',
+            'website:member_directory',
+            '/member-directory/',
+        }
+        or url == '/member-directory/'
+    )
+
+
+def _user_is_active_member(user):
+    if not getattr(user, 'is_authenticated', False):
+        return False
+
+    try:
+        profile = getattr(user, 'userprofile', None)
+        member = getattr(profile, 'member', None) if profile else None
+        return bool(member and member.is_active_member)
+    except Exception:
+        return False
+
+
+@register.simple_tag(takes_context=True)
+def get_navigation_links(context):
     """Return a hierarchical list of navigation link dicts.
     
     Structure: [
@@ -35,6 +64,8 @@ def get_navigation_links():
         ...
     ]
     """
+    user = getattr(context.get('request'), 'user', None)
+    user_can_see_members = _user_is_active_member(user)
     links = NavigationLink.objects.filter(is_active=True).order_by('order')
     tree = []
     
@@ -70,6 +101,9 @@ def get_navigation_links():
             if url and not url.startswith(('http://', 'https://', '/', '#')):
                 url = f"/{url}"
         
+        if _is_member_directory_link(nav.label, url_name, url) and not user_can_see_members:
+            continue
+
         resolved_links.append({
             'id': nav.id,
             'label': nav.label,

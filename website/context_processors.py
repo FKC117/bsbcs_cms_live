@@ -3,6 +3,23 @@ from django.db import DatabaseError, OperationalError, ProgrammingError
 from .models import SiteSettings, NavigationLink, MembershipBenefitModal
 
 
+def _is_member_directory_link(label, url_name, url):
+    label = (label or '').strip().lower()
+    url_name = (url_name or '').strip()
+    url = (url or '').strip()
+
+    return (
+        label == 'members'
+        or url_name in {
+            'member_directory',
+            'member-directory',
+            'website:member_directory',
+            '/member-directory/',
+        }
+        or url == '/member-directory/'
+    )
+
+
 def site_settings(request):
     settings = SiteSettings.objects.first()
     membership_benefit_modal_displayable = False
@@ -54,12 +71,16 @@ def site_settings(request):
         # Ensure path starts with / if it's not a full URL or already absolute
         if url and not url.startswith(('http://', 'https://', '/', '#')):
             url = f"/{url}"
+
+        if _is_member_directory_link(nav.label, nav.url_name, url) and not user_is_active_member:
+            continue
         
         navigation_links.append({'label': nav.label, 'url': url})
 
     return {
         'site_settings': settings,
         'navigation_links': navigation_links,
+        'user_is_active_member': user_is_active_member,
         'membership_benefit_modal': membership_benefit_modal,
         'membership_benefit_modal_displayable': membership_benefit_modal_displayable,
     }
