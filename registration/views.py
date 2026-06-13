@@ -10,6 +10,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.utils.text import slugify
 from .forms import (
     RegistrationForm,
     AbstractSubmissionForm,
@@ -5626,6 +5627,38 @@ def _issue_registration_kit(payment_record):
     return kit, True
 
 
+def _registration_qr_zip(payment_records):
+    from .qr_utils import ensure_registration_qr, registration_qr_filename
+
+    buffer = io.BytesIO()
+    added = 0
+    used_names = set()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for payment in payment_records:
+            try:
+                ensure_registration_qr(payment)
+                payment.refresh_from_db(fields=['qr_code'])
+            except Exception as exc:
+                logger.exception('Could not prepare registration QR for payment %s: %s', payment.pk, exc)
+                continue
+
+            qr_file = payment.qr_code
+            if not qr_file or not qr_file.name or not qr_file.storage.exists(qr_file.name):
+                continue
+
+            archive_name = os.path.basename(registration_qr_filename(payment))
+            if archive_name in used_names:
+                base, extension = os.path.splitext(archive_name)
+                archive_name = f'{base}_{payment.pk}{extension}'
+            used_names.add(archive_name)
+            with qr_file.storage.open(qr_file.name, 'rb') as source_file:
+                archive.writestr(archive_name, source_file.read())
+            added += 1
+
+    buffer.seek(0)
+    return buffer, added
+
+
 @staff_member_required
 def dashboard_registration_kit_center(request):
     from website.models import SiteSettings
@@ -5659,8 +5692,55 @@ def dashboard_registration_kit_center(request):
 
     if request.method == 'POST':
         kit_action = request.POST.get('kit_action')
+        qr_action = request.POST.get('qr_action')
         try:
-            if kit_action == 'issue':
+            if qr_action in {'download_selected', 'download_all_filtered'}:
+                qr_payments = eligible_payments
+                if search_query:
+                    qr_payments = qr_payments.filter(
+                        Q(participant__name__icontains=search_query)
+                        | Q(participant__email__icontains=search_query)
+                        | Q(participant__phone__icontains=search_query)
+                        | Q(participant__organization__icontains=search_query)
+                        | Q(participant__BMDC_registration_number__icontains=search_query)
+                        | Q(merchant_invoice_number__icontains=search_query)
+                        | Q(transaction_id__icontains=search_query)
+                        | Q(trxID__icontains=search_query)
+                    )
+
+                issued_payment_ids = RegistrationKit.objects.filter(
+                    status='issued',
+                    payment_status__in=qr_payments,
+                ).values_list('payment_status_id', flat=True)
+                if kit_status_filter == 'issued':
+                    qr_payments = qr_payments.filter(pk__in=issued_payment_ids)
+                elif kit_status_filter == 'pending':
+                    qr_payments = qr_payments.exclude(pk__in=issued_payment_ids)
+
+                selection_scope = request.POST.get('selection_scope', 'page')
+                if qr_action == 'download_selected' and selection_scope != 'all_filtered':
+                    selected_ids = request.POST.getlist('qr_payment_ids')
+                    qr_payments = qr_payments.filter(pk__in=selected_ids)
+
+                qr_payments = list(qr_payments.order_by('participant__name', 'participant__email'))
+                if not qr_payments:
+                    messages.error(request, 'Select at least one eligible participant QR code to download.')
+                    return redirect(redirect_url)
+
+                zip_buffer, added_count = _registration_qr_zip(qr_payments)
+                if not added_count:
+                    messages.error(request, 'No QR image files could be prepared for this selection.')
+                    return redirect(redirect_url)
+
+                event_label = 'event'
+                if event_filter:
+                    selected_event = events.filter(pk=event_filter).first()
+                    if selected_event:
+                        event_label = slugify(f'{selected_event.name}-{selected_event.year}') or f'event-{selected_event.pk}'
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{event_label}-registration-qr-codes.zip"'
+                return response
+            elif kit_action == 'issue':
                 payment_record = get_object_or_404(eligible_payments, pk=request.POST.get('payment_id'))
                 kit, issued_now = _issue_registration_kit(payment_record)
                 if issued_now:

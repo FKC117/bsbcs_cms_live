@@ -1,6 +1,8 @@
 from datetime import date, time
+import io
 import os
 import tempfile
+import zipfile
 from urllib.parse import urlencode
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -1018,6 +1020,80 @@ class ProgramSessionBuilderTests(TestCase):
                 kit.refresh_from_db()
                 self.assertEqual(kit.status, 'issued')
                 self.assertIsNotNone(kit.issued_at)
+
+    def test_registration_kit_center_downloads_selected_qr_codes(self):
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='QR Download Candidate',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='qrdownload@example.com',
+            phone='01700000114',
+            country='Bangladesh',
+            approved=True,
+        )
+        payment = PaymentStatus.objects.create(
+            participant=participant,
+            event=self.event,
+            merchant_invoice_number='QR-DOWNLOAD-1',
+            amount='500.00',
+            status='completed',
+        )
+        second_participant = Participant.objects.create(
+            user=self.staff_user,
+            event=self.event,
+            name='Second QR Candidate',
+            degree='MBBS',
+            year_of_graduation=2021,
+            department=self.department,
+            organization='Second Hospital',
+            email='secondqr@example.com',
+            phone='01700000115',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=second_participant,
+            event=self.event,
+            merchant_invoice_number='QR-DOWNLOAD-2',
+            amount='500.00',
+            status='completed',
+        )
+
+        self.client.force_login(self.staff_user)
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(MEDIA_ROOT=media_root, SITE_URL='https://beta.bsbcs.info'):
+                response = self.client.post(reverse('dashboard_registration_kit_center'), {
+                    'event': self.event.id,
+                    'kit_status': 'all',
+                    'qr_action': 'download_selected',
+                    'qr_payment_ids': [payment.id],
+                })
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response['Content-Type'], 'application/zip')
+                payment.refresh_from_db()
+                self.assertTrue(payment.qr_code)
+                with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                    names = archive.namelist()
+                self.assertEqual(len(names), 1)
+                self.assertIn('qr-download-candidate', names[0])
+                self.assertIn('qrdownload-at-example-com', names[0])
+
+                response = self.client.post(reverse('dashboard_registration_kit_center'), {
+                    'event': self.event.id,
+                    'kit_status': 'all',
+                    'qr_action': 'download_selected',
+                    'selection_scope': 'all_filtered',
+                    'qr_payment_ids': [payment.id],
+                })
+                self.assertEqual(response.status_code, 200)
+                with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                    names = archive.namelist()
+                self.assertEqual(len(names), 2)
 
     def test_add_setup_actions(self):
         self.client.force_login(self.staff_user)

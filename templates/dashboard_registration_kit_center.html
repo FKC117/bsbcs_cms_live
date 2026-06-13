@@ -257,16 +257,35 @@
                     <h2 class="mt-1 text-xl font-black text-ink">Eligible registration kit queue</h2>
                     <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Only participants with approval and completed event payment appear here.</p>
                 </div>
-                <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} rows</div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <form method="post" id="qr-download-form" class="flex flex-wrap gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                        <input type="hidden" name="kit_status" value="{{ current_filters.kit_status }}">
+                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                        <input type="hidden" name="selection_scope" value="page" data-qr-selection-scope>
+                        <button name="qr_action" value="download_selected" data-download-selected-qr class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy disabled:cursor-not-allowed disabled:bg-slate-300" disabled>Download selected QR <span data-selected-qr-count>(0)</span></button>
+                        <button type="button" data-select-all-filtered-qr data-total-qr-count="{{ page_obj.paginator.count }}" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Select all {{ page_obj.paginator.count }}</button>
+                    </form>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} rows</div>
+                </div>
+            </div>
+
+            <div class="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold leading-5 text-bsbcs-blue ring-1 ring-blue-100">
+                <span data-qr-selection-message>Use the header checkbox to select this page, or choose Select all to include every matching row across pagination.</span>
             </div>
 
             <div class="overflow-x-auto rounded-2xl border border-line">
-                <table class="min-w-[980px] w-full divide-y divide-line text-left">
+                <table class="min-w-[1060px] w-full divide-y divide-line text-left">
                     <thead class="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
                         <tr>
+                            <th class="w-12 px-4 py-3">
+                                <input type="checkbox" aria-label="Select all QR codes on this page" data-select-all-qr class="h-5 w-5 cursor-pointer rounded border-slate-300 text-bsbcs-blue focus:ring-bsbcs-blue" style="accent-color: #1769c2;">
+                            </th>
                             <th class="px-4 py-3">Participant</th>
                             <th class="px-4 py-3">Invoice</th>
                             <th class="px-4 py-3">Payment</th>
+                            <th class="px-4 py-3">QR file</th>
                             <th class="px-4 py-3">Kit</th>
                             <th class="px-4 py-3 text-right">Action</th>
                         </tr>
@@ -274,6 +293,9 @@
                     <tbody class="divide-y divide-line bg-white text-sm">
                         {% for payment in page_obj %}
                             <tr>
+                                <td class="px-4 py-3">
+                                    <input type="checkbox" name="qr_payment_ids" value="{{ payment.id }}" form="qr-download-form" class="qr-download-checkbox h-5 w-5 cursor-pointer rounded border-slate-300 text-bsbcs-blue focus:ring-bsbcs-blue" style="accent-color: #1769c2;" aria-label="Select QR code for {{ payment.participant.name }}">
+                                </td>
                                 <td class="px-4 py-3">
                                     <div class="font-black text-ink">{{ payment.participant.name }}</div>
                                     <div class="text-xs font-semibold text-slate-500">{{ payment.participant.email }}</div>
@@ -286,6 +308,14 @@
                                 <td class="px-4 py-3">
                                     <span class="rounded-full bg-green-50 px-2.5 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Completed</span>
                                     <div class="mt-1 text-xs font-semibold text-slate-500">BDT {{ payment.amount|default:"0" }}</div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if payment.qr_code %}
+                                        <span class="rounded-full bg-green-50 px-2.5 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Stored</span>
+                                        <a href="{{ payment.qr_code.url }}" target="_blank" rel="noopener noreferrer" class="mt-2 block text-xs font-black text-bsbcs-blue hover:underline">View QR</a>
+                                    {% else %}
+                                        <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">Generated on download</span>
+                                    {% endif %}
                                 </td>
                                 <td class="px-4 py-3">
                                     {% if payment.kit_status == 'issued' %}
@@ -313,7 +343,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="5" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">No eligible participant found for this event and filter.</td>
+                                <td colspan="7" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">No eligible participant found for this event and filter.</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -384,6 +414,60 @@
 <script src="{% static 'js/vendor/html5-qrcode.min.js' %}"></script>
 <script>
     (() => {
+        const selectAllQr = document.querySelector('[data-select-all-qr]');
+        const qrCheckboxes = Array.from(document.querySelectorAll('.qr-download-checkbox'));
+        const selectedQrCount = document.querySelector('[data-selected-qr-count]');
+        const downloadSelectedQr = document.querySelector('[data-download-selected-qr]');
+        const selectAllFilteredQr = document.querySelector('[data-select-all-filtered-qr]');
+        const selectionScope = document.querySelector('[data-qr-selection-scope]');
+        const selectionMessage = document.querySelector('[data-qr-selection-message]');
+        const totalQrCount = Number(selectAllFilteredQr?.dataset.totalQrCount || 0);
+        let allFilteredSelected = false;
+
+        function updateQrSelection() {
+            const checkedCount = qrCheckboxes.filter((checkbox) => checkbox.checked).length;
+            const displayedCount = allFilteredSelected ? totalQrCount : checkedCount;
+            if (selectedQrCount) selectedQrCount.textContent = `(${displayedCount})`;
+            if (downloadSelectedQr) downloadSelectedQr.disabled = displayedCount === 0;
+            if (selectAllQr) {
+                selectAllQr.checked = qrCheckboxes.length > 0 && checkedCount === qrCheckboxes.length;
+                selectAllQr.indeterminate = checkedCount > 0 && checkedCount < qrCheckboxes.length;
+            }
+            if (selectionScope) selectionScope.value = allFilteredSelected ? 'all_filtered' : 'page';
+            if (selectAllFilteredQr) {
+                selectAllFilteredQr.textContent = allFilteredSelected ? `Clear all ${totalQrCount}` : `Select all ${totalQrCount}`;
+            }
+            if (selectionMessage) {
+                selectionMessage.textContent = allFilteredSelected
+                    ? `All ${totalQrCount} matching participants are selected across every page.`
+                    : 'Use the header checkbox to select this page, or choose Select all to include every matching row across pagination.';
+            }
+        }
+
+        if (selectAllQr) {
+            selectAllQr.addEventListener('change', () => {
+                allFilteredSelected = false;
+                qrCheckboxes.forEach((checkbox) => {
+                    checkbox.checked = selectAllQr.checked;
+                });
+                updateQrSelection();
+            });
+        }
+        qrCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', () => {
+            allFilteredSelected = false;
+            updateQrSelection();
+        }));
+        if (selectAllFilteredQr) {
+            selectAllFilteredQr.addEventListener('click', () => {
+                allFilteredSelected = !allFilteredSelected;
+                qrCheckboxes.forEach((checkbox) => {
+                    checkbox.checked = allFilteredSelected;
+                });
+                updateQrSelection();
+            });
+        }
+        updateQrSelection();
+
         const modal = document.getElementById('qr-scanner-modal');
         const openButton = document.getElementById('open-qr-scanner');
         const closeButtons = [
