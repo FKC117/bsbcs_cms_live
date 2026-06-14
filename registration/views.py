@@ -1,6 +1,10 @@
 # pyrefly: ignore [missing-import]
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
+from .dashboard_permissions import (
+    dashboard_permission_required,
+    user_can_access_dashboard_area,
+)
 from django.contrib.auth.models import User
 from django.utils.crypto import get_random_string
 from django.urls import reverse
@@ -3517,7 +3521,7 @@ def staff_activity_query_params(request, filters=None):
     return query_params
 
 
-def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None, queue_type='all'):
+def build_dashboard_operations(events, event_filter=None, event_status_filter=None, queue_page_number=None, queue_type='all', user=None):
     from website.models import Member, MembershipPayment, SiteSettings, MembershipBenefitModal
 
     scoped_events = get_dashboard_scoped_events(events, event_filter)
@@ -3620,6 +3624,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     action_cards = [
         {
             'label': 'Participant approvals',
+            'permission_area': 'participants',
             'count': pending_participants.count(),
             'tone': 'warning',
             'description': 'Individual event registrations waiting for admin approval.',
@@ -3628,6 +3633,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Approved but unpaid',
+            'permission_area': 'payments',
             'count': approved_unpaid_payments.count(),
             'tone': 'danger',
             'description': 'Approved participants who still need payment completion.',
@@ -3636,6 +3642,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Corporate review',
+            'permission_area': 'corporate',
             'count': pending_corporate_attendees.count() + corporate_access_request_count,
             'tone': 'primary',
             'description': 'Corporate access requests and attendee rows waiting for review.' if not event_filter else 'Corporate attendee rows waiting for review for this event.',
@@ -3648,6 +3655,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Membership approvals',
+            'permission_area': 'membership',
             'count': pending_event_members.count() if event_filter else pending_members.count(),
             'tone': 'success',
             'description': 'Membership applications waiting for approval or rejection.' if not event_filter else 'Membership applications tied to this event through member-event intent.',
@@ -3656,6 +3664,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Abstract review',
+            'permission_area': 'abstracts',
             'count': pending_abstracts.count(),
             'tone': 'info',
             'description': 'Abstracts not yet marked for oral or poster presentation.',
@@ -3663,6 +3672,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
         },
         {
             'label': 'Corporate invoices',
+            'permission_area': 'payments',
             'count': unpaid_corporate_payments.count(),
             'tone': 'secondary',
             'description': 'Corporate invoices not marked paid or completed.',
@@ -3674,6 +3684,11 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             'internal': True,
         },
     ]
+    if user is not None and not user.is_superuser:
+        action_cards = [
+            card for card in action_cards
+            if user_can_access_dashboard_area(user, card['permission_area'])
+        ]
 
     payment_center_url = reverse('dashboard_payment_center')
 
@@ -3705,7 +3720,7 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
     }
 
 
-@staff_member_required
+@dashboard_permission_required('dashboard')
 def global_dashboard(request):
     from website.models import SiteSettings
 
@@ -3722,7 +3737,14 @@ def global_dashboard(request):
     events = Event.objects.all()
     if event_status_filter:
         events = events.filter(event_status=event_status_filter)
-    operations = build_dashboard_operations(events, event_filter, event_status_filter, queue_page_number, queue_type)
+    operations = build_dashboard_operations(
+        events,
+        event_filter,
+        event_status_filter,
+        queue_page_number,
+        queue_type,
+        request.user,
+    )
 
     event_metrics = build_event_metrics(events, event_filter)
 
@@ -3784,7 +3806,7 @@ def global_dashboard(request):
     return render(request, 'dashboard.html', context)
 
 
-@staff_member_required
+@dashboard_permission_required('events')
 def dashboard_event_builder(request):
     from website.models import SiteSettings
 
@@ -4039,7 +4061,7 @@ def _participant_dashboard_status(participant):
     return 'Approved but unpaid'
 
 
-@staff_member_required
+@dashboard_permission_required('participants')
 def dashboard_participant_lookup(request):
     query = (request.GET.get('q') or request.GET.get('email') or '').strip().lower()
     event_id = request.GET.get('event')
@@ -4115,7 +4137,7 @@ def dashboard_participant_lookup(request):
     return JsonResponse(data)
 
 
-@staff_member_required
+@dashboard_permission_required('abstracts')
 def dashboard_abstract_center(request):
     from website.models import SiteSettings
 
@@ -4279,7 +4301,7 @@ def dashboard_abstract_center(request):
     return render(request, 'dashboard_abstract_center.html', context)
 
 
-@staff_member_required
+@dashboard_permission_required('participants')
 def dashboard_participant_center(request):
     from website.models import SiteSettings
 
@@ -4569,7 +4591,7 @@ def _parse_dashboard_date(value):
         return None
 
 
-@staff_member_required
+@dashboard_permission_required('membership')
 def dashboard_membership_center(request):
     from website.models import (
         Member,
@@ -4985,7 +5007,7 @@ def _approve_dashboard_corporate_request(request, access_request):
     return corporate_account
 
 
-@staff_member_required
+@dashboard_permission_required('corporate')
 def dashboard_corporate_center(request):
     from website.models import SiteSettings
 
@@ -5258,7 +5280,7 @@ def dashboard_corporate_center(request):
     return render(request, 'dashboard_corporate_center.html', context)
 
 
-@staff_member_required
+@dashboard_permission_required('payments')
 def dashboard_payment_center(request):
     from website.models import MembershipPayment, MembershipType, SiteSettings
     from website.utils_membership import send_membership_invoice_email
@@ -5659,7 +5681,7 @@ def _registration_qr_zip(payment_records):
     return buffer, added
 
 
-@staff_member_required
+@dashboard_permission_required('kits')
 def dashboard_registration_kit_center(request):
     from website.models import SiteSettings
 
@@ -6045,7 +6067,7 @@ def _send_bulk_email_recipient(request, bulk_email, recipient):
         return False
 
 
-@staff_member_required
+@dashboard_permission_required('certificates')
 def dashboard_certificate_center(request):
     from website.models import SiteSettings
 
@@ -6344,7 +6366,7 @@ def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
     return rows
 
 
-@staff_member_required
+@dashboard_permission_required('presentations')
 def dashboard_presentation_center(request):
     site_settings = SiteSettings.objects.first()
     events = Event.objects.order_by('-start_date', '-year', 'name')
@@ -6418,7 +6440,7 @@ def dashboard_presentation_center(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('bulk_email')
 def dashboard_bulk_email_center(request):
     from website.models import SiteSettings
 
@@ -6632,7 +6654,7 @@ def dashboard_bulk_email_center(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('payments')
 def dashboard_event_ledger(request):
     event_filter = request.GET.get('event')
     event_status_filter = request.GET.get('event_status')
@@ -6655,7 +6677,7 @@ def dashboard_event_ledger(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('participants')
 def dashboard_participant_preview(request):
     event_filter = request.GET.get('event')
     event_status_filter = request.GET.get('event_status')
@@ -6675,7 +6697,7 @@ def dashboard_participant_preview(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('staff_activity')
 def dashboard_staff_activity(request):
     activity_page_number = request.GET.get('activity_page')
     activity_filters = get_staff_activity_filters(request)
@@ -6711,7 +6733,7 @@ def dashboard_staff_activity(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('program')
 def dashboard_program_session_builder(request):
     from website.models import SiteSettings
 
@@ -7514,7 +7536,7 @@ def add_profile_to_program_person(profile):
     return person, True, None
 
 
-@staff_member_required
+@dashboard_permission_required('program')
 def dashboard_program_profile_search(request):
     selected_event = Event.objects.filter(pk=request.GET.get('event')).first()
     profile_search_query = (request.GET.get('profile_query') or '').strip()
@@ -7532,7 +7554,7 @@ def dashboard_program_profile_search(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('program')
 def dashboard_program_profile_add(request):
     if request.method != 'POST':
         return HttpResponse(status=405)
@@ -7584,7 +7606,7 @@ def dashboard_program_profile_add(request):
     return response
 
 
-@staff_member_required
+@dashboard_permission_required('program')
 def dashboard_program_person_remove(request):
     if request.method != 'POST':
         return HttpResponse(status=405)
@@ -7616,7 +7638,7 @@ def dashboard_program_person_remove(request):
     })
 
 
-@staff_member_required
+@dashboard_permission_required('dashboard')
 def dashboard_attention_queue(request):
     event_filter = request.GET.get('event')
     event_status_filter = request.GET.get('event_status')

@@ -1,4 +1,5 @@
 from .models import UserProfile
+from .dashboard_permissions import dashboard_access_map
 
 
 def user_profile(request):
@@ -10,5 +11,6 @@ def user_profile(request):
     except Exception:
         profile = None
     return {
-        'user_profile': profile
+        'user_profile': profile,
+        'dashboard_access': dashboard_access_map(request.user),
     }
