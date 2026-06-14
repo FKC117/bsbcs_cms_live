@@ -24,6 +24,38 @@ from .models import (
 User = get_user_model()
 
 
+def sync_bulk_email_status(bulk_email):
+    pending_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).count()
+    sent_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).count()
+    failed_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED).count()
+    recipient_total = pending_count + sent_count + failed_count
+
+    if pending_count:
+        status = (
+            BulkEmail.STATUS_SENDING
+            if sent_count or failed_count or bulk_email.status == BulkEmail.STATUS_SENDING
+            else BulkEmail.STATUS_RECIPIENTS_READY
+        )
+    elif recipient_total and sent_count and not failed_count:
+        status = BulkEmail.STATUS_SENT
+    elif recipient_total and (sent_count or failed_count):
+        status = BulkEmail.STATUS_PARTIAL
+    else:
+        status = BulkEmail.STATUS_DRAFT
+
+    if bulk_email.status != status:
+        bulk_email.status = status
+        bulk_email.save(update_fields=['status', 'updated_at'])
+
+    return {
+        'status': status,
+        'pending': pending_count,
+        'sent': sent_count,
+        'failed': failed_count,
+        'total': recipient_total,
+    }
+
+
 def valid_bulk_email_or_none(email):
     if not email:
         return None
@@ -220,6 +252,7 @@ def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
         status=BulkEmailRecipient.STATUS_SENT,
         sent_by=sent_by,
     )
+    sync_bulk_email_status(bulk_email)
     return True
 
 
@@ -245,6 +278,7 @@ def send_bulk_email_recipient(bulk_email, recipient, sent_by=None):
             message=str(exc),
             sent_by=sent_by,
         )
+        sync_bulk_email_status(bulk_email)
         return False
 
 
@@ -276,13 +310,7 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
             failed += 1
 
     bulk_email.refresh_from_db()
-    if queued and not failed:
-        bulk_email.status = BulkEmail.STATUS_SENDING
-    elif queued and failed:
-        bulk_email.status = BulkEmail.STATUS_PARTIAL
-    elif failed:
-        bulk_email.status = BulkEmail.STATUS_PARTIAL
-    bulk_email.save(update_fields=['status', 'updated_at'])
+    sync_bulk_email_status(bulk_email)
 
     if queued_emails:
         BulkEmailsReporting.objects.create(

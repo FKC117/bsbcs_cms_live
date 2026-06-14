@@ -55,6 +55,7 @@ from .program_emails import (
 )
 from .bulk_email_services import (
     prepare_bulk_email_recipients,
+    sync_bulk_email_status,
     upsert_bulk_email_recipient,
 )
 from .tasks import (
@@ -6580,10 +6581,11 @@ def dashboard_bulk_email_center(request):
     selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
     selected_campaign_progress = None
     if selected_campaign:
-        recipient_total = selected_campaign.recipient_count
-        sent_total = selected_campaign.sent_count
-        failed_total = selected_campaign.failed_count
-        pending_total = selected_campaign.pending_count
+        progress_snapshot = sync_bulk_email_status(selected_campaign)
+        recipient_total = progress_snapshot['total']
+        sent_total = progress_snapshot['sent']
+        failed_total = progress_snapshot['failed']
+        pending_total = progress_snapshot['pending']
         completed_total = sent_total + failed_total
         selected_campaign_progress = {
             'total': recipient_total,
@@ -6592,7 +6594,7 @@ def dashboard_bulk_email_center(request):
             'pending': pending_total,
             'completed': completed_total,
             'percent': int((completed_total / recipient_total) * 100) if recipient_total else 0,
-            'is_sending': selected_campaign.status == BulkEmail.STATUS_SENDING,
+            'is_sending': progress_snapshot['status'] == BulkEmail.STATUS_SENDING,
         }
     base_query = {}
     if selected_campaign:
