@@ -2040,7 +2040,7 @@ class BulkEmailAdmin(admin.ModelAdmin):
             group_id = request.POST.get('group_id')
             try:
                 group = EmailGroup.objects.get(id=group_id)
-                emails = [e.strip() for e in group.email_addresses.split(',') if e.strip()]
+                emails = group.parsed_emails()
             except EmailGroup.DoesNotExist:
                 self.message_user(request, "Group not found.", level='error')
                 return
