@@ -1,4 +1,5 @@
 import os
+import time
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -22,6 +23,7 @@ from .models import (
 
 
 User = get_user_model()
+DEFAULT_BULK_EMAIL_DELAY_SECONDS = 0.25
 
 
 def sync_bulk_email_status(bulk_email):
@@ -216,30 +218,48 @@ def prepare_bulk_email_recipients(bulk_email):
 
 
 def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
-    email = EmailMessage(
-        subject=bulk_email.subject,
-        body=bulk_email.body,
-        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
-        to=[recipient.email],
+    disconnect_markers = (
+        'Connection unexpectedly closed',
+        'Server not connected',
+        'Connection reset',
+        'Connection aborted',
+        'Broken pipe',
     )
-    if bulk_email.attachment:
-        email.attach_file(bulk_email.attachment.path)
+    last_error = ''
 
-    try:
-        email.send()
-    except Exception as exc:
-        recipient.status = BulkEmailRecipient.STATUS_FAILED
-        recipient.error_message = str(exc)
-        recipient.save(update_fields=['status', 'error_message'])
-        BulkEmailSendLog.objects.create(
-            bulk_email=bulk_email,
-            recipient=recipient,
-            email=recipient.email,
-            status=BulkEmailRecipient.STATUS_FAILED,
-            message=str(exc),
-            sent_by=sent_by,
+    for attempt in range(1, 4):
+        email = EmailMessage(
+            subject=bulk_email.subject,
+            body=bulk_email.body,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
+            to=[recipient.email],
         )
-        return False
+        if bulk_email.attachment:
+            email.attach_file(bulk_email.attachment.path)
+
+        try:
+            email.send()
+            break
+        except Exception as exc:
+            last_error = str(exc)
+            is_disconnect = any(marker.lower() in last_error.lower() for marker in disconnect_markers)
+            if attempt < 3 and is_disconnect:
+                time.sleep(attempt * 2)
+                continue
+
+            recipient.status = BulkEmailRecipient.STATUS_FAILED
+            recipient.error_message = last_error
+            recipient.save(update_fields=['status', 'error_message'])
+            BulkEmailSendLog.objects.create(
+                bulk_email=bulk_email,
+                recipient=recipient,
+                email=recipient.email,
+                status=BulkEmailRecipient.STATUS_FAILED,
+                message=last_error,
+                sent_by=sent_by,
+            )
+            sync_bulk_email_status(bulk_email)
+            return False
 
     recipient.status = BulkEmailRecipient.STATUS_SENT
     recipient.error_message = ''
@@ -296,28 +316,29 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
         prepare_bulk_email_recipients(bulk_email)
 
     pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
-    queued = 0
+    sent = 0
     failed = 0
-    queued_emails = []
+    sent_emails = []
     bulk_email.status = BulkEmail.STATUS_SENDING
     bulk_email.save(update_fields=['status', 'updated_at'])
 
     for recipient in pending_recipients.iterator():
-        if send_bulk_email_recipient(bulk_email, recipient, sent_by=sent_by):
-            queued += 1
-            queued_emails.append(recipient.email)
+        if _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=sent_by):
+            sent += 1
+            sent_emails.append(recipient.email)
         else:
             failed += 1
+        time.sleep(getattr(settings, 'BULK_EMAIL_DELAY_SECONDS', DEFAULT_BULK_EMAIL_DELAY_SECONDS))
 
     bulk_email.refresh_from_db()
     sync_bulk_email_status(bulk_email)
 
-    if queued_emails:
+    if sent_emails:
         BulkEmailsReporting.objects.create(
             subject=bulk_email.subject,
             body=bulk_email.body,
-            recipients=', '.join(queued_emails),
+            recipients=', '.join(sent_emails),
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )
 
-    return {'queued': queued, 'failed': failed, 'campaign_id': bulk_email.id}
+    return {'sent': sent, 'failed': failed, 'campaign_id': bulk_email.id}
