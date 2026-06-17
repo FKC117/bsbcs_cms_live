@@ -1,4 +1,5 @@
 import os
+import logging
 
 from celery import shared_task
 from django.conf import settings
@@ -12,6 +13,9 @@ from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
 from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog
+
+
+speaker_certificate_celery_logger = logging.getLogger('speaker_certificate_celery')
 
 
 def _send_email(
@@ -315,6 +319,13 @@ def send_speaker_certificate_email(
     log_id=None,
     sent_by_user_id=None,
 ):
+    speaker_certificate_celery_logger.info(
+        "Speaker certificate email task started: certificate_id=%s log_id=%s sent_by_user_id=%s task_id=%s",
+        certificate_id,
+        log_id,
+        sent_by_user_id,
+        getattr(self.request, 'id', None),
+    )
     certificate = SpeakerCertificate.objects.select_related('event', 'program_person', 'profile').get(pk=certificate_id)
     sent_by = User.objects.filter(pk=sent_by_user_id).first() if sent_by_user_id else None
     recipient_email = (certificate.profile.email if certificate.profile_id else '') or certificate.program_person.email
@@ -327,6 +338,12 @@ def send_speaker_certificate_email(
             message=message,
             sent_by=sent_by,
         )
+        speaker_certificate_celery_logger.warning(
+            "Speaker certificate email task aborted: missing recipient certificate_id=%s person_id=%s event_id=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
+        )
         raise ValueError(message)
 
     if not certificate.generated_file:
@@ -336,6 +353,12 @@ def send_speaker_certificate_email(
             status=SpeakerCertificateEmailLog.STATUS_FAILED,
             message=message,
             sent_by=sent_by,
+        )
+        speaker_certificate_celery_logger.warning(
+            "Speaker certificate email task aborted: missing generated file certificate_id=%s person_id=%s event_id=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
         )
         raise ValueError(message)
 
@@ -349,6 +372,12 @@ def send_speaker_certificate_email(
             message=message,
             sent_by=sent_by,
         )
+        speaker_certificate_celery_logger.exception(
+            "Speaker certificate email task could not resolve attachment path: certificate_id=%s person_id=%s event_id=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
+        )
         raise ValueError(message)
 
     subject = f'Your Speaker Certificate for {certificate.event.name} {certificate.event.year}'
@@ -361,6 +390,14 @@ def send_speaker_certificate_email(
     text_content = strip_tags(html_content)
 
     try:
+        speaker_certificate_celery_logger.info(
+            "Speaker certificate email task sending: certificate_id=%s person_id=%s event_id=%s recipient=%s attachment=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
+            recipient_email,
+            attachment_path,
+        )
         _send_email(
             subject=subject,
             body=text_content,
@@ -376,6 +413,13 @@ def send_speaker_certificate_email(
             message=str(exc),
             sent_by=sent_by,
         )
+        speaker_certificate_celery_logger.exception(
+            "Speaker certificate email task failed during send: certificate_id=%s person_id=%s event_id=%s recipient=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
+            recipient_email,
+        )
         raise
 
     sent_at = timezone.now()
@@ -386,5 +430,13 @@ def send_speaker_certificate_email(
         message='Speaker certificate email sent successfully.',
         sent_by=sent_by,
         sent_at=sent_at,
+    )
+    speaker_certificate_celery_logger.info(
+        "Speaker certificate email task completed: certificate_id=%s person_id=%s event_id=%s recipient=%s sent_at=%s",
+        certificate.id,
+        certificate.program_person_id,
+        certificate.event_id,
+        recipient_email,
+        sent_at.isoformat(),
     )
     return {'certificate_id': certificate.id, 'email': recipient_email, 'status': 'sent'}

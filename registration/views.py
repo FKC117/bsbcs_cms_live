@@ -73,6 +73,7 @@ from .pdf_utils import generate_abstract_pdf, generate_invoice
 
 # Payment logger (writes to payment.log via settings)
 logger = logging.getLogger('payment')
+speaker_certificate_logger = logging.getLogger('speaker_certificate')
 
 
 @staff_member_required
@@ -711,17 +712,42 @@ def _save_user_presentation_upload(request, user_profile):
 
 @login_required
 def download_speaker_certificate(request, certificate_id):
+    speaker_certificate_logger.info(
+        "Speaker certificate download requested: certificate_id=%s user_id=%s is_staff=%s",
+        certificate_id,
+        request.user.id if request.user.is_authenticated else None,
+        request.user.is_staff if request.user.is_authenticated else False,
+    )
     certificate = get_object_or_404(
         SpeakerCertificate.objects.select_related('profile', 'event', 'program_person'),
         pk=certificate_id,
     )
     if not certificate.generated_file:
+        speaker_certificate_logger.warning(
+            "Speaker certificate download failed: missing file certificate_id=%s person_id=%s event_id=%s",
+            certificate.id,
+            certificate.program_person_id,
+            certificate.event_id,
+        )
         raise Http404("Speaker certificate file is not available.")
     if not request.user.is_staff:
         if not certificate.profile_id or certificate.profile.user_id != request.user.id:
+            speaker_certificate_logger.warning(
+                "Speaker certificate download denied: certificate_id=%s user_id=%s profile_user_id=%s",
+                certificate.id,
+                request.user.id,
+                certificate.profile.user_id if certificate.profile_id else None,
+            )
             raise Http404("Speaker certificate not found.")
         certificate.downloaded_at = timezone.now()
         certificate.save(update_fields=['downloaded_at'])
+    speaker_certificate_logger.info(
+        "Speaker certificate download started: certificate_id=%s person_id=%s event_id=%s file=%s",
+        certificate.id,
+        certificate.program_person_id,
+        certificate.event_id,
+        certificate.generated_file.name,
+    )
     return FileResponse(
         certificate.generated_file.open('rb'),
         as_attachment=True,
@@ -3120,6 +3146,13 @@ def _render_speaker_certificate_to_jpeg(request, person, event, certificate, out
 
 
 def _generate_speaker_certificate_file(request, event, person, certificate, issued_by=None):
+    speaker_certificate_logger.info(
+        "Speaker certificate generation requested: event_id=%s person_id=%s issued_by=%s design_mode=%s",
+        event.id if event else None,
+        person.id if person else None,
+        issued_by.id if issued_by else None,
+        certificate.design_mode if certificate else None,
+    )
     requirements = _speaker_certificate_requirements_met(person, event, certificate)
     if not requirements['eligible']:
         blockers = []
@@ -3128,6 +3161,12 @@ def _generate_speaker_certificate_file(request, event, person, certificate, issu
         if certificate.speaker_require_kit_issue and not requirements['has_kit']:
             blockers.append('kit issue')
         blocker_text = ' and '.join(blockers) or 'speaker eligibility requirements'
+        speaker_certificate_logger.warning(
+            "Speaker certificate generation blocked: event_id=%s person_id=%s blockers=%s",
+            event.id if event else None,
+            person.id if person else None,
+            blocker_text,
+        )
         raise ValueError(f"{person.name} is not eligible yet. Missing {blocker_text}.")
 
     output_filename = _speaker_certificate_output_filename(person.name)
@@ -3138,6 +3177,11 @@ def _generate_speaker_certificate_file(request, event, person, certificate, issu
         _render_speaker_certificate_to_jpeg(request, person, event, certificate, output_path)
     else:
         if not certificate.speaker_upload_image:
+            speaker_certificate_logger.warning(
+                "Speaker certificate generation failed: missing uploaded speaker image event_id=%s person_id=%s",
+                event.id if event else None,
+                person.id if person else None,
+            )
             raise ValueError("No uploaded speaker certificate image configured for this event.")
         image = Image.open(certificate.speaker_upload_image.path)
         draw = ImageDraw.Draw(image)
@@ -3173,6 +3217,14 @@ def _generate_speaker_certificate_file(request, event, person, certificate, issu
         update_fields.append('issued_by')
     if update_fields:
         record.save(update_fields=update_fields)
+    speaker_certificate_logger.info(
+        "Speaker certificate generated: certificate_id=%s event_id=%s person_id=%s file=%s profile_id=%s",
+        record.id,
+        event.id if event else None,
+        person.id if person else None,
+        record.generated_file.name,
+        record.profile_id,
+    )
     return record, output_path
 
 
@@ -6403,6 +6455,14 @@ def dashboard_certificate_center(request):
                     certificate,
                     issued_by=request.user,
                 )
+                speaker_certificate_logger.info(
+                    "Speaker certificate download prepared from dashboard: certificate_id=%s event_id=%s person_id=%s user_id=%s file=%s",
+                    record.id,
+                    selected_event.id,
+                    person.id,
+                    request.user.id if request.user.is_authenticated else None,
+                    output_path,
+                )
                 dashboard_log_action(request, record, CHANGE, f'Generated speaker certificate for {person.name}.')
                 return FileResponse(
                     open(output_path, 'rb'),
@@ -6421,6 +6481,12 @@ def dashboard_certificate_center(request):
                 )
                 recipient_email = (record.profile.email if record.profile_id else '') or person.email
                 if not recipient_email:
+                    speaker_certificate_logger.warning(
+                        "Speaker certificate email could not be queued: missing recipient event_id=%s person_id=%s certificate_id=%s",
+                        selected_event.id,
+                        person.id,
+                        record.id,
+                    )
                     raise ValueError(f'{person.name} does not have an email address for certificate delivery.')
                 email_log = None
                 if speaker_certificate_email_log_table_ready():
@@ -6434,6 +6500,14 @@ def dashboard_certificate_center(request):
                         message='Queued from Certificate Center speaker certificate section.',
                     )
                 try:
+                    speaker_certificate_logger.info(
+                        "Speaker certificate email queue requested: event_id=%s person_id=%s certificate_id=%s recipient=%s user_id=%s",
+                        selected_event.id,
+                        person.id,
+                        record.id,
+                        recipient_email,
+                        request.user.id if request.user.is_authenticated else None,
+                    )
                     task = send_speaker_certificate_email.delay(
                         record.id,
                         log_id=email_log.id if email_log else None,
@@ -6444,10 +6518,25 @@ def dashboard_certificate_center(request):
                         email_log.status = SpeakerCertificateEmailLog.STATUS_FAILED
                         email_log.message = f'Could not queue email task: {exc}'
                         email_log.save(update_fields=['status', 'message', 'updated_at'])
+                    speaker_certificate_logger.exception(
+                        "Speaker certificate email queue failed: event_id=%s person_id=%s certificate_id=%s recipient=%s",
+                        selected_event.id,
+                        person.id,
+                        record.id,
+                        recipient_email,
+                    )
                     raise
                 if email_log:
                     email_log.task_id = getattr(task, 'id', '') or ''
                     email_log.save(update_fields=['task_id', 'updated_at'])
+                speaker_certificate_logger.info(
+                    "Speaker certificate email queued: event_id=%s person_id=%s certificate_id=%s recipient=%s task_id=%s",
+                    selected_event.id,
+                    person.id,
+                    record.id,
+                    recipient_email,
+                    getattr(task, 'id', '') or '',
+                )
                 dashboard_log_action(
                     request,
                     record,

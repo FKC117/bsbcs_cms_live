@@ -270,6 +270,18 @@ LOGGING = {
             'filename': os.path.join(BASE_DIR, 'payment.log'),
             'formatter': 'verbose',
         },
+        'speaker_certificate_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'speaker_certificate_django.log'),
+            'formatter': 'verbose',
+        },
+        'speaker_certificate_celery_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'speaker_certificate_celery.log'),
+            'formatter': 'verbose',
+        },
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
@@ -319,6 +331,16 @@ LOGGING = {
         },
         'payment': {
             'handlers': ['payment_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'speaker_certificate': {
+            'handlers': ['speaker_certificate_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'speaker_certificate_celery': {
+            'handlers': ['speaker_certificate_celery_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },
