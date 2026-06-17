@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
-from .models import Participant, ParticipantEmailLog
+from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog
 
 
 def _send_email(
@@ -189,6 +189,19 @@ def _update_participant_email_log(log_id, **fields):
     ParticipantEmailLog.objects.filter(pk=log_id).update(**fields, updated_at=timezone.now())
 
 
+def speaker_certificate_email_log_table_ready():
+    try:
+        return SpeakerCertificateEmailLog._meta.db_table in connection.introspection.table_names()
+    except Exception:
+        return False
+
+
+def _update_speaker_certificate_email_log(log_id, **fields):
+    if not log_id or not speaker_certificate_email_log_table_ready():
+        return
+    SpeakerCertificateEmailLog.objects.filter(pk=log_id).update(**fields, updated_at=timezone.now())
+
+
 @shared_task(bind=True)
 def send_participant_approval_email(
     self,
@@ -293,3 +306,85 @@ def send_participant_approval_email(
         sent_at=timezone.now(),
     )
     return {'participant_id': participant.id, 'email': participant.email, 'status': 'sent'}
+
+
+@shared_task(bind=True)
+def send_speaker_certificate_email(
+    self,
+    certificate_id,
+    log_id=None,
+    sent_by_user_id=None,
+):
+    certificate = SpeakerCertificate.objects.select_related('event', 'program_person', 'profile').get(pk=certificate_id)
+    sent_by = User.objects.filter(pk=sent_by_user_id).first() if sent_by_user_id else None
+    recipient_email = (certificate.profile.email if certificate.profile_id else '') or certificate.program_person.email
+
+    if not recipient_email:
+        message = 'No recipient email address available.'
+        _update_speaker_certificate_email_log(
+            log_id,
+            status=SpeakerCertificateEmailLog.STATUS_FAILED,
+            message=message,
+            sent_by=sent_by,
+        )
+        raise ValueError(message)
+
+    if not certificate.generated_file:
+        message = 'Speaker certificate file is not available.'
+        _update_speaker_certificate_email_log(
+            log_id,
+            status=SpeakerCertificateEmailLog.STATUS_FAILED,
+            message=message,
+            sent_by=sent_by,
+        )
+        raise ValueError(message)
+
+    try:
+        attachment_path = certificate.generated_file.path
+    except Exception as exc:
+        message = f'Could not resolve generated speaker certificate file: {exc}'
+        _update_speaker_certificate_email_log(
+            log_id,
+            status=SpeakerCertificateEmailLog.STATUS_FAILED,
+            message=message,
+            sent_by=sent_by,
+        )
+        raise ValueError(message)
+
+    subject = f'Your Speaker Certificate for {certificate.event.name} {certificate.event.year}'
+    context = {
+        'certificate': certificate,
+        'event': certificate.event,
+        'person': certificate.program_person,
+    }
+    html_content = render_to_string('emails/speaker_certificate_email.html', context)
+    text_content = strip_tags(html_content)
+
+    try:
+        _send_email(
+            subject=subject,
+            body=text_content,
+            from_email=settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
+            recipient_list=[recipient_email],
+            html_message=html_content,
+            attachment_paths=[attachment_path],
+        )
+    except Exception as exc:
+        _update_speaker_certificate_email_log(
+            log_id,
+            status=SpeakerCertificateEmailLog.STATUS_FAILED,
+            message=str(exc),
+            sent_by=sent_by,
+        )
+        raise
+
+    sent_at = timezone.now()
+    SpeakerCertificate.objects.filter(pk=certificate.pk).update(emailed_at=sent_at)
+    _update_speaker_certificate_email_log(
+        log_id,
+        status=SpeakerCertificateEmailLog.STATUS_SENT,
+        message='Speaker certificate email sent successfully.',
+        sent_by=sent_by,
+        sent_at=sent_at,
+    )
+    return {'certificate_id': certificate.id, 'email': recipient_email, 'status': 'sent'}

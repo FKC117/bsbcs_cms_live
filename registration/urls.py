@@ -30,6 +30,7 @@ from .views import (
     download_abstract_book,
     event_feedback_view,
     generate_certificate,
+    download_speaker_certificate,
     temp_certificate_design_preview,
 )
 
@@ -73,7 +74,8 @@ urlpatterns = [
    # New Urls added here
     path('<int:event_id>/download-abstract/', views.download_abstract_book, name='download_abstract_book'),
     path('<int:event_id>/feedback/', event_feedback_view, name='event_feedback'),
-    path('<int:event_id>/generate_certificate/', views.generate_certificate, name='generate_certificate')  # Corrected URL pattern
+    path('<int:event_id>/generate_certificate/', views.generate_certificate, name='generate_certificate'),  # Corrected URL pattern
+    path('speaker-certificates/<int:certificate_id>/download/', download_speaker_certificate, name='download_speaker_certificate'),
 ]
 
 if settings.DEBUG:

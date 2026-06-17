@@ -98,11 +98,17 @@
             </section>
         {% endif %}
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Certificate</div>
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Participant cert</div>
                 <div class="mt-1 text-xl font-black {% if totals.certificate_ready %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">
                     {% if totals.certificate_ready %}Ready{% else %}Setup{% endif %}
+                </div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Speaker cert</div>
+                <div class="mt-1 text-xl font-black {% if totals.speaker_certificate_ready %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">
+                    {% if totals.speaker_certificate_ready %}Ready{% else %}Setup{% endif %}
                 </div>
             </div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
@@ -124,6 +130,14 @@
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Feedback pending</div>
                 <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.feedback_pending }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Eligible speakers</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.eligible_speakers }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Issued speaker certs</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.issued_speaker_certificates }}</div>
             </div>
         </section>
 
@@ -245,14 +259,62 @@
                                     </div>
                                 {% endif %}
                             </div>
+                            <div class="mt-4">
+                                <label class="compact-label" for="speaker_upload_image">Speaker certificate image</label>
+                                <input id="speaker_upload_image" name="speaker_upload_image" type="file" accept="image/*" class="workflow-input">
+                                {% if certificate.speaker_upload_image %}
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <a href="{{ certificate.speaker_upload_image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View current speaker certificate</a>
+                                        <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                            <input type="checkbox" name="clear_speaker_upload_image" class="h-3.5 w-3.5 rounded border-pink-200">
+                                            Remove on save
+                                        </label>
+                                    </div>
+                                {% endif %}
+                            </div>
                             <div class="mt-4 rounded-xl bg-white px-3 py-3 ring-1 ring-amber-100">
                                 <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Preview checklist</div>
-                                <div class="mt-2 rounded-lg {% if totals.image_asset_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2 text-sm font-bold">
-                                    {% if totals.image_asset_ready %}Ready{% else %}Missing{% endif %}: uploaded certificate image
+                                <div class="mt-2 grid gap-2 text-sm font-bold sm:grid-cols-2">
+                                    <div class="rounded-lg {% if totals.image_asset_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2">
+                                        {% if totals.image_asset_ready %}Ready{% else %}Missing{% endif %}: participant image
+                                    </div>
+                                    <div class="rounded-lg {% if totals.speaker_image_asset_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %} px-3 py-2">
+                                        {% if totals.speaker_image_asset_ready %}Ready{% else %}Missing{% endif %}: speaker image
+                                    </div>
                                 </div>
-                                {% if not totals.image_asset_ready %}
-                                    <p class="mt-2 text-xs font-semibold text-slate-500">Save a complete certificate image before previewing image mode.</p>
+                                {% if not totals.image_asset_ready or not totals.speaker_image_asset_ready %}
+                                    <p class="mt-2 text-xs font-semibold text-slate-500">Save separate participant and speaker certificate images before using image mode for both tracks.</p>
                                 {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-green-100 bg-green-50/40 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-green">Speaker wording and rules</div>
+                                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Keep speaker certificates separate from participant certificates so the same person can hold both cleanly.</p>
+                                </div>
+                                <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-green ring-1 ring-green-100">Speaker only</span>
+                            </div>
+                            <div class="mt-4 grid gap-3">
+                                <div>
+                                    <label class="compact-label" for="speaker_title">Speaker certificate title</label>
+                                    <input id="speaker_title" name="speaker_title" value="{{ certificate.speaker_title|default:'Certificate of Appreciation' }}" class="workflow-input">
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="speaker_body">Speaker certificate body</label>
+                                    <textarea id="speaker_body" name="speaker_body" class="workflow-textarea">{% if certificate and certificate.speaker_body %}{{ certificate.speaker_body }}{% else %}In recognition of your invaluable contribution as a Guest Speaker in the {{ event_name }}, held on {{ event_date }} at {{ event_location }}.{% endif %}</textarea>
+                                </div>
+                                <div class="grid gap-2 sm:grid-cols-2">
+                                    <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                                        <input type="checkbox" name="speaker_require_feedback" class="h-4 w-4 rounded border-line" {% if certificate.speaker_require_feedback %}checked{% endif %}>
+                                        Require feedback
+                                    </label>
+                                    <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                                        <input type="checkbox" name="speaker_require_kit_issue" class="h-4 w-4 rounded border-line" {% if certificate.speaker_require_kit_issue %}checked{% endif %}>
+                                        Require kit issue
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -344,6 +406,11 @@
                             <a href="{% url 'registration:certificate_design_preview' %}?event_id={{ selected_event.id }}&name=Sample%20Participant" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-bsbcs-blue bg-white px-5 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50">Preview certificate</a>
                         {% else %}
                             <span class="rounded-xl border border-line bg-white px-5 py-2.5 text-sm font-black text-slate-400">Preview after setup</span>
+                        {% endif %}
+                        {% if totals.speaker_certificate_ready %}
+                            <a href="{% url 'registration:certificate_design_preview' %}?event_id={{ selected_event.id }}&kind=speaker&name=Sample%20Speaker" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-bsbcs-green bg-white px-5 py-2.5 text-sm font-black text-bsbcs-green hover:bg-green-50">Preview speaker certificate</a>
+                        {% else %}
+                            <span class="rounded-xl border border-line bg-white px-5 py-2.5 text-sm font-black text-slate-400">Speaker preview after setup</span>
                         {% endif %}
                     </div>
                 </div>
@@ -452,6 +519,116 @@
                     {% empty %}
                         <div class="rounded-xl bg-amber-50 px-3 py-3 text-sm font-bold text-bsbcs-amber">No feedback questions added for this event yet.</div>
                     {% endfor %}
+                </div>
+            </section>
+
+            <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Speaker certificates</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Eligible speakers and manual issue flow</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Generate, download, and email speaker certificates separately from participant certificates. Linked speakers will also see issued files in their profile.</p>
+                    </div>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ speaker_rows|length }} speaker{{ speaker_rows|length|pluralize }}</div>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-line">
+                    <table class="min-w-full table-fixed border-collapse">
+                        <thead class="bg-slate-50">
+                            <tr class="text-left text-xs font-black uppercase tracking-wide text-slate-500">
+                                <th class="w-[28%] px-4 py-3">Speaker</th>
+                                <th class="w-[12%] px-4 py-3">Role</th>
+                                <th class="w-[22%] px-4 py-3">Linked profile</th>
+                                <th class="w-[18%] px-4 py-3">Rules</th>
+                                <th class="w-[20%] px-4 py-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line bg-white text-sm">
+                            {% for row in speaker_rows %}
+                                <tr class="align-top">
+                                    <td class="px-4 py-4">
+                                        <div class="min-w-0">
+                                            <div class="truncate font-black text-ink">{{ row.person.name }}</div>
+                                            <div class="truncate text-xs font-semibold text-slate-500">{{ row.email|default:"No email" }}</div>
+                                            {% if row.issued_record %}
+                                                <div class="mt-1 text-xs font-semibold text-bsbcs-green">Issued {{ row.issued_record.issued_at|date:"M d, Y h:i A" }}</div>
+                                            {% endif %}
+                                            {% if row.latest_email_log and row.latest_email_log.status == 'sent' and row.latest_email_log.sent_at %}
+                                                <div class="mt-1 text-xs font-semibold text-bsbcs-blue">Sent on {{ row.latest_email_log.sent_at|date:"M d, Y h:i A" }}</div>
+                                            {% elif row.latest_email_log and row.latest_email_log.status == 'queued' %}
+                                                <div class="mt-1 text-xs font-semibold text-bsbcs-amber">Email queued</div>
+                                            {% elif row.latest_email_log and row.latest_email_log.status == 'failed' %}
+                                                <div class="mt-1 text-xs font-semibold text-bsbcs-pink">Email failed</div>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <span class="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-blue-100">{{ row.role_label }}</span>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if row.profile %}
+                                            <div class="font-black text-ink">{{ row.profile.name }}</div>
+                                            <div class="text-xs font-semibold text-slate-500">{{ row.profile.email }}</div>
+                                        {% else %}
+                                            <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-slate-200">Not linked</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex flex-col gap-2">
+                                            {% if certificate.speaker_require_feedback %}
+                                                {% if row.has_feedback %}
+                                                    <span class="inline-flex w-fit rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Feedback done</span>
+                                                {% else %}
+                                                    <span class="inline-flex w-fit rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">Feedback pending</span>
+                                                {% endif %}
+                                            {% endif %}
+                                            {% if certificate.speaker_require_kit_issue %}
+                                                {% if row.has_kit %}
+                                                    <span class="inline-flex w-fit rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Kit issued</span>
+                                                {% else %}
+                                                    <span class="inline-flex w-fit rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">Kit pending</span>
+                                                {% endif %}
+                                            {% endif %}
+                                            {% if not certificate.speaker_require_feedback and not certificate.speaker_require_kit_issue %}
+                                                <span class="inline-flex w-fit rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">No extra requirement</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex flex-wrap gap-2">
+                                            <a href="{% url 'registration:certificate_design_preview' %}?event_id={{ selected_event.id }}&kind=speaker&name={{ row.person.name|urlencode }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Preview</a>
+                                            {% if row.eligible %}
+                                                <form method="post">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="certificate_action" value="generate_speaker_certificate">
+                                                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                                    <input type="hidden" name="program_person_id" value="{{ row.person.id }}">
+                                                    <button class="rounded-lg bg-bsbcs-blue px-3 py-2 text-xs font-black text-white hover:bg-bsbcs-navy">Download</button>
+                                                </form>
+                                                {% if row.email %}
+                                                    <form method="post">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="certificate_action" value="email_speaker_certificate">
+                                                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                                        <input type="hidden" name="program_person_id" value="{{ row.person.id }}">
+                                                        <button class="rounded-lg border border-green-200 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-50">Email</button>
+                                                    </form>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="inline-flex rounded-lg border border-line px-3 py-2 text-xs font-black text-slate-400">Not eligible yet</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="5" class="px-4 py-8 text-center text-sm font-bold text-slate-500">No speaker or presenter assignments match this filter.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </section>
 

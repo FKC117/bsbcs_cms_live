@@ -1496,9 +1496,29 @@ class Certificate(models.Model):
     event = models.ForeignKey('Event', on_delete=models.CASCADE, blank=True, null=True)
     design_mode = models.CharField(max_length=20, choices=DESIGN_MODE_CHOICES, default=DESIGN_MODE_IMAGE)
     upload_image = models.ImageField(upload_to='media/event_images/', blank=True, null=True)
+    speaker_upload_image = models.ImageField(upload_to='media/event_images/', blank=True, null=True)
     organizer_logo = models.ImageField(upload_to='certificates/logos/', blank=True, null=True)
     co_organizer_logo = models.ImageField(upload_to='certificates/logos/', blank=True, null=True)
     event_logo = models.ImageField(upload_to='certificates/event_logos/', blank=True, null=True)
+    speaker_title = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text='Optional title for speaker certificates. Defaults to Certificate of Appreciation.',
+    )
+    speaker_body = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Optional body text for speaker certificates. Supports {{ event_name }}, {{ event_date }}, and {{ event_location }}.',
+    )
+    speaker_require_feedback = models.BooleanField(
+        default=False,
+        help_text='Require linked speaker feedback submission before speaker certificate generation.',
+    )
+    speaker_require_kit_issue = models.BooleanField(
+        default=False,
+        help_text='Require linked speaker registration kit issue before speaker certificate generation.',
+    )
 
     def __str__(self):
         if self.event:
@@ -1521,6 +1541,67 @@ class CertificateSignatory(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SpeakerCertificate(models.Model):
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='speaker_certificates')
+    program_person = models.ForeignKey('ProgramPerson', on_delete=models.CASCADE, related_name='speaker_certificates')
+    profile = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='speaker_certificates',
+    )
+    generated_file = models.ImageField(upload_to='certificates/speakers/generated/', blank=True, null=True)
+    issued_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='issued_speaker_certificates',
+    )
+    issued_at = models.DateTimeField(auto_now_add=True)
+    emailed_at = models.DateTimeField(blank=True, null=True)
+    downloaded_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-issued_at']
+        unique_together = ('event', 'program_person')
+
+    def __str__(self):
+        return f"{self.program_person.name} - {self.event.name} Speaker Certificate"
+
+
+class SpeakerCertificateEmailLog(models.Model):
+    STATUS_QUEUED = 'queued'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    certificate = models.ForeignKey(SpeakerCertificate, on_delete=models.CASCADE, related_name='email_logs')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='speaker_certificate_email_logs')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='speaker_certificate_email_logs')
+    email = models.EmailField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_QUEUED)
+    task_id = models.CharField(max_length=255, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='speaker_certificate_email_logs')
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.person.name} - speaker certificate - {self.status}"
 
 # Certificate Model Ends Here----------------------------------------------------------------------------#
 # Feedback Form Model Starts here----------------------------------------------------------------------------#

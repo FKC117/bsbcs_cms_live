@@ -41,6 +41,7 @@ import logging
 import csv
 import io
 import os
+import re
 import zipfile
 from decimal import Decimal, InvalidOperation
 from collections import defaultdict
@@ -60,9 +61,11 @@ from .bulk_email_services import (
 )
 from .tasks import (
     participant_email_log_table_ready,
+    speaker_certificate_email_log_table_ready,
     send_email_task,
     send_manual_participant_account_email,
     send_participant_approval_email,
+    send_speaker_certificate_email,
     send_pending_bulk_email_campaign,
 )
 from .pdf_utils import generate_abstract_pdf, generate_invoice
@@ -89,6 +92,7 @@ def temp_certificate_design_preview(request):
     else:
         event = event_qs.filter(event_logo__isnull=False).exclude(event_logo='').order_by('-year', '-start_date').first()
     certificate = Certificate.objects.filter(event=event).first() if event else None
+    certificate_kind = (request.GET.get('kind') or 'participant').strip().lower()
 
     if certificate:
         signatories = [
@@ -120,14 +124,21 @@ def temp_certificate_design_preview(request):
             },
         ]
 
-    return render(request, 'certificate_design/certificate.html', {
+    template_name = 'certificate_design/speaker_certificate.html' if certificate_kind == 'speaker' else 'certificate_design/certificate.html'
+    context = {
         'participant_name': request.GET.get('name', 'Dr. Sample Participant'),
         'site_settings': site_settings,
         'event': event,
         'certificate': certificate,
         'signatories': signatories,
         'signature_count': len(signatories),
-    })
+    }
+    if certificate_kind == 'speaker':
+        context.update({
+            'speaker_title': _speaker_certificate_title(certificate),
+            'speaker_body': _render_speaker_certificate_body(certificate, event),
+        })
+    return render(request, template_name, context)
 
 
 def _mask_secret(value: str, show: int = 6):
@@ -699,6 +710,26 @@ def _save_user_presentation_upload(request, user_profile):
 
 
 @login_required
+def download_speaker_certificate(request, certificate_id):
+    certificate = get_object_or_404(
+        SpeakerCertificate.objects.select_related('profile', 'event', 'program_person'),
+        pk=certificate_id,
+    )
+    if not certificate.generated_file:
+        raise Http404("Speaker certificate file is not available.")
+    if not request.user.is_staff:
+        if not certificate.profile_id or certificate.profile.user_id != request.user.id:
+            raise Http404("Speaker certificate not found.")
+        certificate.downloaded_at = timezone.now()
+        certificate.save(update_fields=['downloaded_at'])
+    return FileResponse(
+        certificate.generated_file.open('rb'),
+        as_attachment=True,
+        filename=os.path.basename(certificate.generated_file.name),
+    )
+
+
+@login_required
 def user_profile(request):
     # Fetch the user's profile
     user_profile = UserProfile.objects.filter(user=request.user).first()
@@ -758,6 +789,11 @@ def user_profile(request):
     member = getattr(user_profile, 'member', None)
     membership_benefits = MembershipBenefitModal.objects.filter(is_active=True).prefetch_related('benefit_items').first()
     presentation_assignments = _build_user_presentation_assignments(request.user, user_profile, abstract_submissions)
+    speaker_certificates = (
+        SpeakerCertificate.objects.filter(profile=user_profile)
+        .select_related('event', 'program_person')
+        .order_by('-issued_at')
+    )
 
     if request.method == 'POST':
         if request.POST.get('profile_action') == 'upload_presentation':
@@ -793,6 +829,7 @@ def user_profile(request):
         'member': member,
         'membership_benefits': membership_benefits,
         'presentation_assignments': presentation_assignments,
+        'speaker_certificates': speaker_certificates,
         'site_settings': site_settings,
     })
 
@@ -2872,6 +2909,111 @@ def _certificate_output_filename(participant_name):
     return f"BBCC_Certificate_{safe_name}.jpg"
 
 
+def _speaker_certificate_output_filename(person_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in person_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Speaker'
+    return f"BBCC_Speaker_Certificate_{safe_name}.jpg"
+
+
+def _event_certificate_date_label(event):
+    if not event or not event.start_date:
+        return ''
+    if event.end_date and event.end_date != event.start_date:
+        return f"{event.start_date:%d %B %Y} to {event.end_date:%d %B %Y}"
+    return f"{event.start_date:%d %B %Y}"
+
+
+def _speaker_certificate_title(certificate):
+    if certificate and certificate.speaker_title:
+        return certificate.speaker_title
+    return 'Certificate of Appreciation'
+
+
+def _render_speaker_certificate_body(certificate, event):
+    body = (
+        certificate.speaker_body
+        if certificate and certificate.speaker_body
+        else 'In recognition of your invaluable contribution as a Guest Speaker in the {{ event_name }}, held on {{ event_date }} at {{ event_location }}.'
+    )
+    replacements = {
+        'event_name': event.name if event else '',
+        'event name': event.name if event else '',
+        'event_date': _event_certificate_date_label(event),
+        'event date': _event_certificate_date_label(event),
+        'event_location': event.location if event and event.location else 'the announced venue',
+        'event location': event.location if event and event.location else 'the announced venue',
+    }
+    for key, value in replacements.items():
+        body = re.sub(r"{{\s*" + re.escape(key) + r"\s*}}", value or '', body, flags=re.IGNORECASE)
+    return re.sub(r'\s+', ' ', body).strip()
+
+
+def _speaker_profile_for_person(person):
+    if not person:
+        return None
+    if person.profile_id:
+        return person.profile
+    if person.email:
+        return UserProfile.objects.filter(email__iexact=person.email).first()
+    return None
+
+
+def _speaker_related_participant(person, event, profile=None):
+    participant_qs = Participant.objects.filter(event=event).select_related('user')
+    profile = profile or _speaker_profile_for_person(person)
+    if profile and profile.user_id:
+        participant = participant_qs.filter(user=profile.user).order_by('-created_at').first()
+        if participant:
+            return participant
+    if person and person.email:
+        return participant_qs.filter(email__iexact=person.email).order_by('-created_at').first()
+    return None
+
+
+def _speaker_role_labels(person, event):
+    role_values = (
+        ProgramItemFaculty.objects.filter(
+            person=person,
+            item__session__event=event,
+            role__in=[ProgramItemFaculty.ROLE_SPEAKER, ProgramItemFaculty.ROLE_PRESENTER],
+        )
+        .values_list('role', flat=True)
+        .distinct()
+    )
+    labels = []
+    for role in role_values:
+        if role == ProgramItemFaculty.ROLE_SPEAKER:
+            labels.append('Speaker')
+        elif role == ProgramItemFaculty.ROLE_PRESENTER:
+            labels.append('Presenter')
+    return ', '.join(labels) or 'Speaker'
+
+
+def _speaker_certificate_requirements_met(person, event, certificate):
+    profile = _speaker_profile_for_person(person)
+    participant = _speaker_related_participant(person, event, profile)
+    has_feedback = bool(
+        participant and FeedbackResponse.objects.filter(event=event, participant=participant).exists()
+    )
+    has_kit = bool(
+        participant and RegistrationKit.objects.filter(
+            event=event,
+            payment_status__participant=participant,
+            status='issued',
+        ).exists()
+    )
+    feedback_required = bool(certificate and certificate.speaker_require_feedback)
+    kit_required = bool(certificate and certificate.speaker_require_kit_issue)
+    eligible = (has_feedback or not feedback_required) and (has_kit or not kit_required)
+    return {
+        'profile': profile,
+        'participant': participant,
+        'has_feedback': has_feedback,
+        'has_kit': has_kit,
+        'eligible': eligible,
+    }
+
+
 def _get_chrome_executable():
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -2897,32 +3039,14 @@ def _get_certificate_signatories(certificate):
     ]
 
 
-def _render_html_certificate_to_jpeg(request, participant, event, certificate, output_path):
-    from website.models import SiteSettings
-
-    signatories = _get_certificate_signatories(certificate)
-    if not signatories:
-        raise ValueError("No signatories configured for this HTML certificate.")
-
-    base_url = request.build_absolute_uri('/')
-    html = render_to_string('certificate_design/certificate.html', {
-        'participant_name': participant.name,
-        'site_settings': SiteSettings.objects.first(),
-        'event': event,
-        'certificate': certificate,
-        'signatories': signatories,
-        'signature_count': len(signatories),
-        'capture_mode': True,
-        'base_url': base_url,
-    }, request=request)
-
+def _render_certificate_html_to_jpeg(template_name, context, output_path, capture_width=1632, capture_height=1155):
     output = Path(output_path)
     render_dir = output.parent / 'html_render'
     render_dir.mkdir(parents=True, exist_ok=True)
     html_path = render_dir / f"{output.stem}.html"
     png_path = render_dir / f"{output.stem}.png"
     chrome_profile = Path(tempfile.mkdtemp(prefix=f"{output.stem}_chrome_"))
-    html_path.write_text(html, encoding='utf-8')
+    html_path.write_text(render_to_string(template_name, context), encoding='utf-8')
 
     chrome = _get_chrome_executable()
     if not chrome:
@@ -2941,7 +3065,7 @@ def _render_html_certificate_to_jpeg(request, participant, event, certificate, o
         "--hide-scrollbars",
         "--allow-file-access-from-files",
         f"--user-data-dir={chrome_profile.resolve()}",
-        "--window-size=1632,1155",
+        f"--window-size={capture_width},{capture_height}",
         f"--screenshot={png_path.resolve()}",
         file_url,
     ]
@@ -2949,6 +3073,153 @@ def _render_html_certificate_to_jpeg(request, participant, event, certificate, o
 
     image = Image.open(png_path).convert('RGB')
     image.save(output_path, 'JPEG', quality=95)
+
+
+def _render_html_certificate_to_jpeg(request, participant, event, certificate, output_path):
+    from website.models import SiteSettings
+
+    signatories = _get_certificate_signatories(certificate)
+    if not signatories:
+        raise ValueError("No signatories configured for this HTML certificate.")
+
+    base_url = request.build_absolute_uri('/')
+    context = {
+        'participant_name': participant.name,
+        'site_settings': SiteSettings.objects.first(),
+        'event': event,
+        'certificate': certificate,
+        'signatories': signatories,
+        'signature_count': len(signatories),
+        'capture_mode': True,
+        'base_url': base_url,
+    }
+    _render_certificate_html_to_jpeg('certificate_design/certificate.html', context, output_path)
+
+
+def _render_speaker_certificate_to_jpeg(request, person, event, certificate, output_path):
+    from website.models import SiteSettings
+
+    signatories = _get_certificate_signatories(certificate)
+    if not signatories:
+        raise ValueError("No signatories configured for this HTML certificate.")
+
+    base_url = request.build_absolute_uri('/')
+    context = {
+        'participant_name': person.name,
+        'site_settings': SiteSettings.objects.first(),
+        'event': event,
+        'certificate': certificate,
+        'signatories': signatories,
+        'signature_count': len(signatories),
+        'capture_mode': True,
+        'base_url': base_url,
+        'speaker_title': _speaker_certificate_title(certificate),
+        'speaker_body': _render_speaker_certificate_body(certificate, event),
+    }
+    _render_certificate_html_to_jpeg('certificate_design/speaker_certificate.html', context, output_path)
+
+
+def _generate_speaker_certificate_file(request, event, person, certificate, issued_by=None):
+    requirements = _speaker_certificate_requirements_met(person, event, certificate)
+    if not requirements['eligible']:
+        blockers = []
+        if certificate.speaker_require_feedback and not requirements['has_feedback']:
+            blockers.append('feedback')
+        if certificate.speaker_require_kit_issue and not requirements['has_kit']:
+            blockers.append('kit issue')
+        blocker_text = ' and '.join(blockers) or 'speaker eligibility requirements'
+        raise ValueError(f"{person.name} is not eligible yet. Missing {blocker_text}.")
+
+    output_filename = _speaker_certificate_output_filename(person.name)
+    output_path = os.path.join(settings.MEDIA_ROOT, 'certificates', 'speakers', 'generated', output_filename)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    if certificate.design_mode == Certificate.DESIGN_MODE_HTML:
+        _render_speaker_certificate_to_jpeg(request, person, event, certificate, output_path)
+    else:
+        if not certificate.speaker_upload_image:
+            raise ValueError("No uploaded speaker certificate image configured for this event.")
+        image = Image.open(certificate.speaker_upload_image.path)
+        draw = ImageDraw.Draw(image)
+        try:
+            title_font = ImageFont.truetype("arial.ttf", 34)
+            name_font = ImageFont.truetype("arial.ttf", 42)
+        except OSError:
+            title_font = ImageFont.load_default()
+            name_font = ImageFont.load_default()
+        draw.text((470, 365), _speaker_certificate_title(certificate), font=title_font, fill="black")
+        draw.text((520, 470), person.name, font=name_font, fill="black")
+        image.save(output_path)
+
+    profile = requirements['profile']
+    record, _ = SpeakerCertificate.objects.get_or_create(
+        event=event,
+        program_person=person,
+        defaults={
+            'profile': profile,
+            'issued_by': issued_by,
+        },
+    )
+    update_fields = []
+    relative_path = os.path.relpath(output_path, settings.MEDIA_ROOT).replace('\\', '/')
+    if record.generated_file.name != relative_path:
+        record.generated_file = relative_path
+        update_fields.append('generated_file')
+    if profile and record.profile_id != profile.id:
+        record.profile = profile
+        update_fields.append('profile')
+    if issued_by and record.issued_by_id != issued_by.id:
+        record.issued_by = issued_by
+        update_fields.append('issued_by')
+    if update_fields:
+        record.save(update_fields=update_fields)
+    return record, output_path
+
+
+def _speaker_certificate_rows(event, certificate, search_query=''):
+    people = (
+        ProgramPerson.objects.filter(
+            events=event,
+            item_roles__item__session__event=event,
+            item_roles__role__in=[ProgramItemFaculty.ROLE_SPEAKER, ProgramItemFaculty.ROLE_PRESENTER],
+        )
+        .select_related('profile')
+        .distinct()
+        .order_by('name')
+    )
+    if search_query:
+        people = people.filter(
+            Q(name__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(institution__icontains=search_query)
+            | Q(profile__email__icontains=search_query)
+        )
+    issued_map = {
+        row.program_person_id: row
+        for row in SpeakerCertificate.objects.filter(event=event).select_related('profile', 'program_person')
+    }
+    latest_email_log_map = {}
+    if speaker_certificate_email_log_table_ready():
+        for log in SpeakerCertificateEmailLog.objects.filter(event=event).select_related('sent_by').order_by('certificate_id', '-created_at'):
+            latest_email_log_map.setdefault(log.certificate_id, log)
+    rows = []
+    for person in people:
+        requirements = _speaker_certificate_requirements_met(person, event, certificate)
+        profile = requirements['profile']
+        issued_record = issued_map.get(person.id)
+        rows.append({
+            'person': person,
+            'profile': profile,
+            'participant': requirements['participant'],
+            'email': (profile.email if profile else '') or (person.email or ''),
+            'role_label': _speaker_role_labels(person, event),
+            'has_feedback': requirements['has_feedback'],
+            'has_kit': requirements['has_kit'],
+            'eligible': requirements['eligible'],
+            'issued_record': issued_record,
+            'latest_email_log': latest_email_log_map.get(issued_record.id) if issued_record else None,
+        })
+    return rows
 
 
 def generate_certificate(request, event_id):
@@ -6102,7 +6373,11 @@ def dashboard_certificate_center(request):
                 if design_mode not in dict(Certificate.DESIGN_MODE_CHOICES):
                     design_mode = Certificate.DESIGN_MODE_HTML
                 certificate.design_mode = design_mode
-                file_fields = ['upload_image', 'organizer_logo', 'co_organizer_logo', 'event_logo']
+                certificate.speaker_title = (request.POST.get('speaker_title') or '').strip() or None
+                certificate.speaker_body = (request.POST.get('speaker_body') or '').strip() or None
+                certificate.speaker_require_feedback = bool(request.POST.get('speaker_require_feedback'))
+                certificate.speaker_require_kit_issue = bool(request.POST.get('speaker_require_kit_issue'))
+                file_fields = ['upload_image', 'speaker_upload_image', 'organizer_logo', 'co_organizer_logo', 'event_logo']
                 for field_name in file_fields:
                     if request.POST.get(f'clear_{field_name}'):
                         setattr(certificate, field_name, None)
@@ -6118,6 +6393,68 @@ def dashboard_certificate_center(request):
                     'Updated certificate design assets from Certificate Center dashboard.',
                 )
                 messages.success(request, f'Certificate setup updated for {selected_event.name}.')
+
+            elif action == 'generate_speaker_certificate':
+                person = get_object_or_404(ProgramPerson, pk=request.POST.get('program_person_id'))
+                record, output_path = _generate_speaker_certificate_file(
+                    request,
+                    selected_event,
+                    person,
+                    certificate,
+                    issued_by=request.user,
+                )
+                dashboard_log_action(request, record, CHANGE, f'Generated speaker certificate for {person.name}.')
+                return FileResponse(
+                    open(output_path, 'rb'),
+                    as_attachment=True,
+                    filename=os.path.basename(output_path),
+                )
+
+            elif action == 'email_speaker_certificate':
+                person = get_object_or_404(ProgramPerson, pk=request.POST.get('program_person_id'))
+                record, output_path = _generate_speaker_certificate_file(
+                    request,
+                    selected_event,
+                    person,
+                    certificate,
+                    issued_by=request.user,
+                )
+                recipient_email = (record.profile.email if record.profile_id else '') or person.email
+                if not recipient_email:
+                    raise ValueError(f'{person.name} does not have an email address for certificate delivery.')
+                email_log = None
+                if speaker_certificate_email_log_table_ready():
+                    email_log = SpeakerCertificateEmailLog.objects.create(
+                        certificate=record,
+                        event=selected_event,
+                        person=person,
+                        email=recipient_email,
+                        status=SpeakerCertificateEmailLog.STATUS_QUEUED,
+                        sent_by=request.user if request.user.is_authenticated else None,
+                        message='Queued from Certificate Center speaker certificate section.',
+                    )
+                try:
+                    task = send_speaker_certificate_email.delay(
+                        record.id,
+                        log_id=email_log.id if email_log else None,
+                        sent_by_user_id=request.user.id if request.user.is_authenticated else None,
+                    )
+                except Exception as exc:
+                    if email_log:
+                        email_log.status = SpeakerCertificateEmailLog.STATUS_FAILED
+                        email_log.message = f'Could not queue email task: {exc}'
+                        email_log.save(update_fields=['status', 'message', 'updated_at'])
+                    raise
+                if email_log:
+                    email_log.task_id = getattr(task, 'id', '') or ''
+                    email_log.save(update_fields=['task_id', 'updated_at'])
+                dashboard_log_action(
+                    request,
+                    record,
+                    CHANGE,
+                    f'Queued speaker certificate email to {recipient_email}.',
+                )
+                messages.success(request, f'Speaker certificate email queued for {recipient_email}.')
 
             elif action == 'add_signatory':
                 name = (request.POST.get('signatory_name') or '').strip()
@@ -6199,6 +6536,7 @@ def dashboard_certificate_center(request):
     feedback_questions = FeedbackQuestion.objects.none()
     kit_rows_qs = RegistrationKit.objects.none()
     feedback_participant_ids = set()
+    speaker_rows = []
 
     if selected_event:
         certificate = Certificate.objects.filter(event=selected_event).prefetch_related('signatories').first()
@@ -6219,6 +6557,7 @@ def dashboard_certificate_center(request):
         feedback_participant_ids = set(
             FeedbackResponse.objects.filter(event=selected_event).values_list('participant_id', flat=True).distinct()
         )
+        speaker_rows = _speaker_certificate_rows(selected_event, certificate, search_query)
 
     page_obj = Paginator(kit_rows_qs, 15).get_page(request.GET.get('page'))
     for kit in page_obj.object_list:
@@ -6228,18 +6567,28 @@ def dashboard_certificate_center(request):
     signatory_count = signatories.count()
     html_assets_ready = False
     image_asset_ready = False
+    speaker_image_asset_ready = False
     certificate_ready = False
+    speaker_certificate_ready = False
     if certificate:
         html_assets_ready = bool(certificate.organizer_logo and certificate.event_logo and signatory_count > 0)
         image_asset_ready = bool(certificate.upload_image)
+        speaker_image_asset_ready = bool(certificate.speaker_upload_image)
         certificate_ready = (
             certificate.design_mode == Certificate.DESIGN_MODE_HTML and html_assets_ready
         ) or (
             certificate.design_mode == Certificate.DESIGN_MODE_IMAGE and image_asset_ready
         )
+        speaker_certificate_ready = (
+            certificate.design_mode == Certificate.DESIGN_MODE_HTML and html_assets_ready
+        ) or (
+            certificate.design_mode == Certificate.DESIGN_MODE_IMAGE and speaker_image_asset_ready
+        )
 
     issued_total = RegistrationKit.objects.filter(event=selected_event, status='issued').count() if selected_event else 0
     feedback_submitted_total = len(feedback_participant_ids) if selected_event else 0
+    issued_speaker_total = sum(1 for row in speaker_rows if row['issued_record'])
+    eligible_speaker_total = sum(1 for row in speaker_rows if row['eligible'])
 
     context = {
         'site_settings': site_settings,
@@ -6248,6 +6597,7 @@ def dashboard_certificate_center(request):
         'certificate': certificate,
         'signatories': signatories,
         'feedback_questions': feedback_questions,
+        'speaker_rows': speaker_rows,
         'question_types': FeedbackQuestion.QUESTION_TYPES,
         'page_obj': page_obj,
         'query_string': urlencode(query_params),
@@ -6259,11 +6609,15 @@ def dashboard_certificate_center(request):
             'certificate_ready': certificate_ready,
             'html_assets_ready': html_assets_ready,
             'image_asset_ready': image_asset_ready,
+            'speaker_image_asset_ready': speaker_image_asset_ready,
             'signatories': signatory_count,
             'feedback_questions': feedback_questions.count(),
             'issued_kits': issued_total,
             'feedback_submitted': feedback_submitted_total,
             'feedback_pending': max(issued_total - feedback_submitted_total, 0),
+            'speaker_certificate_ready': speaker_certificate_ready,
+            'eligible_speakers': eligible_speaker_total,
+            'issued_speaker_certificates': issued_speaker_total,
         },
     }
     return render(request, 'dashboard_certificate_center.html', context)

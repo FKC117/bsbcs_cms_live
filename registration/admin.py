@@ -1605,7 +1605,7 @@ class ThankYouEmailAdmin(admin.ModelAdmin):
 
 # Certificate admin starts ----------------------------------------------------#
 
-from .models import Certificate, CertificateSignatory
+from .models import Certificate, CertificateSignatory, SpeakerCertificate, SpeakerCertificateEmailLog
 
 
 class CertificateSignatoryInline(admin.TabularInline):
@@ -1621,15 +1621,48 @@ class CertificateAdmin(admin.ModelAdmin):
     list_display_links = ('id', 'event')
     fieldsets = (
         (None, {
-            'fields': ('event', 'design_mode', 'upload_image')
+            'fields': ('event', 'design_mode', 'upload_image', 'speaker_upload_image')
         }),
         ('HTML design logo overrides', {
             'fields': ('organizer_logo', 'co_organizer_logo', 'event_logo'),
             'description': 'Event logo is optional here. If left blank, the certificate uses the logo from the selected event.'
         }),
+        ('Speaker certificate', {
+            'fields': ('speaker_title', 'speaker_body', 'speaker_require_feedback', 'speaker_require_kit_issue'),
+        }),
     )
     inlines = [CertificateSignatoryInline]
 admin.site.register(Certificate, CertificateAdmin)
+
+
+@admin.register(SpeakerCertificate)
+class SpeakerCertificateAdmin(admin.ModelAdmin):
+    list_display = ('program_person', 'event', 'profile', 'issued_at', 'emailed_at', 'downloaded_at')
+    list_filter = ('event', 'issued_at', 'emailed_at')
+    search_fields = ('program_person__name', 'program_person__email', 'event__name', 'profile__email')
+
+
+@admin.register(SpeakerCertificateEmailLog)
+class SpeakerCertificateEmailLogAdmin(admin.ModelAdmin):
+    list_display = ('person', 'event', 'email', 'status', 'sent_by', 'sent_at', 'created_at')
+    list_filter = ('status', 'event', 'created_at')
+    search_fields = ('person__name', 'email', 'event__name', 'message', 'task_id')
+    readonly_fields = (
+        'certificate',
+        'event',
+        'person',
+        'email',
+        'status',
+        'task_id',
+        'message',
+        'sent_by',
+        'sent_at',
+        'created_at',
+        'updated_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 # Feedback Form Model Starts here----------------------------------------------------------------------------#
 from django.contrib import admin

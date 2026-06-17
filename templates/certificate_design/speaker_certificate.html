@@ -1,0 +1,147 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ speaker_title|default:"Certificate of Appreciation" }}</title>
+  {% if base_url %}
+  <base href="{{ base_url }}">{% endif %}
+  <link rel="stylesheet" href="{% static 'css/certificate_design.css' %}?v=20260519-42">
+</head>
+
+<body>
+  <main class="certificate-page{% if capture_mode %} certificate-capture{% endif %}">
+    <section class="certificate" aria-label="Speaker certificate">
+      <div class="top-band">
+        <div class="top-pattern">
+          <span class="stripe stripe-dark"></span>
+          <span class="stripe stripe-light"></span>
+          <span class="stripe stripe-dark"></span>
+          <span class="stripe stripe-light"></span>
+          <span class="block block-purple"></span>
+          <span class="block block-red"></span>
+          <span class="arc arc-green"></span>
+          <span class="semi semi-purple"></span>
+          <span class="circle circle-white"></span>
+        </div>
+      </div>
+
+      <div class="paper">
+        <div class="brand-logos">
+          {% if certificate and certificate.organizer_logo %}
+          <span class="logo-slot"><img src="{{ certificate.organizer_logo.url }}" alt="Organizer logo"></span>
+          {% elif site_settings and site_settings.logo %}
+          <span class="logo-slot"><img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'Organizer' }} logo"></span>
+          {% else %}
+          <span class="logo-slot logo-placeholder">BSBCS</span>
+          {% endif %}
+
+          {% if certificate and certificate.co_organizer_logo %}
+          <span class="logo-slot"><img src="{{ certificate.co_organizer_logo.url }}" alt="Co-organizer logo"></span>
+          {% endif %}
+        </div>
+
+        {% if certificate and certificate.event_logo %}
+        <span class="event-logo"><img src="{{ certificate.event_logo.url }}" alt="Event logo"></span>
+        {% elif event and event.event_logo %}
+        <span class="event-logo"><img src="{{ event.event_logo.url }}" alt="{{ event.name }} logo"></span>
+        {% else %}
+        <span class="event-logo logo-placeholder">BSBCS</span>
+        {% endif %}
+
+        <div class="certificate-content">
+          <h1>{{ speaker_title|default:"Certificate of Appreciation" }}</h1>
+          <p class="acknowledged">This Certificate Is Presented To</p>
+
+          <div class="recipient-name" data-fit-text data-max-size="45" data-min-size="18">{{ participant_name|default:"Sample Speaker" }}</div>
+
+          <div class="name-line"></div>
+
+          <p class="event-copy speaker-event-copy" data-fit-block data-max-size="24" data-min-size="12">{{ speaker_body|default:"In recognition of your invaluable contribution as a Guest Speaker." }}</p>
+
+          <div class="signatures signature-count-{{ signature_count|default:2 }}" style="--signature-count: {{ signature_count|default:2 }};">
+            {% for signatory in signatories %}
+            <div class="signature-block">
+              <div class="signature-image-slot">
+                {% if signatory.signature_url %}
+                <img src="{{ signatory.signature_url }}" alt="">
+                {% endif %}
+              </div>
+              <div class="signature-line"></div>
+              <p class="signature-copy" data-fit-block data-max-size="20" data-min-size="10">
+                {{ signatory.name }}{% if signatory.designation %}<br>{{ signatory.designation }}{% endif %}
+                {% if signatory.organization %}<br>{{ signatory.organization|linebreaksbr }}{% endif %}
+              </p>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-band">
+        <div class="bottom-pattern">
+          <span class="tile tile-purple"></span>
+          <span class="triangle triangle-green"></span>
+          <span class="tile tile-magenta"></span>
+          <span class="triangle triangle-red"></span>
+          <span class="quarter quarter-white"></span>
+          <span class="tile tile-lavender"></span>
+          <span class="triangle triangle-deep"></span>
+          <span class="triangle triangle-white"></span>
+          <span class="triangle triangle-red-up"></span>
+        </div>
+        <p class="contact">info.bsbcs@gmail.com | www.bsbcs.info</p>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const fitText = (element) => {
+        const certificate = element.closest(".certificate");
+        const baseWidth = certificate ? certificate.clientWidth : 1632;
+        const maxSize = Math.min(Number(element.dataset.maxSize || 54), baseWidth * 0.033);
+        const minSize = Math.max(Number(element.dataset.minSize || 16), baseWidth * 0.014);
+
+        element.textContent = element.textContent.trim().replace(/\s+/g, " ");
+        element.style.whiteSpace = "nowrap";
+        element.style.lineHeight = "1";
+        element.style.fontSize = `${maxSize}px`;
+        while (element.scrollWidth > element.clientWidth && parseFloat(element.style.fontSize) > minSize) {
+          element.style.fontSize = `${parseFloat(element.style.fontSize) - 0.5}px`;
+        }
+      };
+
+      const fitBlock = (element) => {
+        const certificate = element.closest(".certificate");
+        const baseWidth = certificate ? certificate.clientWidth : 1632;
+        const maxSize = Math.min(Number(element.dataset.maxSize || 20), baseWidth * 0.0122);
+        const minSize = Math.max(Number(element.dataset.minSize || 10), baseWidth * 0.0068);
+
+        element.style.fontSize = `${maxSize}px`;
+        while (
+          (element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth) &&
+          parseFloat(element.style.fontSize) > minSize
+        ) {
+          element.style.fontSize = `${parseFloat(element.style.fontSize) - 0.5}px`;
+        }
+      };
+
+      const fitAll = () => {
+        document.querySelectorAll("[data-fit-text]").forEach(fitText);
+        document.querySelectorAll("[data-fit-block]").forEach(fitBlock);
+      };
+
+      document.addEventListener("DOMContentLoaded", fitAll);
+      window.addEventListener("load", fitAll);
+      window.addEventListener("resize", fitAll);
+      if (document.fonts) {
+        document.fonts.ready.then(fitAll);
+      }
+      requestAnimationFrame(fitAll);
+    })();
+  </script>
+</body>
+
+</html>

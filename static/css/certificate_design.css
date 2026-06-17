@@ -203,6 +203,23 @@ h1 {
   width: 100%;
 }
 
+.speaker-event-copy {
+  top: 48.5%;
+  left: 18%;
+  right: 18%;
+  width: 64%;
+  height: 14%;
+  margin: 0 auto;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1.32;
+  letter-spacing: 0.06em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-wrap: pretty;
+}
+
 .event-copy sup {
   font-size: 58%;
   line-height: 0;

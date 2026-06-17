@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Speaker Certificate</title>
+</head>
+<body>
+    <h2>Your Speaker Certificate for {{ event.name }} {{ event.year }}</h2>
+
+    <p>Dear {{ person.name }},</p>
+
+    <p>Thank you for your contribution to <strong>{{ event.name }} {{ event.year }}</strong>.</p>
+
+    <p>Your speaker certificate is attached with this email.</p>
+
+    <p><strong>Event Details:</strong></p>
+    <ul>
+        <li>Event: {{ event.name }} {{ event.year }}</li>
+        <li>Date:
+            {% if event.start_date and event.end_date and event.start_date != event.end_date %}
+                {{ event.start_date }} to {{ event.end_date }}
+            {% else %}
+                {{ event.start_date }}
+            {% endif %}
+        </li>
+        {% if event.location %}
+            <li>Location: {{ event.location }}</li>
+        {% endif %}
+    </ul>
+
+    <p>Best regards,<br>
+    {{ event.name }} Organizing Committee</p>
+</body>
+</html>
