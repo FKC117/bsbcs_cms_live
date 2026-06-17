@@ -3072,6 +3072,12 @@ def _render_certificate_html_to_jpeg(template_name, context, output_path, captur
     html_path = render_dir / f"{output.stem}.html"
     png_path = render_dir / f"{output.stem}.png"
     chrome_profile = Path(tempfile.mkdtemp(prefix=f"{output.stem}_chrome_"))
+    chrome_home = Path(tempfile.mkdtemp(prefix=f"{output.stem}_home_"))
+    chrome_config = chrome_home / "config"
+    chrome_cache = chrome_home / "cache"
+    chrome_runtime = chrome_home / "runtime"
+    for path in (chrome_config, chrome_cache, chrome_runtime):
+        path.mkdir(parents=True, exist_ok=True)
     html_path.write_text(render_to_string(template_name, context), encoding='utf-8')
 
     chrome = _get_chrome_executable()
@@ -3087,7 +3093,10 @@ def _render_certificate_html_to_jpeg(template_name, context, output_path, captur
         "--disable-dev-shm-usage",
         "--disable-crash-reporter",
         "--disable-crashpad",
+        "--disable-breakpad",
         "--disable-features=Crashpad",
+        "--no-first-run",
+        "--no-default-browser-check",
         "--hide-scrollbars",
         "--allow-file-access-from-files",
         f"--user-data-dir={chrome_profile.resolve()}",
@@ -3095,7 +3104,12 @@ def _render_certificate_html_to_jpeg(template_name, context, output_path, captur
         f"--screenshot={png_path.resolve()}",
         file_url,
     ]
-    subprocess.run(command, check=True, timeout=30, cwd=str(settings.BASE_DIR))
+    env = os.environ.copy()
+    env["HOME"] = str(chrome_home.resolve())
+    env["XDG_CONFIG_HOME"] = str(chrome_config.resolve())
+    env["XDG_CACHE_HOME"] = str(chrome_cache.resolve())
+    env["XDG_RUNTIME_DIR"] = str(chrome_runtime.resolve())
+    subprocess.run(command, check=True, timeout=30, cwd=str(settings.BASE_DIR), env=env)
 
     image = Image.open(png_path).convert('RGB')
     image.save(output_path, 'JPEG', quality=95)
