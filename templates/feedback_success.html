@@ -2,55 +2,35 @@
 
 {% block title %}Thank You{% endblock %}
 
+{% block legacy_event_styles %}{% endblock %}
+
 {% block content %}
-<section class="min-h-screen bg-pink-100 py-20">
-  <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-lg-6 col-md-8">
-        <!-- Card Section -->
-        <div class="card shadow border-1 p-4 p-md-5 bg-white rounded">
-          <div class="card-body text-center">
-            <!-- Header Section -->
-            <h1 class="text-4xl font-bold text-pink-900 mb-4">Thank You!</h1>
-            <p class="text-lg text-gray-700 mb-5">Your feedback for <strong>{{ event.name }}</strong> has been recorded. We appreciate your input!</p>
+<section class="relative overflow-hidden bg-background py-12 sm:py-16">
+  <div class="absolute inset-x-0 top-0 h-56 bg-gradient-to-br from-bsbcs-green via-bsbcs-teal to-bsbcs-blue opacity-90"></div>
+  <div class="relative container-custom">
+    <div class="mx-auto max-w-3xl">
+      <div class="rounded-[2rem] border border-white/30 bg-white/95 px-6 py-10 text-center shadow-[0_28px_80px_rgba(15,23,42,0.16)] backdrop-blur sm:px-10">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-50 text-bsbcs-green ring-1 ring-green-100">
+          <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <div class="mt-5 text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Feedback Received</div>
+        <h1 class="mt-3 text-3xl font-black tracking-tight text-text-primary sm:text-4xl">Thank you for your response</h1>
+        <p class="mx-auto mt-4 max-w-2xl text-base font-semibold leading-7 text-text-secondary">
+          Your feedback for <strong>{{ event.name }} {{ event.year }}</strong> has been recorded successfully. We appreciate the time you took to share your experience with us.
+        </p>
 
-            <!-- Message Section -->
-            <div id="message-section" class="hidden mb-4">
-              <p id="message-text" class="text-lg"></p>
-            </div>
-
-            <!-- Button Section -->
-            <div class="flex justify-center space-x-4">
-              <a href="{% url 'index' %}" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
-                Back to Home
-              </a>
-              <a href="{% url 'registration:generate_certificate' event.id %}" class="btn btn-pink text-white font-bold py-2 px-5 rounded">
-                Download Certificate
-              </a>
-            </div>
-          </div>
+        <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <a href="{% url 'registration:home' event.id %}" class="inline-flex items-center justify-center rounded-2xl border border-line bg-white px-5 py-3 text-sm font-black text-text-primary transition hover:border-bsbcs-blue hover:text-bsbcs-blue">
+            Back to Event
+          </a>
+          <a href="{% url 'registration:generate_certificate' event.id %}" class="inline-flex items-center justify-center rounded-2xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white transition hover:bg-bsbcs-navy">
+            Download Certificate
+          </a>
         </div>
       </div>
     </div>
   </div>
 </section>
-
-<!-- Custom Styles -->
-<style>
-  body {
-    font-family: 'Arial', sans-serif;
-    background-color: #fce4ec;
-  }
-  .btn-pink {
-    background-color: #ec407a;
-    border-color: #ec407a;
-  }
-  .btn-pink:hover {
-    background-color: #d81b60;
-    border-color: #d81b60;
-  }
-  .hidden {
-    display: none;
-  }
-</style>
 {% endblock %}

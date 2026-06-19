@@ -3487,12 +3487,23 @@ def event_feedback_view(request, event_id):
         return render(request, 'feedback_access_denied.html', {'event': event})
 
     questions = event.feedback_questions.all()  # type: ignore[attr-defined]
+    for question in questions:
+        if question.question_type == FeedbackQuestion.RADIO:
+            question.display_columns = question.get_columns() or ['Very satisfied', 'Satisfied', 'Neutral', 'Needs improvement']
+            question.display_rows = []
+        elif question.question_type == FeedbackQuestion.MATRIX:
+            question.display_rows = question.get_rows() or ['Venue', 'Food', 'Sessions']
+            question.display_columns = question.get_columns() or ['1', '2', '3', '4', '5']
+        else:
+            question.display_rows = []
+            question.display_columns = []
 
     if request.method == 'POST':
         for question in questions:
             response_key = f"response_{question.id}"
             if question.question_type == 'matrix':
-                for index, row in enumerate(question.get_rows(), start=1):
+                matrix_rows = getattr(question, 'display_rows', None) or question.get_rows()
+                for index, row in enumerate(matrix_rows, start=1):
                     row_response = request.POST.get(f"{response_key}_{index}", None)
                     if row_response:
                         FeedbackResponse.objects.create(
