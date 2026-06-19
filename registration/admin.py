@@ -1539,7 +1539,7 @@ admin.site.register(UploadNoteBook, UploadNoteBookAdmin)
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 from django.contrib import messages
-from .models import ThankYouEmail, RegistrationKit
+from .models import ThankYouEmail, ThankYouEmailLog, RegistrationKit
 
 @admin.register(ThankYouEmail)
 class ThankYouEmailAdmin(admin.ModelAdmin):
@@ -1600,6 +1600,27 @@ class ThankYouEmailAdmin(admin.ModelAdmin):
         self.message_user(request, f"Successfully sent {count} thank-you emails.", messages.SUCCESS)
 
     send_thank_you_emails.short_description = "Send Thank You Emails"
+
+
+@admin.register(ThankYouEmailLog)
+class ThankYouEmailLogAdmin(admin.ModelAdmin):
+    list_display = ('participant', 'event', 'email', 'status', 'sent_by', 'sent_at', 'created_at')
+    list_filter = ('status', 'event', 'created_at')
+    search_fields = ('participant__name', 'participant__email', 'event__name', 'email', 'message', 'task_id')
+    readonly_fields = (
+        'thank_you_email',
+        'event',
+        'participant',
+        'email',
+        'status',
+        'task_id',
+        'message',
+        'sent_by',
+        'sent_at',
+        'created_at',
+        'updated_at',
+    )
+
 
 #Thank You Email Admin Starts--------------------------------------------------#
 

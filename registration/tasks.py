@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
-from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog
+from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, ThankYouEmailLog
 
 
 speaker_certificate_celery_logger = logging.getLogger('speaker_certificate_celery')
@@ -91,36 +91,76 @@ def send_email_task(
     )
 
 
+def thank_you_email_log_table_ready():
+    try:
+        return ThankYouEmailLog._meta.db_table in connection.introspection.table_names()
+    except Exception:
+        return False
+
+
+def _update_thank_you_email_log(log_id, **fields):
+    if not log_id or not thank_you_email_log_table_ready():
+        return
+    ThankYouEmailLog.objects.filter(pk=log_id).update(**fields, updated_at=timezone.now())
+
+
 @shared_task(bind=True)
-def send_thank_you_email_task(self, thank_you_email_id):
+def send_thank_you_email_task(self, thank_you_email_id, log_id=None, sent_by_user_id=None, force_resend=False):
     from .models import ThankYouEmail
 
     try:
         thank_you_email = ThankYouEmail.objects.select_related(
+            'registration_kit__event',
             'registration_kit__payment_status__participant'
         ).get(pk=thank_you_email_id)
     except ThankYouEmail.DoesNotExist:
+        _update_thank_you_email_log(log_id, status=ThankYouEmailLog.STATUS_FAILED, message='Thank-you email record not found.')
         return {'status': 'missing'}
 
-    if thank_you_email.email_sent or thank_you_email.registration_kit.status != 'issued':
+    if thank_you_email.registration_kit.status != 'issued':
+        _update_thank_you_email_log(
+            log_id,
+            status=ThankYouEmailLog.STATUS_SKIPPED,
+            message='Thank-you email skipped because the kit is no longer issued.',
+        )
+        return {'status': 'skipped'}
+
+    if thank_you_email.email_sent and not force_resend:
+        _update_thank_you_email_log(
+            log_id,
+            status=ThankYouEmailLog.STATUS_SKIPPED,
+            message='Thank-you email skipped because it was already sent.',
+        )
         return {'status': 'skipped'}
 
     participant = thank_you_email.registration_kit.payment_status.participant
     if not participant or not participant.email:
+        _update_thank_you_email_log(log_id, status=ThankYouEmailLog.STATUS_FAILED, message='Recipient email is missing.')
         return {'status': 'missing_recipient'}
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv('EMAIL_HOST_USER')
-    result = _send_email(
-        subject=thank_you_email.subject,
-        body=thank_you_email.body,
-        from_email=from_email,
-        recipient_list=[participant.email],
-    )
+    try:
+        result = _send_email(
+            subject=thank_you_email.subject,
+            body=thank_you_email.body,
+            from_email=from_email,
+            recipient_list=[participant.email],
+        )
+    except Exception as exc:
+        _update_thank_you_email_log(log_id, status=ThankYouEmailLog.STATUS_FAILED, message=str(exc))
+        raise
 
     if result:
+        sent_at = timezone.now()
         thank_you_email.email_sent = True
-        thank_you_email.sent_at = timezone.now()
+        thank_you_email.sent_at = sent_at
         thank_you_email.save(update_fields=['email_sent', 'sent_at'])
+        _update_thank_you_email_log(
+            log_id,
+            status=ThankYouEmailLog.STATUS_SENT,
+            sent_at=sent_at,
+            message='Thank-you email resent successfully.' if force_resend else 'Thank-you email sent successfully.',
+        )
 
     return {'status': 'sent' if result else 'failed', 'result': result}
 

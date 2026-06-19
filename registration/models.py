@@ -358,6 +358,37 @@ class ThankYouEmail(models.Model):
         return f"Thank You Email for {self.registration_kit.payment_status.participant.name}"
 
 
+class ThankYouEmailLog(models.Model):
+    STATUS_QUEUED = 'queued'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    thank_you_email = models.ForeignKey(ThankYouEmail, on_delete=models.CASCADE, related_name='email_logs')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='thank_you_email_logs')
+    participant = models.ForeignKey('Participant', on_delete=models.CASCADE, related_name='thank_you_email_logs')
+    email = models.EmailField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_QUEUED)
+    task_id = models.CharField(max_length=255, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='thank_you_email_logs')
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.participant.name} - thank-you email - {self.status}"
+
+
 # Thank You Mail Model Starts Here----------------------------------------------------------------------------#
 
 

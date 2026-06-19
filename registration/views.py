@@ -62,9 +62,11 @@ from .bulk_email_services import (
 from .tasks import (
     participant_email_log_table_ready,
     speaker_certificate_email_log_table_ready,
+    thank_you_email_log_table_ready,
     send_email_task,
     send_manual_participant_account_email,
     send_participant_approval_email,
+    send_thank_you_email_task,
     send_speaker_certificate_email,
     send_pending_bulk_email_campaign,
 )
@@ -3040,6 +3042,110 @@ def _speaker_certificate_requirements_met(person, event, certificate):
     }
 
 
+def _participant_certificate_requirements_met(participant, event):
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+    registration_kit = RegistrationKit.objects.filter(
+        payment_status__participant=participant,
+        event=event,
+    ).select_related('payment_status').first()
+    has_feedback = FeedbackResponse.objects.filter(event=event, participant=participant).exists()
+    is_approved = bool(participant and participant.approved)
+    payment_completed = bool(payment_status and payment_status.status in SUCCESS_PAYMENT_STATUSES)
+    kit_issued = bool(registration_kit and registration_kit.status == 'issued')
+    eligible = all([is_approved, payment_completed, kit_issued, has_feedback])
+    return {
+        'payment_status': payment_status,
+        'registration_kit': registration_kit,
+        'is_approved': is_approved,
+        'payment_completed': payment_completed,
+        'kit_issued': kit_issued,
+        'has_feedback': has_feedback,
+        'eligible': eligible,
+    }
+
+
+def _queue_thank_you_email_for_kit(kit, event, subject, body, sent_by=None, force_resend=False):
+    participant = kit.payment_status.participant if kit.payment_status_id else None
+    recipient_email = participant.email if participant and participant.email else ''
+    if not recipient_email:
+        return 'missing_email', None
+
+    thank_you_email, _ = ThankYouEmail.objects.get_or_create(
+        registration_kit=kit,
+        defaults={
+            'subject': subject,
+            'body': body,
+        },
+    )
+
+    update_fields = []
+    if thank_you_email.subject != subject:
+        thank_you_email.subject = subject
+        update_fields.append('subject')
+    if thank_you_email.body != body:
+        thank_you_email.body = body
+        update_fields.append('body')
+    if update_fields:
+        thank_you_email.save(update_fields=update_fields)
+
+    if thank_you_email.email_sent and not force_resend:
+        return 'already_sent', thank_you_email
+
+    email_log = None
+    if thank_you_email_log_table_ready():
+        email_log = ThankYouEmailLog.objects.create(
+            thank_you_email=thank_you_email,
+            event=event,
+            participant=participant,
+            email=recipient_email,
+            status=ThankYouEmailLog.STATUS_QUEUED,
+            sent_by=sent_by if getattr(sent_by, 'is_authenticated', False) else None,
+            message='Queued for resend from Certificate Center participant thank-you section.' if force_resend else 'Queued from Certificate Center participant thank-you section.',
+        )
+    try:
+        task = send_thank_you_email_task.delay(
+            thank_you_email.id,
+            log_id=email_log.id if email_log else None,
+            sent_by_user_id=sent_by.id if getattr(sent_by, 'is_authenticated', False) else None,
+            force_resend=force_resend,
+        )
+    except Exception as exc:
+        if email_log:
+            email_log.status = ThankYouEmailLog.STATUS_FAILED
+            email_log.message = f'Could not queue email task: {exc}'
+            email_log.save(update_fields=['status', 'message', 'updated_at'])
+        raise
+    if email_log:
+        email_log.task_id = getattr(task, 'id', '') or ''
+        email_log.save(update_fields=['task_id', 'updated_at'])
+    return 'queued', thank_you_email
+
+
+def _queue_thank_you_emails_for_kits(kits, event, subject, body, sent_by=None, force_resend=False):
+    counts = {
+        'queued': 0,
+        'already_sent': 0,
+        'missing_email': 0,
+        'failed': 0,
+    }
+    for kit in kits:
+        try:
+            result, _ = _queue_thank_you_email_for_kit(
+                kit,
+                event,
+                subject,
+                body,
+                sent_by=sent_by,
+                force_resend=force_resend,
+            )
+        except Exception:
+            counts['failed'] += 1
+            continue
+        if result in counts:
+            counts[result] += 1
+    return counts
+
+
 def _get_chrome_executable():
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -3289,28 +3395,40 @@ def _speaker_certificate_rows(event, certificate, search_query=''):
 
 
 def generate_certificate(request, event_id):
-    # Fetch the participant details for the current user and event
     participant = get_object_or_404(Participant, user=request.user, event_id=event_id)
+    event = get_object_or_404(Event, id=event_id)
+    requirements = _participant_certificate_requirements_met(participant, event)
 
-    # Fetch the registration kit for the participant
-    registration_kit = get_object_or_404(RegistrationKit, payment_status__participant=participant, event_id=event_id)
+    if not requirements['is_approved']:
+        return JsonResponse({
+            'success': False,
+            'error': 'Your registration for this event has not been approved yet.',
+        }, status=403)
 
-    # Check if the registration kit is issued
-    if registration_kit.status != 'issued':
+    if not requirements['payment_completed']:
+        return JsonResponse({
+            'success': False,
+            'error': 'Your payment is not completed yet.',
+        }, status=403)
+
+    registration_kit = requirements['registration_kit']
+    if not requirements['kit_issued'] or not registration_kit:
         return JsonResponse({
             'success': False,
             'error': 'Your registration kit has not been issued yet.',
-        }, status=400)
+        }, status=403)
+
+    if not requirements['has_feedback']:
+        return JsonResponse({
+            'success': False,
+            'error': 'Please submit your feedback form before downloading the certificate.',
+        }, status=403)
 
     participant_name = participant.name
-
-    # Fetch the certificate template for the event
-    event = get_object_or_404(Event, id=event_id)
-    certificate = get_object_or_404(Certificate, event=event)  # Fetch certificate for the event
+    certificate = get_object_or_404(Certificate, event=event)
     output_filename = _certificate_output_filename(participant_name)
     output_path = os.path.join(settings.MEDIA_ROOT, 'certificates', output_filename)
 
-    # Ensure the output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     try:
@@ -3354,48 +3472,40 @@ from .models import Event, Participant, FeedbackQuestion, FeedbackResponse, Regi
 
 @login_required
 def event_feedback_view(request, event_id):
-    # Get the event
     event = get_object_or_404(Event, id=event_id)
 
-    # check if the event is over
     if event.event_status != 'closed':
         return HttpResponseForbidden("Feedback for this event is not available now.")
 
-    # Check if the logged-in user has a Registration Kit issued for this event
-    try:
-        registration_kit = RegistrationKit.objects.get(
-            payment_status__participant__user=request.user,  # Check if the logged-in user is linked to the participant
-            event=event,
-            status='issued'  # Ensure the registration kit is marked as issued
-        )
-    except RegistrationKit.DoesNotExist:
-        # Redirect non-eligible users (no issued registration kit) to an error or informational page
+    participant = Participant.objects.filter(user=request.user, event=event).first()
+    if not participant:
         return render(request, 'feedback_access_denied.html', {'event': event})
 
-    # Get all feedback questions for the event
+    requirements = _participant_certificate_requirements_met(participant, event)
+    registration_kit = requirements['registration_kit']
+    if not requirements['is_approved'] or not requirements['payment_completed'] or not requirements['kit_issued'] or not registration_kit:
+        return render(request, 'feedback_access_denied.html', {'event': event})
+
     questions = event.feedback_questions.all()  # type: ignore[attr-defined]
 
     if request.method == 'POST':
-        # Save feedback responses for the confirmed participant
         for question in questions:
             response_key = f"response_{question.id}"
             if question.question_type == 'matrix':
-                # Handle matrix-based responses
                 for index, row in enumerate(question.get_rows(), start=1):
                     row_response = request.POST.get(f"{response_key}_{index}", None)
                     if row_response:
                         FeedbackResponse.objects.create(
-                            participant=registration_kit.payment_status.participant,  # Associate the feedback with the participant
+                            participant=registration_kit.payment_status.participant,
                             event=event,
                             question=question,
                             response=f"{row}: {row_response}"
                         )
             else:
-                # Handle text and radio responses
                 user_response = request.POST.get(response_key, None)
                 if user_response:
                     FeedbackResponse.objects.create(
-                        participant=registration_kit.payment_status.participant,  # Associate the feedback with the participant
+                        participant=registration_kit.payment_status.participant,
                         event=event,
                         question=question,
                         response=user_response
@@ -6623,6 +6733,61 @@ def dashboard_certificate_center(request):
                     question.event.remove(selected_event)
                 messages.success(request, 'Feedback question removed from this event.')
 
+            elif action == 'save_thank_you_template':
+                subject = (request.POST.get('thank_you_subject') or '').strip()
+                body = (request.POST.get('thank_you_body') or '').strip()
+                if not subject or not body:
+                    raise ValueError('Thank-you email subject and body are required before saving.')
+                selected_event.email_subject = subject
+                selected_event.email_body = body
+                selected_event.save(update_fields=['email_subject', 'email_body', 'updated_at'])
+                dashboard_log_action(request, selected_event, CHANGE, 'Updated thank-you email template from Certificate Center dashboard.')
+                messages.success(request, f'Thank-you event email saved for {selected_event.name}.')
+
+            elif action in ('send_selected_thank_you', 'resend_selected_thank_you'):
+                subject = (selected_event.email_subject or '').strip()
+                body = (selected_event.email_body or '').strip()
+                if not subject or not body:
+                    raise ValueError('Save the event email first before sending or resending participant thank-you emails.')
+
+                selected_kit_ids = [
+                    int(value) for value in request.POST.getlist('selected_kit_ids')
+                    if str(value).strip().isdigit()
+                ]
+                if not selected_kit_ids:
+                    raise ValueError('Select at least one participant before sending or resending emails.')
+
+                selected_kits = list(
+                    RegistrationKit.objects.select_related('payment_status__participant').filter(
+                        event=selected_event,
+                        status='issued',
+                        id__in=selected_kit_ids,
+                    )
+                )
+                if not selected_kits:
+                    raise ValueError('No eligible issued-kit participants were found for the selected action.')
+
+                force_resend = action == 'resend_selected_thank_you'
+                counts = _queue_thank_you_emails_for_kits(
+                    selected_kits,
+                    selected_event,
+                    subject,
+                    body,
+                    sent_by=request.user,
+                    force_resend=force_resend,
+                )
+                action_label = 'resent' if force_resend else 'sent'
+                dashboard_log_action(
+                    request,
+                    selected_event,
+                    CHANGE,
+                    f'Participant thank-you emails {action_label} from Certificate Center. queued={counts["queued"]}, already_sent={counts["already_sent"]}, missing_email={counts["missing_email"]}, failed={counts["failed"]}',
+                )
+                messages.success(
+                    request,
+                    f'Participant thank-you email action complete. Queued: {counts["queued"]}, already sent: {counts["already_sent"]}, missing email: {counts["missing_email"]}, failed: {counts["failed"]}.',
+                )
+
             else:
                 messages.error(request, 'Choose a valid certificate action.')
         except Exception as exc:
@@ -6632,6 +6797,8 @@ def dashboard_certificate_center(request):
             redirect_url = f"{redirect_url}#signatories"
         elif action in ('add_question', 'remove_question'):
             redirect_url = f"{redirect_url}#feedback"
+        elif action in ('save_thank_you_template', 'send_selected_thank_you', 'resend_selected_thank_you'):
+            redirect_url = f"{redirect_url}#thank-you-email"
         return redirect(redirect_url)
 
     certificate = None
@@ -6639,6 +6806,8 @@ def dashboard_certificate_center(request):
     feedback_questions = FeedbackQuestion.objects.none()
     kit_rows_qs = RegistrationKit.objects.none()
     feedback_participant_ids = set()
+    thank_you_email_records = {}
+    thank_you_latest_log_map = {}
     speaker_rows = []
 
     if selected_event:
@@ -6660,12 +6829,21 @@ def dashboard_certificate_center(request):
         feedback_participant_ids = set(
             FeedbackResponse.objects.filter(event=selected_event).values_list('participant_id', flat=True).distinct()
         )
+        thank_you_email_records = {
+            row.registration_kit_id: row
+            for row in ThankYouEmail.objects.filter(registration_kit__event=selected_event).select_related('registration_kit')
+        }
+        if thank_you_email_log_table_ready():
+            for log in ThankYouEmailLog.objects.filter(event=selected_event).select_related('sent_by').order_by('thank_you_email_id', '-created_at'):
+                thank_you_latest_log_map.setdefault(log.thank_you_email_id, log)
         speaker_rows = _speaker_certificate_rows(selected_event, certificate, search_query)
 
     page_obj = Paginator(kit_rows_qs, 15).get_page(request.GET.get('page'))
     for kit in page_obj.object_list:
         participant = kit.payment_status.participant
         kit.feedback_submitted = participant.id in feedback_participant_ids
+        kit.thank_you_email = thank_you_email_records.get(kit.id)
+        kit.latest_thank_you_log = thank_you_latest_log_map.get(kit.thank_you_email.id) if getattr(kit, 'thank_you_email', None) else None
 
     signatory_count = signatories.count()
     html_assets_ready = False
@@ -6690,6 +6868,9 @@ def dashboard_certificate_center(request):
 
     issued_total = RegistrationKit.objects.filter(event=selected_event, status='issued').count() if selected_event else 0
     feedback_submitted_total = len(feedback_participant_ids) if selected_event else 0
+    thank_you_total = len(thank_you_email_records) if selected_event else 0
+    thank_you_sent_total = sum(1 for row in thank_you_email_records.values() if row.email_sent) if selected_event else 0
+    thank_you_recipients_total = sum(1 for kit in RegistrationKit.objects.select_related('payment_status__participant').filter(event=selected_event, status='issued') if kit.payment_status.participant and kit.payment_status.participant.email) if selected_event else 0
     issued_speaker_total = sum(1 for row in speaker_rows if row['issued_record'])
     eligible_speaker_total = sum(1 for row in speaker_rows if row['eligible'])
 
@@ -6708,6 +6889,8 @@ def dashboard_certificate_center(request):
             'event': str(selected_event.id) if selected_event else '',
             'q': search_query,
         },
+        'thank_you_subject': selected_event.email_subject if selected_event and selected_event.email_subject else '',
+        'thank_you_body': selected_event.email_body if selected_event and selected_event.email_body else '',
         'totals': {
             'certificate_ready': certificate_ready,
             'html_assets_ready': html_assets_ready,
@@ -6718,6 +6901,10 @@ def dashboard_certificate_center(request):
             'issued_kits': issued_total,
             'feedback_submitted': feedback_submitted_total,
             'feedback_pending': max(issued_total - feedback_submitted_total, 0),
+            'thank_you_recipients': thank_you_recipients_total,
+            'thank_you_records': thank_you_total,
+            'thank_you_sent': thank_you_sent_total,
+            'thank_you_pending': max(thank_you_recipients_total - thank_you_sent_total, 0),
             'speaker_certificate_ready': speaker_certificate_ready,
             'eligible_speakers': eligible_speaker_total,
             'issued_speaker_certificates': issued_speaker_total,
