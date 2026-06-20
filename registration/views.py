@@ -4592,9 +4592,38 @@ def global_dashboard(request):
     event_metrics = build_event_metrics(events, event_filter)
     selected_event = get_dashboard_scoped_events(events, event_filter).first() if event_filter else None
     event_report = build_event_report(selected_event) if selected_event else None
+    executive_member_summary = _executive_member_dashboard_summary(selected_event) if selected_event else None
 
     if request.method == 'POST':
         dashboard_action = (request.POST.get('dashboard_action') or '').strip()
+        if dashboard_action == 'register_executive_members':
+            if not selected_event:
+                messages.error(request, 'Select an event first to register executive members.')
+            else:
+                results = _register_executive_members_for_event(request, selected_event)
+                messages.success(
+                    request,
+                    f"Executive member sync finished for {selected_event.name}. "
+                    f"Created {results['created']}, updated {results['updated']}, "
+                    f"invoice emails queued {results['email_queued']}."
+                )
+                if results['skipped_paid']:
+                    messages.warning(request, f"{results['skipped_paid']} existing paid registration(s) were left unchanged for manual review.")
+                if results['skipped_missing_profile']:
+                    messages.warning(request, f"{results['skipped_missing_profile']} executive member(s) were skipped because profile/email/phone data is incomplete.")
+                if results['skipped_already_synced']:
+                    messages.info(request, f"{results['skipped_already_synced']} executive member(s) were already synced for this event and were skipped.")
+                if results['email_failed']:
+                    messages.warning(request, f"{results['email_failed']} confirmation email(s) could not be queued. Check Celery or email settings.")
+            redirect_params = {}
+            if event_filter:
+                redirect_params['event'] = event_filter
+            if event_status_filter:
+                redirect_params['event_status'] = event_status_filter
+            redirect_url = reverse('global_dashboard')
+            if redirect_params:
+                redirect_url = f"{redirect_url}?{urlencode(redirect_params)}"
+            return redirect(redirect_url)
         if dashboard_action == 'export_event_report_pdf':
             if not selected_event or not event_report:
                 messages.error(request, 'Select an event first to export the event report PDF.')
@@ -4664,6 +4693,7 @@ def global_dashboard(request):
         },
         'selected_event': selected_event,
         'event_report': event_report,
+        'executive_member_summary': executive_member_summary,
         'operations': operations,
         'current_filters': {
             'event': event_filter,
@@ -4921,6 +4951,193 @@ def _approve_dashboard_participant(request, participant):
         )
 
     return payment_status, email_queued
+
+
+
+def _executive_member_matches_event_participant(event, member):
+    profile = getattr(member, 'user_profile', None)
+    if not profile:
+        return None
+    user = getattr(profile, 'user', None)
+    email = (getattr(profile, 'email', '') or '').strip()
+    phone = (getattr(profile, 'phone', '') or '').strip()
+
+    participant_qs = Participant.objects.filter(event=event)
+    lookup = Q()
+    if user:
+        lookup |= Q(user=user)
+    if email:
+        lookup |= Q(email__iexact=email)
+    if phone:
+        lookup |= Q(phone=phone)
+    if not lookup:
+        return None
+    return participant_qs.filter(lookup).select_related('payment_statuses', 'department').first()
+
+
+def _executive_member_sync_needed(event, participant):
+    if not participant:
+        return True
+    if not participant.approved or participant.denied:
+        return True
+
+    payment_status = getattr(participant, 'payment_statuses', None)
+    if not payment_status:
+        return True
+    if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+        return True
+    if (payment_status.amount or 0) != 0:
+        return True
+    if not payment_status.invoice or not payment_status.qr_token or not payment_status.qr_code:
+        return True
+    if not RegistrationKit.objects.filter(event=event, payment_status=payment_status).exists():
+        return True
+    return False
+
+
+def _executive_member_dashboard_summary(event):
+    from website.models import Member
+
+    executive_members = Member.objects.filter(
+        approval_status='approved',
+        is_active_member=True,
+        is_executive_member=True,
+    ).select_related('user_profile__user').order_by('user_profile__name')
+
+    eligible_total = executive_members.count()
+    registered_total = 0
+    synced_total = 0
+    pending_total = 0
+
+    for member in executive_members:
+        participant = _executive_member_matches_event_participant(event, member)
+        sync_needed = _executive_member_sync_needed(event, participant)
+        if participant:
+            registered_total += 1
+        if sync_needed:
+            pending_total += 1
+        else:
+            synced_total += 1
+
+    return {
+        'eligible_total': eligible_total,
+        'registered_total': registered_total,
+        'synced_total': synced_total,
+        'pending_total': pending_total,
+    }
+
+
+def _register_executive_members_for_event(request, event):
+    from website.models import Member
+
+    executive_members = Member.objects.filter(
+        approval_status='approved',
+        is_active_member=True,
+        is_executive_member=True,
+    ).select_related('user_profile__user').prefetch_related('specialties').order_by('user_profile__name')
+
+    results = {
+        'created': 0,
+        'updated': 0,
+        'skipped_paid': 0,
+        'skipped_missing_profile': 0,
+        'skipped_already_synced': 0,
+        'email_queued': 0,
+        'email_failed': 0,
+    }
+
+    for member in executive_members:
+        profile = getattr(member, 'user_profile', None)
+        user = getattr(profile, 'user', None) if profile else None
+        if not profile or not user or not profile.email or not profile.phone:
+            results['skipped_missing_profile'] += 1
+            continue
+
+        participant = _executive_member_matches_event_participant(event, member)
+        existing_payment_status = getattr(participant, 'payment_statuses', None) if participant else None
+        if existing_payment_status and existing_payment_status.status in SUCCESS_PAYMENT_STATUSES and (existing_payment_status.amount or 0) > 0:
+            results['skipped_paid'] += 1
+            continue
+        if not _executive_member_sync_needed(event, participant):
+            results['skipped_already_synced'] += 1
+            continue
+
+        department_name = get_previous_participant_department_name(profile.email, event)
+        if not department_name:
+            first_specialty = member.specialties.first()
+            department_name = first_specialty.name if first_specialty else 'Executive Committee'
+        department = get_or_create_participant_department(event, department_name)
+
+        if participant is None:
+            participant = Participant.objects.create(
+                user=user,
+                event=event,
+                registration_type='member',
+                name=profile.name,
+                degree=(member.position or 'Executive Member')[:50],
+                year_of_graduation=0,
+                department=department,
+                organization=(member.institution or 'BSBCS')[:100],
+                email=profile.email,
+                phone=profile.phone,
+                country=profile.country or 'Bangladesh',
+                BMDC_registration_number='',
+                approved=True,
+                denied=False,
+            )
+            dashboard_log_action(request, participant, ADDITION, 'Created executive member participant from Global Dashboard.')
+            results['created'] += 1
+        else:
+            participant.user = user
+            participant.registration_type = 'member'
+            participant.name = profile.name
+            participant.degree = (member.position or participant.degree or 'Executive Member')[:50]
+            participant.department = participant.department if participant.department_id else department
+            participant.organization = (member.institution or participant.organization or 'BSBCS')[:100]
+            participant.email = profile.email
+            participant.phone = profile.phone
+            participant.country = profile.country or participant.country or 'Bangladesh'
+            participant.approved = True
+            participant.denied = False
+            participant.save(update_fields=['user', 'registration_type', 'name', 'degree', 'department', 'organization', 'email', 'phone', 'country', 'approved', 'denied'])
+            dashboard_log_action(request, participant, CHANGE, 'Updated executive member participant from Global Dashboard.')
+            results['updated'] += 1
+
+        payment_status, _ = PaymentStatus.objects.get_or_create(
+            participant=participant,
+            event=event,
+            defaults={
+                'merchant_invoice_number': f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}",
+                'amount': 0,
+                'status': 'completed',
+            }
+        )
+
+        payment_status.merchant_invoice_number = f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}"
+        payment_status.amount = 0
+        payment_status.status = 'completed'
+        payment_status.email_sent = False
+        payment_status.save()
+        RegistrationKit.objects.get_or_create(
+            event=event,
+            payment_status=payment_status,
+            defaults={'status': 'not_issued'},
+        )
+        dashboard_log_action(request, payment_status, CHANGE, 'Marked executive member event registration as complimentary and completed from Global Dashboard.')
+
+        _generate_event_payment_invoice(payment_status)
+
+        queued = _queue_dashboard_participant_email(
+            request,
+            participant,
+            ParticipantEmailLog.TYPE_FREE_CONFIRMATION,
+        )
+        if queued:
+            results['email_queued'] += 1
+        else:
+            results['email_failed'] += 1
+
+    return results
 
 
 def _participant_dashboard_status(participant):

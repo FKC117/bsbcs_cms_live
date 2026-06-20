@@ -18,7 +18,7 @@ from registration.models import (
 from registration.forms import ProgramSessionBuilderForm
 from registration.pdf_utils import generate_invoice
 from registration.qr_utils import registration_qr_payload
-from website.models import MembershipPayment, MembershipType
+from website.models import Member, MembershipPayment, MembershipType
 
 class ProgramSessionBuilderTests(TestCase):
 
@@ -194,6 +194,61 @@ class ProgramSessionBuilderTests(TestCase):
             response,
             f"{reverse('dashboard_abstract_center')}?{urlencode({'event': self.event.id, 'status': 'pending', 'q': pending_abstract.title}).replace('&', '&amp;')}",
         )
+
+    def test_global_dashboard_registers_executive_members_with_completed_payment_and_invoice(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Executive Member',
+            email='user@test.com',
+            phone='01700000099',
+            country='Bangladesh',
+        )
+        member = Member.objects.create(
+            user_profile=profile,
+            institution='BSBCS',
+            position='Secretary',
+            approval_status='approved',
+            is_active_member=True,
+            is_executive_member=True,
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            f"{reverse('global_dashboard')}?event={self.event.id}",
+            {'dashboard_action': 'register_executive_members'},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        participant = Participant.objects.get(event=self.event, email='user@test.com')
+        self.assertTrue(participant.approved)
+        self.assertEqual(participant.registration_type, 'member')
+        self.assertEqual(participant.organization, 'BSBCS')
+
+        payment_status = PaymentStatus.objects.get(participant=participant, event=self.event)
+        self.assertEqual(payment_status.status, 'completed')
+        self.assertEqual(float(payment_status.amount or 0), 0.0)
+        self.assertTrue(payment_status.merchant_invoice_number.startswith(f'EC-FREE-{self.event.id}-{participant.id}-'))
+        self.assertTrue(bool(payment_status.invoice))
+        self.assertTrue(bool(payment_status.qr_token))
+        self.assertTrue(bool(payment_status.qr_code))
+        self.assertTrue(RegistrationKit.objects.filter(event=self.event, payment_status=payment_status).exists())
+
+        original_invoice_number = payment_status.merchant_invoice_number
+        original_qr_token = payment_status.qr_token
+
+        second_response = self.client.post(
+            f"{reverse('global_dashboard')}?event={self.event.id}",
+            {'dashboard_action': 'register_executive_members'},
+            follow=True,
+        )
+        self.assertEqual(second_response.status_code, 200)
+        payment_status.refresh_from_db()
+        self.assertEqual(payment_status.merchant_invoice_number, original_invoice_number)
+        self.assertEqual(payment_status.qr_token, original_qr_token)
+        self.assertEqual(Participant.objects.filter(event=self.event, email='user@test.com').count(), 1)
 
     def test_bulk_email_center_renders_dashboard_workflow(self):
         self.client.force_login(self.staff_user)

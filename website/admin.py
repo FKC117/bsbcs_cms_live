@@ -195,8 +195,8 @@ class WebinarAdmin(admin.ModelAdmin):
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
-    list_display = ('get_member_name', 'get_user_email', 'membership_type', 'approval_status', 'is_active_member', 'subscription_expiry_date', 'approved_at', 'created_at', 'order')
-    list_filter = ('membership_type', 'approval_status', 'is_active_member', 'created_at', 'specialties', 'research_interest_areas')
+    list_display = ('get_member_name', 'get_user_email', 'membership_type', 'approval_status', 'is_active_member', 'is_executive_member', 'subscription_expiry_date', 'approved_at', 'created_at', 'order')
+    list_filter = ('membership_type', 'approval_status', 'is_active_member', 'is_executive_member', 'created_at', 'specialties', 'research_interest_areas')
     readonly_fields = ('created_at', 'updated_at', 'approved_at', 'rejected_at')
     ordering = ('-created_at',)
     search_fields = ('user_profile__name', 'user_profile__email', 'institution', 'position')
@@ -213,7 +213,7 @@ class MemberAdmin(admin.ModelAdmin):
             'fields': ('approval_status', 'rejection_reason', 'approved_at', 'rejected_at')
         }),
         ('Subscription Status', {
-            'fields': ('membership_type', 'is_active_member', 'subscription_start_date', 'subscription_expiry_date')
+            'fields': ('membership_type', 'is_active_member', 'is_executive_member', 'subscription_start_date', 'subscription_expiry_date')
         }),
         ('Metadata', {
             'fields': ('order', 'created_at', 'updated_at'),

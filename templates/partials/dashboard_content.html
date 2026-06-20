@@ -85,6 +85,45 @@
 </section>
 
 
+{% if selected_event and executive_member_summary and dashboard_access.participants %}
+<section class="mt-3 rounded-3xl border border-line bg-white p-5 shadow-quiet">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Executive member registration</div>
+      <h2 class="mt-1 text-2xl font-black text-ink">Register EC members for {{ selected_event.name }} {{ selected_event.year }}</h2>
+      <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">This one-click action creates or updates executive members as participant rows, approves them, marks payment completed with amount BDT 0, generates the QR invoice, and queues the confirmation email.</p>
+    </div>
+    <form method="post" class="flex items-center gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="dashboard_action" value="register_executive_members">
+      <button type="submit" {% if executive_member_summary.pending_total == 0 %}disabled{% endif %} class="rounded-xl px-5 py-3 text-sm font-black text-white shadow-quiet transition {% if executive_member_summary.pending_total == 0 %}cursor-not-allowed bg-slate-300 text-slate-600 shadow-none{% else %}bg-bsbcs-blue hover:-translate-y-0.5 hover:bg-bsbcs-navy{% endif %}">{% if executive_member_summary.pending_total == 0 %}EC members already synced{% else %}Register and approve EC members{% endif %}</button>
+    </form>
+  </div>
+  <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
+      <div class="text-xs font-black uppercase tracking-wide text-slate-500">Eligible EC members</div>
+      <div class="mt-2 text-3xl font-black text-ink">{{ executive_member_summary.eligible_total }}</div>
+      <p class="mt-2 text-sm text-slate-600">Approved active members marked as executive committee.</p>
+    </div>
+    <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
+      <div class="text-xs font-black uppercase tracking-wide text-slate-500">Matched to event</div>
+      <div class="mt-2 text-3xl font-black text-bsbcs-green">{{ executive_member_summary.registered_total }}</div>
+      <p class="mt-2 text-sm text-slate-600">Members already matched to this event by user, email, or phone.</p>
+    </div>
+    <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
+      <div class="text-xs font-black uppercase tracking-wide text-slate-500">Already synced</div>
+      <div class="mt-2 text-3xl font-black text-bsbcs-teal">{{ executive_member_summary.synced_total }}</div>
+      <p class="mt-2 text-sm text-slate-600">Rows already approved with zero-fee completed payment, invoice QR, and kit row.</p>
+    </div>
+    <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
+      <div class="text-xs font-black uppercase tracking-wide text-slate-500">Ready to sync</div>
+      <div class="mt-2 text-3xl font-black text-bsbcs-blue">{{ executive_member_summary.pending_total }}</div>
+      <p class="mt-2 text-sm text-slate-600">Executive members who still need approval, payment completion, invoice QR, or kit row sync.</p>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% if event_report and selected_event and selected_event.event_status == 'closed' %}
 <section class="mt-3 rounded-3xl border border-line bg-white p-5 shadow-quiet">
   <div class="flex flex-wrap items-start justify-between gap-4">

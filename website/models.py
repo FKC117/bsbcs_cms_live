@@ -527,6 +527,7 @@ class Member(models.Model):
     # Subscription status fields
     membership_type = models.ForeignKey(MembershipType, on_delete=models.SET_NULL, null=True, blank=True)
     is_active_member = models.BooleanField(default=False, help_text="Designates whether this member has an active subscription")
+    is_executive_member = models.BooleanField(default=False, help_text="Marks members who receive complimentary event registration as executive committee members.")
     subscription_start_date = models.DateField(blank=True, null=True)
     subscription_expiry_date = models.DateField(blank=True, null=True)
     
