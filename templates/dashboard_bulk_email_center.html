@@ -270,6 +270,20 @@
                         <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-bsbcs-blue ring-1 ring-blue-100">{{ selected_campaign.get_status_display }}</span>
                     </div>
 
+                    <div class="mt-3 rounded-2xl border border-line bg-slate-50/70 p-4">
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Stored message</div>
+                        <div class="mt-3 grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
+                            <div class="rounded-xl border border-line bg-white px-3 py-3">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Subject</div>
+                                <div class="mt-2 text-sm font-black text-ink break-words">{{ selected_campaign.subject }}</div>
+                            </div>
+                            <div class="rounded-xl border border-line bg-white px-3 py-3">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Body</div>
+                                <div class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words pr-1 text-sm font-semibold leading-6 text-slate-700">{{ selected_campaign.body|default:'No message body saved.' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
                         <div class="rounded-xl border border-line bg-slate-50 px-3 py-3">
                             <div class="text-xs font-black uppercase text-slate-500">Recipients</div>
