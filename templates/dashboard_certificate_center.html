@@ -156,7 +156,7 @@
                     <div class="mb-4">
                         <div>
                             <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Certificate design</div>
-                            <h2 class="mt-1 text-xl font-black text-ink">{{ selected_event.name }} certificate setup</h2>
+                            <h2 class="mt-1 text-lg font-black text-ink">{{ selected_event.name }} certificate setup</h2>
                             <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Choose one certificate workflow. HTML/CSS uses logos and signatories. Uploaded image mode uses one complete certificate background.</p>
                         </div>
                     </div>
@@ -305,7 +305,7 @@
                                     <label class="compact-label" for="speaker_body">Speaker certificate body</label>
                                     <textarea id="speaker_body" name="speaker_body" class="workflow-textarea">{% if certificate and certificate.speaker_body %}{{ certificate.speaker_body }}{% else %}In recognition of your invaluable contribution as a Guest Speaker in the {{ event_name }}, held on {{ event_date }} at {{ event_location }}.{% endif %}</textarea>
                                 </div>
-                                <div class="grid gap-2 sm:grid-cols-2">
+                                <div class="grid gap-2 grid-cols-2">
                                     <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
                                         <input type="checkbox" name="speaker_require_feedback" class="h-4 w-4 rounded border-line" {% if certificate.speaker_require_feedback %}checked{% endif %}>
                                         Require feedback
@@ -324,7 +324,7 @@
                 <section id="signatories" class="rounded-2xl border border-line bg-white p-4 shadow-quiet lg:min-w-0">
                     <div class="mb-4">
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Signatories</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Certificate signature block</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Certificate signature block</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Add one signatory at a time. Each signatory is saved immediately. Use the order field to control how multiple signatures appear on the certificate.</p>
                     </div>
                     <form hx-post="{% url 'dashboard_certificate_center' %}" hx-encoding="multipart/form-data" hx-target="#signatories" hx-select="#signatories" hx-swap="outerHTML" class="grid gap-2">
@@ -397,7 +397,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Finish setup</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Save design assets, then preview the certificate.</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Save design assets, then preview the certificate.</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Signatories save from their own add button. This save button only updates design mode and certificate assets.</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
@@ -417,58 +417,71 @@
             </section>
 
             <section id="feedback" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
-                <div class="mb-4">
-                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback builder</div>
-                    <h2 class="mt-1 text-xl font-black text-ink">Build feedback questions with live preview</h2>
-                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Type the question and choose a type; the preview shows roughly how participants will see it before certificate download.</p>
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback builder</div>
+                        <h2 class="mt-1 text-lg font-black text-ink">{% if editing_question %}Edit feedback question with live preview{% else %}Build feedback questions with live preview{% endif %}</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">{% if editing_question %}Review the saved question, update its fields, then save your changes back to this event.{% else %}Type the question and choose a type; the preview shows roughly how participants will see it before certificate download.{% endif %}</p>
+                    </div>
+                    {% if editing_question %}
+                        <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}#feedback" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:bg-blue-50 hover:text-bsbcs-blue">Cancel edit</a>
+                    {% endif %}
                 </div>
                 <div class="grid gap-3 xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]">
                 <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                     <form method="post" class="grid gap-2" id="feedback-question-form">
                         {% csrf_token %}
-                        <input type="hidden" name="certificate_action" value="add_question">
+                        <input type="hidden" name="certificate_action" value="{{ question_form_initial.action }}">
+                        <input type="hidden" name="question_id" value="{{ question_form_initial.question_id }}">
+                        <input type="hidden" name="edit_question_id" value="{{ question_form_initial.question_id }}">
                         <input type="hidden" name="event" value="{{ selected_event.id }}">
                         <input type="hidden" name="q" value="{{ current_filters.q }}">
                         <div>
                             <label class="compact-label" for="question_text">Question</label>
-                            <textarea id="question_text" name="question_text" class="workflow-textarea" placeholder="Write the feedback question" required></textarea>
+                            <textarea id="question_text" name="question_text" class="workflow-textarea" placeholder="Write the feedback question" required>{{ question_form_initial.question_text }}</textarea>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_92px]">
                             <div>
                                 <label class="compact-label" for="question_type">Type</label>
                                 <select id="question_type" name="question_type" class="workflow-select">
                                     {% for value, label in question_types %}
-                                        <option value="{{ value }}">{{ label }}</option>
+                                        <option value="{{ value }}" {% if question_form_initial.question_type == value %}selected{% endif %}>{{ label }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
                             <div>
                                 <label class="compact-label" for="question_order">Order</label>
-                                <input id="question_order" name="question_order" type="number" min="0" value="{{ totals.feedback_questions|add:1 }}" class="workflow-input">
+                                <input id="question_order" name="question_order" type="number" min="0" value="{{ question_form_initial.question_order }}" class="workflow-input">
                             </div>
                         </div>
                         <label class="inline-flex items-center gap-2 text-sm font-bold text-slate-600">
-                            <input type="checkbox" name="is_required" class="h-4 w-4 rounded border-line" checked>
+                            <input type="checkbox" name="is_required" class="h-4 w-4 rounded border-line" {% if question_form_initial.is_required %}checked{% endif %}>
                             Required question
                         </label>
-                        <div class="grid gap-2 sm:grid-cols-2" data-matrix-fields>
+                        <div class="grid gap-2" data-radio-fields hidden>
                             <div>
-                                <label class="compact-label" for="rows">Matrix rows</label>
-                                <textarea id="rows" name="rows" class="workflow-textarea" placeholder="For matrix only: Venue, Food, Sessions"></textarea>
-                            </div>
-                            <div>
-                                <label class="compact-label" for="columns">Matrix columns</label>
-                                <textarea id="columns" name="columns" class="workflow-textarea" placeholder="For matrix only: 1, 2, 3, 4, 5"></textarea>
+                                <label class="compact-label" for="radio_choices">Radio choices</label>
+                                <textarea id="radio_choices" name="radio_choices" class="workflow-textarea" placeholder="For radio only: Very satisfied, Satisfied, Neutral, Needs improvement">{{ question_form_initial.radio_choices }}</textarea>
                             </div>
                         </div>
-                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Add question</button>
+                        <div class="grid gap-2 grid-cols-2" data-matrix-fields hidden>
+                            <div>
+                                <label class="compact-label" for="matrix_rows">Matrix rows</label>
+                                <textarea id="matrix_rows" name="matrix_rows" class="workflow-textarea" placeholder="For matrix only: Venue, Food, Sessions">{{ question_form_initial.matrix_rows }}</textarea>
+                            </div>
+                            <div>
+                                <label class="compact-label" for="matrix_columns">Matrix columns</label>
+                                <textarea id="matrix_columns" name="matrix_columns" class="workflow-textarea" placeholder="For matrix only: 1, 2, 3, 4, 5">{{ question_form_initial.matrix_columns }}</textarea>
+                            </div>
+                        </div>
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">{% if editing_question %}Update question{% else %}Add question{% endif %}</button>
                     </form>
                 </section>
 
                 <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                     <div class="mb-4">
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Live preview</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Participant view</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Participant view</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">This preview updates while you type. Save the question when it looks right.</p>
                     </div>
                     <div class="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
@@ -487,10 +500,10 @@
                 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Saved feedback form</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Questions for {{ selected_event.name }}</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Questions for {{ selected_event.name }}</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Responses are separate from question building and can be reviewed when participants start submitting feedback.</p>
                     </div>
-                    <a href="{% url 'admin:registration_feedbackresponse_changelist' %}?event__id__exact={{ selected_event.id }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Responses</a>
+                    <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}#feedback-report" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">View report</a>
                 </div>
                 <div class="space-y-2">
                     {% for question in feedback_questions %}
@@ -503,17 +516,20 @@
                                         </div>
                                         <h3 class="mt-2 text-sm font-black leading-5 text-ink">{{ question.question_text }}</h3>
                                         {% if question.rows or question.columns %}
-                                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Rows: {{ question.rows|default:"-" }}<br>Columns: {{ question.columns|default:"-" }}</p>
+                                            <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">{% if question.question_type == "radio" %}Choices: {{ question.columns|default:"-" }}{% else %}Rows: {{ question.rows|default:"-" }}<br>Columns: {{ question.columns|default:"-" }}{% endif %}</p>
                                         {% endif %}
                                     </div>
-                                    <form method="post">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="certificate_action" value="remove_question">
-                                        <input type="hidden" name="event" value="{{ selected_event.id }}">
-                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
-                                        <input type="hidden" name="question_id" value="{{ question.id }}">
-                                        <button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-black text-bsbcs-pink hover:bg-pink-50">Remove</button>
-                                    </form>
+                                    <div class="flex flex-wrap gap-2">
+                                        <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}&edit_question={{ question.id }}#feedback" class="rounded-lg border border-line px-3 py-1.5 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a>
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="certificate_action" value="remove_question">
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="question_id" value="{{ question.id }}">
+                                            <button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-black text-bsbcs-pink hover:bg-pink-50">Remove</button>
+                                        </form>
+                                    </div>
                                 </div>
                             </article>
                     {% empty %}
@@ -522,11 +538,280 @@
                 </div>
             </section>
 
+            <section id="feedback-report" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback report</div>
+                        <h2 class="mt-1 text-lg font-black text-ink">Participant submissions for {{ selected_event.name }}</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Review who submitted feedback, inspect their answers, and export the current filtered event report.</p>
+                    </div>
+                    <form method="post" class="flex gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="certificate_action" value="export_feedback_report_csv">
+                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                        <button class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export CSV</button>
+                    </form>
+                </div>
+                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/40 px-4 py-4">
+                        <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Participants</div>
+                        <div class="mt-2 text-3xl font-black text-bsbcs-blue">{{ feedback_report.totals.participants }}</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-500">Submitted participants in this filtered view</div>
+                    </div>
+                    <div class="rounded-2xl border border-green-100 bg-green-50/40 px-4 py-4">
+                        <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Submitted</div>
+                        <div class="mt-2 text-3xl font-black text-bsbcs-green">{{ feedback_report.totals.submitted }}</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-500">Participants included in this report</div>
+                    </div>
+                    <div class="rounded-2xl border border-amber-100 bg-amber-50/40 px-4 py-4">
+                        <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Pending</div>
+                        <div class="mt-2 text-3xl font-black text-bsbcs-amber">{{ feedback_report.totals.pending }}</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-500">No pending rows are shown in this report</div>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                        <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Issued kits</div>
+                        <div class="mt-2 text-3xl font-black text-ink">{{ feedback_report.totals.issued }}</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-500">Participants already marked kit issued</div>
+                    </div>
+                </div>
+                {% if feedback_report.insights %}
+                    <section class="mt-4 rounded-2xl border border-line bg-slate-50/50 p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback insights</div>
+                                <h3 class="mt-1 text-lg font-black text-ink">Question-wise response patterns</h3>
+                                <p class="mt-1 text-sm font-semibold text-slate-600">Radio questions are summarized as bars, matrix questions are grouped by row and score, and open-ended questions stay readable as sample responses.</p>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-line">{{ feedback_report.insights|length }} question{{ feedback_report.insights|length|pluralize }}</div>
+                        </div>
+                        <div class="mt-4 grid gap-4 xl:grid-cols-2">
+                            {% for insight in feedback_report.insights %}
+                                <article class="rounded-2xl border border-line bg-white p-4 shadow-quiet {% if insight.kind == 'matrix' %}xl:col-span-2{% endif %}">
+                                    <div class="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">{{ insight.question.get_question_type_display }}</div>
+                                            <h4 class="mt-1 text-base font-black text-ink">{{ insight.question.question_text }}</h4>
+                                        </div>
+                                        <div class="rounded-full bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600 ring-1 ring-line">{{ insight.answered_participants }}/{{ insight.submitted_participants }} answered</div>
+                                    </div>
+
+                                    {% if insight.kind == 'radio' %}
+                                        <div class="mt-4 space-y-3">
+                                            {% for bar in insight.bars %}
+                                                <div>
+                                                    <div class="mb-1 flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
+                                                        <span class="truncate">{{ bar.label }}</span>
+                                                        <span class="shrink-0 text-xs font-black uppercase tracking-[0.12em] text-slate-500">{{ bar.count }} responses / {{ bar.percent }}%</span>
+                                                    </div>
+                                                    <div class="h-3 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
+                                                        <div class="h-full rounded-full bg-bsbcs-blue" style="width: {{ bar.percent }}%"></div>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% elif insight.kind == 'matrix' %}
+                                        <div class="mt-4 overflow-x-auto rounded-xl border border-line">
+                                            <table class="min-w-full border-collapse text-sm">
+                                                <thead class="bg-slate-50">
+                                                    <tr class="text-left text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                                                        <th class="px-3 py-2.5">Row</th>
+                                                        {% for column in insight.matrix_columns %}
+                                                            <th class="px-3 py-2.5 text-center">{{ column }}</th>
+                                                        {% endfor %}
+                                                        <th class="px-3 py-2.5 text-center">Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-line bg-white">
+                                                    {% for matrix_row in insight.matrix_rows %}
+                                                        <tr>
+                                                            <td class="px-3 py-2.5 font-black text-ink">{{ matrix_row.label }}</td>
+                                                            {% for cell in matrix_row.cells %}
+                                                                <td class="px-3 py-2.5 text-center">
+                                                                    <div class="mx-auto flex min-h-[44px] min-w-[52px] items-center justify-center rounded-xl border text-sm font-black {% if cell.use_light_text %}border-blue-300 text-white shadow-sm{% else %}border-blue-200 text-bsbcs-blue{% endif %}" {% if cell.intensity %}style="background-color: rgba(37, 99, 235, 0.{{ cell.intensity }});"{% else %}style="background-color: rgba(226, 232, 240, 0.85);"{% endif %}>{{ cell.count }}</div>
+                                                                </td>
+                                                            {% endfor %}
+                                                            <td class="px-3 py-2.5 text-center text-sm font-black text-slate-600">{{ matrix_row.total }}</td>
+                                                        </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    {% else %}
+                                        <div class="mt-4 rounded-xl border border-line bg-slate-50/70 p-3">
+                                            <div class="text-sm font-semibold text-slate-600">{{ insight.response_count }} text response{{ insight.response_count|pluralize }} captured for this question.</div>
+                                            <div class="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                                                {% for answer in insight.text_answers %}
+                                                    <div class="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">{{ answer }}</div>
+                                                {% empty %}
+                                                    <div class="rounded-xl border border-dashed border-line bg-white px-3 py-2.5 text-sm font-semibold text-slate-400">No saved text responses yet.</div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </article>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+                <div class="mt-4 overflow-x-auto rounded-xl border border-line">
+                    <table class="min-w-full table-fixed border-collapse">
+                        <thead class="bg-slate-50">
+                            <tr class="text-left text-xs font-black uppercase tracking-wide text-slate-500">
+                                <th class="w-[24%] px-4 py-3">Participant</th>
+                                <th class="w-[12%] px-4 py-3">Approval</th>
+                                <th class="w-[12%] px-4 py-3">Payment</th>
+                                <th class="w-[12%] px-4 py-3">Kit</th>
+                                <th class="w-[12%] px-4 py-3">Feedback</th>
+                                <th class="w-[10%] px-4 py-3">Answers</th>
+                                <th class="w-[18%] px-4 py-3">Review</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-line bg-white text-sm">
+                            {% for row in feedback_report.rows %}
+                                <tr class="align-top">
+                                    <td class="px-4 py-4">
+                                        <div class="min-w-0">
+                                            <div class="truncate font-black text-ink">{{ row.participant.name }}</div>
+                                            <div class="truncate text-xs font-semibold text-slate-500">{{ row.participant.email }}</div>
+                                            <div class="mt-1 truncate text-xs font-semibold text-slate-500">{{ row.invoice_number|default:"No invoice" }}</div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if row.participant.approved %}
+                                            <span class="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Approved</span>
+                                        {% else %}
+                                            <span class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if row.payment_completed %}
+                                            <span class="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Completed</span>
+                                        {% else %}
+                                            <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-slate-200">{{ row.payment_status.status|default:"Unpaid"|title }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if row.kit_issued %}
+                                            <span class="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Issued</span>
+                                        {% else %}
+                                            <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-slate-200">Not issued</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        {% if row.feedback_submitted %}
+                                            <span class="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">Submitted</span>
+                                        {% else %}
+                                            <span class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-4 text-xs font-black text-slate-500">
+                                        {{ row.answered_questions }}/{{ feedback_report.questions|length }}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <button
+                                            type="button"
+                                            class="feedback-report-modal-trigger inline-flex rounded-xl border border-line px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-bsbcs-blue transition hover:border-bsbcs-blue hover:bg-blue-50"
+                                            data-feedback-modal-target="feedback-report-modal-{{ row.participant.id }}"
+                                        >
+                                            View answers
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="7" class="px-4 py-8 text-center text-sm font-bold text-slate-500">No participants match this feedback report filter.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if feedback_report.page_obj and feedback_report.page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                        <div>
+                            Showing {{ feedback_report.rows|length }} of {{ feedback_report.totals.participants }} participant{{ feedback_report.totals.participants|pluralize }}.
+                            Page {{ feedback_report.page_obj.number }} of {{ feedback_report.page_obj.paginator.num_pages }}.
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if feedback_report.page_obj.has_previous %}
+                                <a href="?{{ feedback_query_string }}&feedback_page={{ feedback_report.page_obj.previous_page_number }}#feedback-report" class="rounded-lg border border-line px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-600 hover:border-bsbcs-blue hover:bg-white hover:text-bsbcs-blue">Previous</a>
+                            {% else %}
+                                <span class="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-300">Previous</span>
+                            {% endif %}
+                            <span class="rounded-lg bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue ring-1 ring-line">{{ feedback_report.page_obj.number }}</span>
+                            {% if feedback_report.page_obj.has_next %}
+                                <a href="?{{ feedback_query_string }}&feedback_page={{ feedback_report.page_obj.next_page_number }}#feedback-report" class="rounded-lg border border-line px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-600 hover:border-bsbcs-blue hover:bg-white hover:text-bsbcs-blue">Next</a>
+                            {% else %}
+                                <span class="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-300">Next</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+                {% for row in feedback_report.rows %}
+                    <div id="feedback-report-modal-{{ row.participant.id }}" class="feedback-report-modal fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/60 px-3 py-3" aria-hidden="true">
+                        <div class="feedback-report-modal-panel w-full max-w-lg overflow-hidden rounded-2xl border border-line bg-white shadow-2xl">
+                            <div class="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+                                <div class="min-w-0">
+                                    <div class="text-[11px] font-black uppercase tracking-[0.14em] text-bsbcs-teal">Feedback answers</div>
+                                    <h3 class="mt-1 truncate text-base font-black text-ink">{{ row.participant.name }}</h3>
+                                    <div class="truncate text-xs font-semibold text-slate-500">{{ row.participant.email|default:"No email" }}</div>
+                                </div>
+                                <button type="button" class="feedback-report-modal-close inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-sm font-black text-slate-500 transition hover:border-bsbcs-blue hover:text-bsbcs-blue" aria-label="Close">&times;</button>
+                            </div>
+                            <div class="border-b border-line px-4 py-2.5">
+                                <div class="flex flex-wrap gap-2">
+                                    <span class="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-blue-100">{% if row.participant.approved %}Approved{% else %}Pending approval{% endif %}</span>
+                                    <span class="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-green ring-1 ring-green-100">{% if row.payment_completed %}Payment completed{% else %}{{ row.payment_status.status|default:"Unpaid"|title }}{% endif %}</span>
+                                    <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-slate-200">{% if row.kit_issued %}Kit issued{% else %}Kit not issued{% endif %}</span>
+                                    <span class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-amber ring-1 ring-amber-100">{{ row.answered_questions }}/{{ feedback_report.questions|length }} answered</span>
+                                </div>
+                            </div>
+                            <div class="max-h-[52vh] overflow-y-auto px-4 py-3">
+                                <div class="overflow-hidden rounded-xl border border-line bg-white">
+                                    <table class="min-w-full border-collapse text-sm">
+                                        <thead class="bg-slate-50">
+                                            <tr class="text-left text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                                                <th class="w-[18%] px-3 py-2.5">Type</th>
+                                                <th class="w-[42%] px-3 py-2.5">Question</th>
+                                                <th class="w-[40%] px-3 py-2.5">Answer</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-line">
+                                            {% for answer in row.question_answers %}
+                                                <tr class="align-top bg-white">
+                                                    <td class="px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">{{ answer.question.get_question_type_display }}</td>
+                                                    <td class="px-3 py-2.5 text-sm font-black leading-5 text-ink">{{ answer.question.question_text }}</td>
+                                                    <td class="px-3 py-2.5">
+                                                        {% if answer.has_answer %}
+                                                            {% if answer.question.question_type == 'matrix' %}
+                                                                <div class="flex flex-wrap gap-1.5">
+                                                                    {% for value in answer.values %}
+                                                                        <span class="inline-flex rounded-full border border-line bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">{{ value }}</span>
+                                                                    {% endfor %}
+                                                                </div>
+                                                            {% else %}
+                                                                <div class="text-sm font-semibold leading-5 text-slate-700">{{ answer.display_value }}</div>
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <div class="text-sm font-semibold text-slate-400">No answer submitted.</div>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </section>
+
             <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
                 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Speaker certificates</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Eligible speakers and manual issue flow</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Eligible speakers and manual issue flow</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Generate, download, and email speaker certificates separately from participant certificates. Linked speakers will also see issued files in their profile.</p>
                     </div>
                     <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ speaker_rows|length }} speaker{{ speaker_rows|length|pluralize }}</div>
@@ -636,7 +921,7 @@
                 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Certificate eligibility</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Issued-kit participants and feedback status</h2>
+                        <h2 class="mt-1 text-lg font-black text-ink">Issued-kit participants and feedback status</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">The public certificate button appears after kit issue and feedback submission. Admin preview is for design checking only.</p>
                     </div>
                     <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} rows</div>
@@ -645,7 +930,7 @@
                 <section class="mb-5 rounded-2xl border border-line bg-white p-4 shadow-quiet">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Thank-you email</div>
-                        <h3 class="mt-1 text-xl font-black text-ink">Review and edit the message before the event-wide send</h3>
+                        <h3 class="mt-1 text-lg font-black text-ink">Review and edit the message before the event-wide send</h3>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use the same builder pattern as feedback: keep the editor in one subsection, keep the campaign stats in another, and review everything inside one parent card before you send.</p>
                     </div>
 
@@ -690,7 +975,7 @@
                         <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                             <div class="mb-4">
                                 <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Email status</div>
-                                <h3 class="mt-1 text-xl font-black text-ink">Campaign snapshot</h3>
+                                <h3 class="mt-1 text-lg font-black text-ink">Campaign snapshot</h3>
                                 <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">A compact view of who can receive the message and what has already been prepared or sent.</p>
                             </div>
                             <div class="grid gap-3 sm:grid-cols-2">
@@ -709,7 +994,7 @@
                                     <div class="mt-2 text-3xl font-black text-bsbcs-amber">{{ totals.thank_you_pending }}</div>
                                     <div class="mt-1 text-sm font-semibold text-slate-500">Still available to queue</div>
                                 </div>
-                                <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
+                                <div class="rounded-2xl border border-line bg-slate-50/70 px-3 py-2.5">
                                     <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">Prepared records</div>
                                     <div class="mt-2 text-3xl font-black text-ink">{{ totals.thank_you_records }}</div>
                                     <div class="mt-1 text-sm font-semibold text-slate-500">Participant email records saved for this event</div>
@@ -960,12 +1245,63 @@
         })();
 
         (function () {
+            const triggers = document.querySelectorAll('.feedback-report-modal-trigger');
+            const modalNodes = document.querySelectorAll('.feedback-report-modal');
+            if (!triggers.length || !modalNodes.length) return;
+
+            const closeModal = (modal) => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('overflow-hidden');
+            };
+
+            const openModal = (modal) => {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('overflow-hidden');
+            };
+
+            triggers.forEach((trigger) => {
+                trigger.addEventListener('click', () => {
+                    const modal = document.getElementById(trigger.dataset.feedbackModalTarget || '');
+                    if (modal) {
+                        openModal(modal);
+                    }
+                });
+            });
+
+            modalNodes.forEach((modal) => {
+                modal.addEventListener('click', (event) => {
+                    if (event.target === modal) {
+                        closeModal(modal);
+                    }
+                });
+                modal.querySelectorAll('.feedback-report-modal-close').forEach((button) => {
+                    button.addEventListener('click', () => closeModal(modal));
+                });
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                modalNodes.forEach((modal) => {
+                    if (!modal.classList.contains('hidden')) {
+                        closeModal(modal);
+                    }
+                });
+            });
+        })();
+
+        (function () {
             const form = document.getElementById('feedback-question-form');
             const questionInput = document.getElementById('question_text');
             const typeInput = document.getElementById('question_type');
             const requiredInput = form ? form.querySelector('input[name="is_required"]') : null;
-            const rowsInput = document.getElementById('rows');
-            const columnsInput = document.getElementById('columns');
+            const radioChoicesInput = document.getElementById('radio_choices');
+            const matrixRowsInput = document.getElementById('matrix_rows');
+            const matrixColumnsInput = document.getElementById('matrix_columns');
+            const radioFields = document.querySelector('[data-radio-fields]');
             const matrixFields = document.querySelector('[data-matrix-fields]');
             const previewQuestion = document.getElementById('feedback-preview-question');
             const previewRequired = document.getElementById('feedback-preview-required');
@@ -978,7 +1314,7 @@
             }
 
             function radioPreview() {
-                const choices = ['Very satisfied', 'Satisfied', 'Neutral', 'Needs improvement'];
+                const choices = splitList(radioChoicesInput ? radioChoicesInput.value : '', ['Very satisfied', 'Satisfied', 'Neutral', 'Needs improvement']);
                 return '<div class="grid gap-2">' + choices.map((choice) => (
                     '<label class="flex items-center gap-2 rounded-xl border border-line bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">' +
                     '<span class="h-3.5 w-3.5 rounded-full border border-slate-300 bg-white"></span>' +
@@ -992,8 +1328,8 @@
             }
 
             function matrixPreview() {
-                const rows = splitList(rowsInput ? rowsInput.value : '', ['Venue', 'Food', 'Sessions']);
-                const columns = splitList(columnsInput ? columnsInput.value : '', ['1', '2', '3', '4', '5']);
+                const rows = splitList(matrixRowsInput ? matrixRowsInput.value : '', ['Venue', 'Food', 'Sessions']);
+                const columns = splitList(matrixColumnsInput ? matrixColumnsInput.value : '', ['1', '2', '3', '4', '5']);
                 return (
                     '<div class="overflow-auto rounded-xl border border-line">' +
                     '<table class="w-full min-w-[520px] border-collapse text-sm">' +
@@ -1016,6 +1352,9 @@
                 if (previewRequired && requiredInput) {
                     previewRequired.hidden = !requiredInput.checked;
                 }
+                if (radioFields) {
+                    radioFields.hidden = type !== 'radio';
+                }
                 if (matrixFields) {
                     matrixFields.hidden = type !== 'matrix';
                 }
@@ -1028,7 +1367,7 @@
                 }
             }
 
-            [questionInput, typeInput, requiredInput, rowsInput, columnsInput].forEach((field) => {
+            [questionInput, typeInput, requiredInput, radioChoicesInput, matrixRowsInput, matrixColumnsInput].forEach((field) => {
                 if (field) {
                     field.addEventListener('input', syncFeedbackPreview);
                     field.addEventListener('change', syncFeedbackPreview);

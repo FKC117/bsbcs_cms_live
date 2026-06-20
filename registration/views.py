@@ -3163,6 +3163,199 @@ def _certificate_center_kit_rows_queryset(event, search_query=''):
     return qs
 
 
+def _feedback_question_display_parts(question):
+    if question.question_type == FeedbackQuestion.RADIO:
+        return {
+            'rows': [],
+            'columns': question.get_columns() or ['Very satisfied', 'Satisfied', 'Neutral', 'Needs improvement'],
+        }
+    if question.question_type == FeedbackQuestion.MATRIX:
+        return {
+            'rows': question.get_rows() or ['Venue', 'Food', 'Sessions'],
+            'columns': question.get_columns() or ['1', '2', '3', '4', '5'],
+        }
+    return {
+        'rows': [],
+        'columns': [],
+    }
+
+
+def _build_feedback_report_data(event, search_query=''):
+    questions = list(event.feedback_questions.all().order_by('order', 'id'))
+    submitted_participant_ids = FeedbackResponse.objects.filter(event=event).values_list('participant_id', flat=True).distinct()
+    participants_qs = Participant.objects.filter(event=event, id__in=submitted_participant_ids).select_related(
+        'payment_statuses',
+        'payment_statuses__registration_kit',
+    ).order_by('name', 'id')
+    query_text = (search_query or '').strip()
+    if query_text:
+        participants_qs = participants_qs.filter(
+            Q(name__icontains=query_text)
+            | Q(email__icontains=query_text)
+            | Q(phone__icontains=query_text)
+            | Q(organization__icontains=query_text)
+            | Q(payment_statuses__merchant_invoice_number__icontains=query_text)
+        )
+
+    participants = list(participants_qs)
+    response_qs = FeedbackResponse.objects.filter(
+        event=event,
+        participant__in=participants,
+    ).select_related('question', 'participant').order_by('participant_id', 'question__order', 'question_id', 'id')
+
+    answers_by_participant = defaultdict(lambda: defaultdict(list))
+    question_response_values = defaultdict(list)
+    question_answered_participants = defaultdict(set)
+    for response in response_qs:
+        clean_value = (response.response or '').strip()
+        answers_by_participant[response.participant_id][response.question_id].append(clean_value)
+        if clean_value:
+            question_response_values[response.question_id].append(clean_value)
+            question_answered_participants[response.question_id].add(response.participant_id)
+
+    rows = []
+    insights = []
+    totals = {
+        'participants': len(participants),
+        'submitted': len(participants),
+        'pending': 0,
+        'approved': 0,
+        'paid': 0,
+        'issued': 0,
+    }
+
+    total_submitted_participants = len(participants)
+
+    for question in questions:
+        display_parts = _feedback_question_display_parts(question)
+        response_values = question_response_values.get(question.id, [])
+        answered_participants = len(question_answered_participants.get(question.id, set()))
+        insight = {
+            'question': question,
+            'kind': question.question_type,
+            'response_count': len(response_values),
+            'answered_participants': answered_participants,
+            'submitted_participants': total_submitted_participants,
+        }
+
+        if question.question_type == FeedbackQuestion.RADIO:
+            option_counts = Counter()
+            known_options = list(display_parts['columns'])
+            extra_options = []
+            for value in response_values:
+                option_counts[value] += 1
+                if value not in known_options and value not in extra_options:
+                    extra_options.append(value)
+            bars = []
+            for option in known_options + extra_options:
+                count = option_counts.get(option, 0)
+                percent = round((count / answered_participants) * 100) if answered_participants else 0
+                bars.append({
+                    'label': option,
+                    'count': count,
+                    'percent': percent,
+                })
+            insight['bars'] = bars
+            insight['has_data'] = any(bar['count'] for bar in bars)
+
+        elif question.question_type == FeedbackQuestion.MATRIX:
+            row_labels = list(display_parts['rows'])
+            column_labels = list(display_parts['columns'])
+            matrix_counts = defaultdict(Counter)
+            extra_rows = []
+            extra_columns = []
+            for value in response_values:
+                if ':' in value:
+                    row_label, column_label = [part.strip() for part in value.split(':', 1)]
+                else:
+                    row_label, column_label = value.strip(), ''
+                if row_label:
+                    matrix_counts[row_label][column_label] += 1
+                    if row_label not in row_labels and row_label not in extra_rows:
+                        extra_rows.append(row_label)
+                    if column_label and column_label not in column_labels and column_label not in extra_columns:
+                        extra_columns.append(column_label)
+            all_rows = row_labels + extra_rows
+            all_columns = column_labels + extra_columns
+            matrix_rows = []
+            for row_label in all_rows:
+                row_total = sum(matrix_counts[row_label].values())
+                cells = []
+                for column_label in all_columns:
+                    count = matrix_counts[row_label].get(column_label, 0)
+                    intensity = 28 + round((count / row_total) * 62) if row_total and count else 0
+                    cells.append({
+                        'label': column_label,
+                        'count': count,
+                        'intensity': intensity,
+                        'use_light_text': intensity >= 55,
+                    })
+                matrix_rows.append({
+                    'label': row_label,
+                    'total': row_total,
+                    'cells': cells,
+                })
+            insight['matrix_columns'] = all_columns
+            insight['matrix_rows'] = matrix_rows
+            insight['has_data'] = any(row['total'] for row in matrix_rows)
+
+        else:
+            text_answers = []
+            for value in response_values:
+                if value and value not in text_answers:
+                    text_answers.append(value)
+            insight['text_answers'] = text_answers
+            insight['has_data'] = bool(text_answers)
+
+        insights.append(insight)
+
+    for participant in participants:
+        payment_status = getattr(participant, 'payment_statuses', None)
+        registration_kit = getattr(payment_status, 'registration_kit', None) if payment_status else None
+        payment_completed = bool(payment_status and payment_status.status in ['paid', 'completed'])
+        kit_issued = bool(registration_kit and registration_kit.status == 'issued')
+        participant_answers = answers_by_participant.get(participant.id, {})
+        question_answers = []
+        answered_questions = 0
+
+        for question in questions:
+            answer_values = [value for value in participant_answers.get(question.id, []) if value]
+            if answer_values:
+                answered_questions += 1
+            question_answers.append({
+                'question': question,
+                'values': answer_values,
+                'display_value': ' | '.join(answer_values) if answer_values else '',
+                'has_answer': bool(answer_values),
+            })
+
+        if participant.approved:
+            totals['approved'] += 1
+        if payment_completed:
+            totals['paid'] += 1
+        if kit_issued:
+            totals['issued'] += 1
+
+        rows.append({
+            'participant': participant,
+            'payment_status': payment_status,
+            'registration_kit': registration_kit,
+            'invoice_number': payment_status.merchant_invoice_number if payment_status else '',
+            'payment_completed': payment_completed,
+            'kit_issued': kit_issued,
+            'feedback_submitted': True,
+            'answered_questions': answered_questions,
+            'question_answers': question_answers,
+        })
+
+    return {
+        'questions': questions,
+        'rows': rows,
+        'insights': insights,
+        'totals': totals,
+    }
+
+
 def _get_chrome_executable():
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -6555,6 +6748,13 @@ def dashboard_certificate_center(request):
         event_filter = str(default_event.id)
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
     selected_event = events.filter(pk=event_filter).first() if event_filter else None
+    edit_question_id = None
+    if request.method == 'POST':
+        edit_question_raw = request.POST.get('edit_question_id') or request.POST.get('question_id') or ''
+    else:
+        edit_question_raw = request.GET.get('edit_question') or ''
+    if str(edit_question_raw).strip().isdigit():
+        edit_question_id = int(str(edit_question_raw).strip())
 
     query_params = {}
     if selected_event:
@@ -6731,25 +6931,107 @@ def dashboard_certificate_center(request):
                 dashboard_log_action(request, signatory, CHANGE, 'Removed certificate signatory signature image from Certificate Center dashboard.')
                 messages.success(request, f'Removed signature image for {signatory.name}.')
 
-            elif action == 'add_question':
+            elif action in ('add_question', 'update_question'):
                 question_text = (request.POST.get('question_text') or '').strip()
                 question_type = request.POST.get('question_type') or FeedbackQuestion.TEXT
                 if question_type not in dict(FeedbackQuestion.QUESTION_TYPES):
                     question_type = FeedbackQuestion.TEXT
-                if not question_text:
+
+                try:
+                    question_order = int(request.POST.get('question_order') or 0)
+                except (TypeError, ValueError):
+                    question_order = 0
+
+                editing_question = None
+                if action == 'update_question':
+                    editing_question = get_object_or_404(FeedbackQuestion, pk=request.POST.get('question_id'), event=selected_event)
+
+                rows_value = None
+                columns_value = None
+                if question_type == FeedbackQuestion.RADIO:
+                    columns_value = (request.POST.get('radio_choices') or request.POST.get('columns') or '').strip() or None
+                    if not columns_value:
+                        messages.error(request, 'Radio questions need comma-separated answer choices.')
+                    elif not question_text:
+                        messages.error(request, 'Feedback question text is required.')
+                    else:
+                        if editing_question:
+                            editing_question.question_text = question_text
+                            editing_question.question_type = question_type
+                            editing_question.is_required = bool(request.POST.get('is_required'))
+                            editing_question.rows = None
+                            editing_question.columns = columns_value
+                            editing_question.order = question_order
+                            editing_question.save(update_fields=['question_text', 'question_type', 'is_required', 'rows', 'columns', 'order'])
+                            dashboard_log_action(request, selected_event, CHANGE, f'Updated feedback question from Certificate Center dashboard: {question_text[:80]}')
+                            messages.success(request, 'Feedback question updated.')
+                        else:
+                            question = FeedbackQuestion.objects.create(
+                                question_text=question_text,
+                                question_type=question_type,
+                                is_required=bool(request.POST.get('is_required')),
+                                rows=None,
+                                columns=columns_value,
+                                order=question_order,
+                            )
+                            question.event.add(selected_event)
+                            dashboard_log_action(request, selected_event, CHANGE, f'Added feedback question from Certificate Center dashboard: {question_text[:80]}')
+                            messages.success(request, 'Feedback question added.')
+                elif question_type == FeedbackQuestion.MATRIX:
+                    rows_value = (request.POST.get('matrix_rows') or request.POST.get('rows') or '').strip() or None
+                    columns_value = (request.POST.get('matrix_columns') or request.POST.get('columns') or '').strip() or None
+                    if not rows_value or not columns_value:
+                        messages.error(request, 'Matrix questions need both rows and columns.')
+                    elif not question_text:
+                        messages.error(request, 'Feedback question text is required.')
+                    else:
+                        if editing_question:
+                            editing_question.question_text = question_text
+                            editing_question.question_type = question_type
+                            editing_question.is_required = bool(request.POST.get('is_required'))
+                            editing_question.rows = rows_value
+                            editing_question.columns = columns_value
+                            editing_question.order = question_order
+                            editing_question.save(update_fields=['question_text', 'question_type', 'is_required', 'rows', 'columns', 'order'])
+                            dashboard_log_action(request, selected_event, CHANGE, f'Updated feedback question from Certificate Center dashboard: {question_text[:80]}')
+                            messages.success(request, 'Feedback question updated.')
+                        else:
+                            question = FeedbackQuestion.objects.create(
+                                question_text=question_text,
+                                question_type=question_type,
+                                is_required=bool(request.POST.get('is_required')),
+                                rows=rows_value,
+                                columns=columns_value,
+                                order=question_order,
+                            )
+                            question.event.add(selected_event)
+                            dashboard_log_action(request, selected_event, CHANGE, f'Added feedback question from Certificate Center dashboard: {question_text[:80]}')
+                            messages.success(request, 'Feedback question added.')
+                elif not question_text:
                     messages.error(request, 'Feedback question text is required.')
                 else:
-                    question = FeedbackQuestion.objects.create(
-                        question_text=question_text,
-                        question_type=question_type,
-                        is_required=bool(request.POST.get('is_required')),
-                        rows=(request.POST.get('rows') or '').strip() or None,
-                        columns=(request.POST.get('columns') or '').strip() or None,
-                        order=int(request.POST.get('question_order') or 0),
-                    )
-                    question.event.add(selected_event)
-                    dashboard_log_action(request, selected_event, CHANGE, f'Added feedback question from Certificate Center dashboard: {question_text[:80]}')
-                    messages.success(request, 'Feedback question added.')
+                    if editing_question:
+                        editing_question.question_text = question_text
+                        editing_question.question_type = question_type
+                        editing_question.is_required = bool(request.POST.get('is_required'))
+                        editing_question.rows = None
+                        editing_question.columns = None
+                        editing_question.order = question_order
+                        editing_question.save(update_fields=['question_text', 'question_type', 'is_required', 'rows', 'columns', 'order'])
+                        dashboard_log_action(request, selected_event, CHANGE, f'Updated feedback question from Certificate Center dashboard: {question_text[:80]}')
+                        messages.success(request, 'Feedback question updated.')
+                    else:
+                        question = FeedbackQuestion.objects.create(
+                            question_text=question_text,
+                            question_type=question_type,
+                            is_required=bool(request.POST.get('is_required')),
+                            rows=None,
+                            columns=None,
+                            order=question_order,
+                        )
+                        question.event.add(selected_event)
+                        dashboard_log_action(request, selected_event, CHANGE, f'Added feedback question from Certificate Center dashboard: {question_text[:80]}')
+                        messages.success(request, 'Feedback question added.')
 
             elif action == 'remove_question':
                 question = get_object_or_404(FeedbackQuestion, pk=request.POST.get('question_id'), event=selected_event)
@@ -6760,6 +7042,31 @@ def dashboard_certificate_center(request):
                 else:
                     question.event.remove(selected_event)
                 messages.success(request, 'Feedback question removed from this event.')
+
+            elif action == 'export_feedback_report_csv':
+                report_data = _build_feedback_report_data(selected_event, search_query)
+                response = HttpResponse(content_type='text/csv')
+                response['Content-Disposition'] = f'attachment; filename="feedback_report_event_{selected_event.id}.csv"'
+                writer = csv.writer(response)
+                headers = [
+                    'Participant', 'Email', 'Phone', 'Organization', 'Invoice',
+                    'Approved', 'Payment status', 'Kit status', 'Feedback submitted', 'Answered questions',
+                ] + [question.question_text or f'Question {index}' for index, question in enumerate(report_data['questions'], start=1)]
+                writer.writerow(headers)
+                for row in report_data['rows']:
+                    writer.writerow([
+                        row['participant'].name,
+                        row['participant'].email,
+                        row['participant'].phone,
+                        row['participant'].organization,
+                        row['invoice_number'],
+                        'Yes' if row['participant'].approved else 'No',
+                        getattr(row['payment_status'], 'status', 'Unpaid') if row['payment_status'] else 'Unpaid',
+                        'Issued' if row['kit_issued'] else 'Not issued',
+                        'Yes' if row['feedback_submitted'] else 'No',
+                        f"{row['answered_questions']}/{len(report_data['questions'])}",
+                    ] + [answer['display_value'] for answer in row['question_answers']])
+                return response
 
             elif action == 'save_thank_you_template':
                 subject = (request.POST.get('thank_you_subject') or '').strip()
@@ -6830,7 +7137,7 @@ def dashboard_certificate_center(request):
             messages.error(request, str(exc))
         if action in ('add_signatory', 'delete_signatory', 'clear_signatory_signature'):
             redirect_url = f"{redirect_url}#signatories"
-        elif action in ('add_question', 'remove_question'):
+        elif action in ('add_question', 'update_question', 'remove_question', 'export_feedback_report_csv'):
             redirect_url = f"{redirect_url}#feedback"
         elif action in ('save_thank_you_template', 'send_selected_thank_you', 'resend_selected_thank_you'):
             redirect_url = f"{redirect_url}#thank-you-email"
@@ -6839,6 +7146,32 @@ def dashboard_certificate_center(request):
     certificate = None
     signatories = CertificateSignatory.objects.none()
     feedback_questions = FeedbackQuestion.objects.none()
+    editing_question = None
+    question_form_initial = {
+        'action': 'add_question',
+        'question_id': '',
+        'question_text': '',
+        'question_type': FeedbackQuestion.TEXT,
+        'question_order': 1,
+        'is_required': True,
+        'radio_choices': '',
+        'matrix_rows': '',
+        'matrix_columns': '',
+    }
+    feedback_report = {
+        'questions': [],
+        'rows': [],
+        'insights': [],
+        'page_obj': None,
+        'totals': {
+            'participants': 0,
+            'submitted': 0,
+            'pending': 0,
+            'approved': 0,
+            'paid': 0,
+            'issued': 0,
+        },
+    }
     kit_rows_qs = RegistrationKit.objects.none()
     feedback_participant_ids = set()
     thank_you_email_records = {}
@@ -6849,6 +7182,25 @@ def dashboard_certificate_center(request):
         certificate = Certificate.objects.filter(event=selected_event).prefetch_related('signatories').first()
         signatories = certificate.signatories.all() if certificate else CertificateSignatory.objects.none()
         feedback_questions = selected_event.feedback_questions.all().order_by('order', 'id')
+        if edit_question_id:
+            editing_question = feedback_questions.filter(pk=edit_question_id).first()
+            if editing_question:
+                question_form_initial = {
+                    'action': 'update_question',
+                    'question_id': editing_question.id,
+                    'question_text': editing_question.question_text or '',
+                    'question_type': editing_question.question_type or FeedbackQuestion.TEXT,
+                    'question_order': editing_question.order,
+                    'is_required': editing_question.is_required,
+                    'radio_choices': (editing_question.columns or '') if editing_question.question_type == FeedbackQuestion.RADIO else '',
+                    'matrix_rows': (editing_question.rows or '') if editing_question.question_type == FeedbackQuestion.MATRIX else '',
+                    'matrix_columns': (editing_question.columns or '') if editing_question.question_type == FeedbackQuestion.MATRIX else '',
+                }
+        if not editing_question:
+            question_form_initial['question_order'] = feedback_questions.count() + 1
+        feedback_report = _build_feedback_report_data(selected_event, search_query)
+        feedback_report['page_obj'] = Paginator(feedback_report['rows'], 10).get_page(request.GET.get('feedback_page'))
+        feedback_report['rows'] = feedback_report['page_obj'].object_list
         kit_rows_qs = _certificate_center_kit_rows_queryset(selected_event, search_query)
         feedback_participant_ids = set(
             FeedbackResponse.objects.filter(event=selected_event).values_list('participant_id', flat=True).distinct()
@@ -6905,10 +7257,14 @@ def dashboard_certificate_center(request):
         'certificate': certificate,
         'signatories': signatories,
         'feedback_questions': feedback_questions,
+        'feedback_report': feedback_report,
         'speaker_rows': speaker_rows,
+        'editing_question': editing_question,
+        'question_form_initial': question_form_initial,
         'question_types': FeedbackQuestion.QUESTION_TYPES,
         'page_obj': page_obj,
         'query_string': urlencode(query_params),
+        'feedback_query_string': urlencode(query_params),
         'current_filters': {
             'event': str(selected_event.id) if selected_event else '',
             'q': search_query,
