@@ -221,6 +221,13 @@
                 ],
                 indexAxis: 'y',
             });
+            renderBarChart('eventReportInstitution', 'eventReportInstitutionChart', {
+                labels: (eventReport.institutions || {}).labels || [],
+                datasets: [
+                    { label: 'Participants', data: (eventReport.institutions || {}).counts || [], backgroundColor: 'rgba(23,105,194,.84)', borderRadius: 10 },
+                ],
+                indexAxis: 'y',
+            });
             renderBarChart('eventReportAbstract', 'eventReportAbstractChart', {
                 labels: (eventReport.abstracts || {}).labels || [],
                 datasets: [

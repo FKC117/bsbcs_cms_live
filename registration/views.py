@@ -3830,15 +3830,19 @@ def build_event_metrics(events, event_filter=None):
     for event in events:
         if event_filter and str(event.id) != event_filter:  # type: ignore[attr-defined]
             continue
+        participant_revenue = PaymentStatus.objects.filter(
+            event=event, status__in=['paid', 'completed']
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        corporate_revenue = CorporatePayment.objects.filter(
+            event=event, status__in=['paid', 'completed']
+        ).aggregate(total=Sum('amount'))['total'] or 0
         metrics = {
             'name': event.name,
             'approved_participants': Participant.objects.filter(event=event).count(),
             'pending_payments': PaymentStatus.objects.filter(
                 event=event, status__in=UNPAID_PAYMENT_STATUSES
             ).count(),
-            'revenue_collected': PaymentStatus.objects.filter(
-                event=event, status__in=PAID_PAYMENT_STATUSES
-            ).aggregate(total=Sum('amount'))['total'] or 0,
+            'revenue_collected': participant_revenue + corporate_revenue,
         }
         event_metrics.append(metrics)
     return event_metrics
@@ -4604,7 +4608,7 @@ def global_dashboard(request):
                     redirect_url = f"{redirect_url}?{urlencode(redirect_params)}"
                 return redirect(redirect_url)
             from website.models import SiteSettings
-            feedback_report_data = _build_feedback_report_data(selected_event, '')
+            feedback_report_data = _build_feedback_report_data(selected_event, '') if selected_event.event_status == 'closed' else None
             pdf_buffer = generate_event_report_pdf(
                 selected_event,
                 event_report,

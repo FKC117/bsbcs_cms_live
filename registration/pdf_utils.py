@@ -806,6 +806,50 @@ def generate_feedback_report_pdf(event, report_data, site_settings=None):
     else:
         organizer_name = 'BSBCS'
 
+    event_title_text = f"{event.name} {event.year}".strip()
+    title_length = len(event_title_text)
+    compact_title_mode = title_length > 32
+    extra_compact_title_mode = title_length > 48
+
+    title_font_size = 22
+    title_leading = 26
+    subtitle_font_size = 10
+    subtitle_leading = 14
+    meta_font_size = 8.5
+    meta_leading = 11
+    logo_size = 0.86 * inch
+    header_title_width = 5.0 * inch
+    header_meta_width = 3.15 * inch
+    executive_spacing_after_header = 10
+    executive_spacing_after_summary = 10
+    executive_subtitle_text = 'A board-ready event snapshot covering registration health, payment completion, attendance proxy, participation mix, geography, institutions, corporate activity, and abstract outcomes.'
+
+    if compact_title_mode:
+        title_font_size = 20
+        title_leading = 23
+        subtitle_font_size = 9
+        subtitle_leading = 12
+        meta_font_size = 8
+        meta_leading = 10
+        logo_size = 0.78 * inch
+        header_title_width = 5.45 * inch
+        header_meta_width = 2.7 * inch
+        executive_spacing_after_header = 8
+        executive_spacing_after_summary = 8
+        executive_subtitle_text = 'A board-ready event snapshot across registrations, payments, attendance proxy, participation mix, geography, institutions, corporate activity, and abstracts.'
+
+    if extra_compact_title_mode:
+        title_font_size = 18
+        title_leading = 21
+        subtitle_font_size = 8.5
+        subtitle_leading = 11
+        meta_font_size = 7.5
+        meta_leading = 9
+        logo_size = 0.7 * inch
+        header_title_width = 5.8 * inch
+        header_meta_width = 2.35 * inch
+        executive_subtitle_text = 'A board-ready event snapshot across registrations, payments, attendance, geography, institutions, corporate activity, and abstracts.'
+
     title_style = ParagraphStyle(
         'FeedbackPDFTitle',
         parent=styles['Heading1'],
@@ -1220,14 +1264,58 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
     else:
         organizer_name = 'BSBCS'
 
+    event_title_text = f"{event.name} {event.year}".strip()
+    title_length = len(event_title_text)
+    compact_title_mode = title_length > 32
+    extra_compact_title_mode = title_length > 48
+
+    title_font_size = 22
+    title_leading = 26
+    subtitle_font_size = 10
+    subtitle_leading = 14
+    meta_font_size = 8.5
+    meta_leading = 11
+    logo_size = 0.86 * inch
+    header_title_width = 5.0 * inch
+    header_meta_width = 3.15 * inch
+    executive_spacing_after_header = 10
+    executive_spacing_after_summary = 10
+    executive_subtitle_text = 'A board-ready event snapshot covering registration health, payment completion, attendance proxy, participation mix, geography, institutions, corporate activity, and abstract outcomes.'
+
+    if compact_title_mode:
+        title_font_size = 20
+        title_leading = 23
+        subtitle_font_size = 9
+        subtitle_leading = 12
+        meta_font_size = 8
+        meta_leading = 10
+        logo_size = 0.78 * inch
+        header_title_width = 5.45 * inch
+        header_meta_width = 2.7 * inch
+        executive_spacing_after_header = 8
+        executive_spacing_after_summary = 8
+        executive_subtitle_text = 'A board-ready event snapshot across registrations, payments, attendance proxy, participation mix, geography, institutions, corporate activity, and abstracts.'
+
+    if extra_compact_title_mode:
+        title_font_size = 18
+        title_leading = 21
+        subtitle_font_size = 8.5
+        subtitle_leading = 11
+        meta_font_size = 7.5
+        meta_leading = 9
+        logo_size = 0.7 * inch
+        header_title_width = 5.8 * inch
+        header_meta_width = 2.35 * inch
+        executive_subtitle_text = 'A board-ready event snapshot across registrations, payments, attendance, geography, institutions, corporate activity, and abstracts.'
+
     title_style = ParagraphStyle(
         'EventPDFTitle',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=22,
-        leading=26,
+        fontSize=title_font_size,
+        leading=title_leading,
         textColor=colors.HexColor('#0f172a'),
-        spaceAfter=4,
+        spaceAfter=4 if not compact_title_mode else 3,
     )
     section_kicker_style = ParagraphStyle(
         'EventPDFKicker',
@@ -1241,8 +1329,8 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
     subtitle_style = ParagraphStyle(
         'EventPDFSubtitle',
         parent=styles['Normal'],
-        fontSize=10,
-        leading=14,
+        fontSize=subtitle_font_size,
+        leading=subtitle_leading,
         textColor=colors.HexColor('#475569'),
     )
     body_style = ParagraphStyle(
@@ -1312,8 +1400,8 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
     right_meta_style = ParagraphStyle(
         'EventPDFRightMeta',
         parent=styles['Normal'],
-        fontSize=8.5,
-        leading=11,
+        fontSize=meta_font_size,
+        leading=meta_leading,
         textColor=colors.HexColor('#475569'),
         alignment=TA_RIGHT,
     )
@@ -1465,15 +1553,15 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
     ]
 
     header_table = Table([[
-        safe_image(logo_path, 0.86 * inch, 0.86 * inch),
+        safe_image(logo_path, logo_size, logo_size),
         [
             Paragraph('EVENT REPORT', section_kicker_style),
-            Paragraph(f"{esc(event.name)} {esc(event.year)}", title_style),
-            Paragraph('A board-ready event snapshot covering registration health, payment completion, attendance proxy, participation mix, geography, institutions, corporate activity, and abstract outcomes.', subtitle_style),
+            Paragraph(esc(event_title_text), title_style),
+            Paragraph(executive_subtitle_text, subtitle_style),
         ],
         [Paragraph(line, right_meta_style) for line in meta_lines],
-        safe_image(event_logo_path, 0.86 * inch, 0.86 * inch),
-    ]], colWidths=[0.95 * inch, 5.0 * inch, 3.15 * inch, 0.95 * inch])
+        safe_image(event_logo_path, logo_size, logo_size),
+    ]], colWidths=[0.95 * inch, header_title_width, header_meta_width, 0.95 * inch])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -1539,7 +1627,7 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
         body_style,
     )
 
-    elements = [header_table, Spacer(1, 10), executive_summary, Spacer(1, 10), summary_cards, Spacer(1, 12), detail_row, Spacer(1, 12)]
+    elements = [header_table, Spacer(1, executive_spacing_after_header), executive_summary, Spacer(1, executive_spacing_after_summary), summary_cards, Spacer(1, 12), detail_row, Spacer(1, 12)]
 
     elements.append(Paragraph('GEOGRAPHY AND INSTITUTION MIX', section_kicker_style))
     elements.append(Paragraph('Where participants are coming from and which institutions are most represented', ParagraphStyle('EventPDFSectionTitle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=15, leading=18, textColor=colors.HexColor('#0f172a'))))
@@ -1665,9 +1753,9 @@ def generate_event_report_pdf(event, report_data, site_settings=None, feedback_r
     ]))
     elements.append(appendix_table)
 
-    feedback_questions = feedback_report_data.get('questions', [])
-    feedback_rows = feedback_report_data.get('rows', [])
-    if feedback_questions or feedback_rows:
+    feedback_questions = feedback_report_data.get('questions', []) if event.event_status == 'closed' else []
+    feedback_rows = feedback_report_data.get('rows', []) if event.event_status == 'closed' else []
+    if event.event_status == 'closed' and (feedback_questions or feedback_rows):
         feedback_totals = feedback_report_data.get('totals', {})
         elements.extend([
             PageBreak(),
