@@ -545,13 +545,22 @@
                         <h2 class="mt-1 text-lg font-black text-ink">Participant submissions for {{ selected_event.name }}</h2>
                         <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Review who submitted feedback, inspect their answers, and export the current filtered event report.</p>
                     </div>
-                    <form method="post" class="flex gap-2">
-                        {% csrf_token %}
-                        <input type="hidden" name="certificate_action" value="export_feedback_report_csv">
-                        <input type="hidden" name="event" value="{{ selected_event.id }}">
-                        <input type="hidden" name="q" value="{{ current_filters.q }}">
-                        <button class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export CSV</button>
-                    </form>
+                    <div class="flex flex-wrap gap-2">
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="certificate_action" value="export_feedback_report_pdf">
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <button class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Generate PDF</button>
+                        </form>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="certificate_action" value="export_feedback_report_csv">
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <button class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export CSV</button>
+                        </form>
+                    </div>
                 </div>
                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <div class="rounded-2xl border border-blue-100 bg-blue-50/40 px-4 py-4">

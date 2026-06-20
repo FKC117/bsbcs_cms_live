@@ -773,3 +773,416 @@ def generate_corporate_invoice(corporate_payment):
     corporate_payment.invoice.name = f"media/corporate_invoices/{file_name}"
     corporate_payment.save(update_fields=['invoice', 'updated_at'])
     return file_path
+
+
+
+def generate_feedback_report_pdf(event, report_data, site_settings=None):
+    from datetime import datetime
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
+    from reportlab.graphics.shapes import Drawing, Rect, String
+    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=0.55 * inch,
+        rightMargin=0.55 * inch,
+        topMargin=0.7 * inch,
+        bottomMargin=0.55 * inch,
+    )
+    styles = getSampleStyleSheet()
+    organizer_name = ''
+    if site_settings and getattr(site_settings, 'site_name', None):
+        organizer_name = site_settings.site_name
+    elif site_settings and getattr(site_settings, 'abbreviation', None):
+        organizer_name = site_settings.abbreviation
+    else:
+        organizer_name = 'BSBCS'
+
+    title_style = ParagraphStyle(
+        'FeedbackPDFTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=22,
+        leading=26,
+        textColor=colors.HexColor('#0f172a'),
+        spaceAfter=6,
+    )
+    section_kicker_style = ParagraphStyle(
+        'FeedbackPDFKicker',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=11,
+        textColor=colors.HexColor('#0f8aa8'),
+        spaceAfter=2,
+    )
+    subtitle_style = ParagraphStyle(
+        'FeedbackPDFSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#475569'),
+    )
+    card_value_style = ParagraphStyle(
+        'FeedbackPDFCardValue',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#0f172a'),
+        alignment=TA_CENTER,
+    )
+    card_label_style = ParagraphStyle(
+        'FeedbackPDFCardLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#64748b'),
+        alignment=TA_CENTER,
+    )
+    body_style = ParagraphStyle(
+        'FeedbackPDFBody',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor('#334155'),
+    )
+    answer_style = ParagraphStyle(
+        'FeedbackPDFAnswer',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=12,
+        textColor=colors.HexColor('#334155'),
+    )
+    table_head_style = ParagraphStyle(
+        'FeedbackPDFTableHead',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    table_cell_style = ParagraphStyle(
+        'FeedbackPDFTableCell',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#1e293b'),
+        alignment=TA_CENTER,
+    )
+    appendix_cell_style = ParagraphStyle(
+        'FeedbackPDFApxCell',
+        parent=styles['Normal'],
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.HexColor('#334155'),
+    )
+    appendix_head_style = ParagraphStyle(
+        'FeedbackPDFApxHead',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    right_meta_style = ParagraphStyle(
+        'FeedbackPDFRightMeta',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor('#475569'),
+        alignment=TA_RIGHT,
+    )
+    question_title_style = ParagraphStyle(
+        'FeedbackPDFQuestionTitle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor('#0f172a'),
+    )
+
+    def format_event_date_range():
+        start = getattr(event, 'start_date', None)
+        end = getattr(event, 'end_date', None)
+        if start and end:
+            if start == end:
+                return start.strftime('%d %B %Y')
+            if start.year == end.year and start.month == end.month:
+                return f"{start.strftime('%d')} - {end.strftime('%d %B %Y')}"
+            if start.year == end.year:
+                return f"{start.strftime('%d %B')} - {end.strftime('%d %B %Y')}"
+            return f"{start.strftime('%d %B %Y')} - {end.strftime('%d %B %Y')}"
+        if start:
+            return start.strftime('%d %B %Y')
+        return 'Date not available'
+
+    def safe_image(path_value, width, height):
+        if path_value and os.path.exists(path_value):
+            image = Image(path_value, width=width, height=height)
+            image.hAlign = 'LEFT'
+            return image
+        return Spacer(width, height)
+
+    def stat_card(label, value, note, border_color, fill_color, value_color):
+        table = Table([
+            [Paragraph(label.upper(), card_label_style)],
+            [Paragraph(str(value), ParagraphStyle('TmpValue', parent=card_value_style, textColor=value_color))],
+            [Paragraph(note, ParagraphStyle('TmpNote', parent=body_style, alignment=TA_CENTER, fontSize=8, leading=10, textColor=colors.HexColor('#64748b')))],
+        ], colWidths=[2.7 * inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), fill_color),
+            ('BOX', (0, 0), (-1, -1), 0.8, border_color),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ]))
+        return table
+
+    def radio_bar_drawing(percent, count, label):
+        drawing = Drawing(280, 18)
+        drawing.add(Rect(0, 4, 280, 10, rx=5, ry=5, fillColor=colors.HexColor('#e2e8f0'), strokeColor=colors.HexColor('#dbeafe')))
+        fill_width = max(8, 280 * (percent / 100.0)) if count else 0
+        if fill_width:
+            drawing.add(Rect(0, 4, fill_width, 10, rx=5, ry=5, fillColor=colors.HexColor('#2563eb'), strokeColor=colors.HexColor('#2563eb')))
+        return drawing
+
+    class FeedbackReportCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            num_pages = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self.draw_footer(num_pages)
+                canvas.Canvas.showPage(self)
+            canvas.Canvas.save(self)
+
+        def draw_footer(self, page_count):
+            width, _height = landscape(A4)
+            self.saveState()
+            self.setStrokeColor(colors.HexColor('#dbe4f0'))
+            self.line(doc.leftMargin, 24, width - doc.rightMargin, 24)
+            self.setFont('Helvetica', 8)
+            self.setFillColor(colors.HexColor('#64748b'))
+            self.drawString(doc.leftMargin, 12, f"{event.name} {event.year} Feedback report")
+            self.drawRightString(width - doc.rightMargin, 12, f"Page {self._pageNumber} of {page_count}")
+            self.restoreState()
+
+    logo_path = getattr(getattr(site_settings, 'logo', None), 'path', None) if site_settings and getattr(site_settings, 'logo', None) else None
+    event_logo_path = getattr(getattr(event, 'event_logo', None), 'path', None) if getattr(event, 'event_logo', None) else None
+
+    left_logo = safe_image(logo_path, 0.9 * inch, 0.9 * inch)
+    right_logo = safe_image(event_logo_path, 0.9 * inch, 0.9 * inch)
+
+    meta_lines = [
+        f"<b>Organizer:</b> {organizer_name}",
+        f"<b>Event:</b> {event.name} {event.year}",
+        f"<b>Date:</b> {format_event_date_range()}",
+        f"<b>Location:</b> {getattr(event, 'location', None) or 'Not specified'}",
+        f"<b>Generated:</b> {datetime.now().strftime('%d %B %Y, %I:%M %p')}",
+    ]
+
+    header_table = Table([
+        [
+            left_logo,
+            [
+                Paragraph('FEEDBACK REPORT', section_kicker_style),
+                Paragraph(f"{event.name} {event.year}", title_style),
+                Paragraph('Participant submissions, question-wise insights, and response appendix prepared for event organizers.', subtitle_style),
+            ],
+            [
+                Paragraph(line, right_meta_style) for line in meta_lines
+            ],
+            right_logo,
+        ]
+    ], colWidths=[0.95 * inch, 5.0 * inch, 3.25 * inch, 0.95 * inch])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    totals = report_data.get('totals', {})
+    summary_cards = Table([
+        [
+            stat_card('Participants', totals.get('participants', 0), 'Submitted participants in this filtered report', colors.HexColor('#bfdbfe'), colors.HexColor('#eff6ff'), colors.HexColor('#1d4ed8')),
+            stat_card('Submitted', totals.get('submitted', 0), 'Participants included in the report dataset', colors.HexColor('#bbf7d0'), colors.HexColor('#f0fdf4'), colors.HexColor('#15803d')),
+            stat_card('Issued kits', totals.get('issued', 0), 'Submitted participants whose kits are already issued', colors.HexColor('#cbd5e1'), colors.HexColor('#f8fafc'), colors.HexColor('#0f172a')),
+        ]
+    ], colWidths=[2.8 * inch, 2.8 * inch, 2.8 * inch])
+    summary_cards.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+
+    elements = [header_table, Spacer(1, 18), summary_cards, Spacer(1, 18)]
+
+    for index, insight in enumerate(report_data.get('insights', []), start=1):
+        elements.append(Paragraph(f"QUESTION {index}", section_kicker_style))
+        elements.append(Paragraph(insight['question'].question_text or f'Question {index}', question_title_style))
+        elements.append(Paragraph(
+            f"Type: <b>{insight['question'].get_question_type_display()}</b> &nbsp;&nbsp; | &nbsp;&nbsp; Answered by <b>{insight.get('answered_participants', 0)}/{insight.get('submitted_participants', 0)}</b> submitted participants.",
+            body_style,
+        ))
+        elements.append(Spacer(1, 10))
+
+        if insight.get('kind') == 'radio':
+            radio_rows = [[
+                Paragraph('Option', table_head_style),
+                Paragraph('Count', table_head_style),
+                Paragraph('Share', table_head_style),
+                Paragraph('Distribution', table_head_style),
+            ]]
+            for bar in insight.get('bars', []):
+                radio_rows.append([
+                    Paragraph(bar['label'], body_style),
+                    Paragraph(str(bar['count']), table_cell_style),
+                    Paragraph(f"{bar['percent']}%", table_cell_style),
+                    radio_bar_drawing(bar['percent'], bar['count'], bar['label']),
+                ])
+            radio_table = Table(radio_rows, colWidths=[2.8 * inch, 0.8 * inch, 0.8 * inch, 3.3 * inch], repeatRows=1)
+            radio_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.extend([radio_table, Spacer(1, 16)])
+
+        elif insight.get('kind') == 'matrix':
+            matrix_columns = insight.get('matrix_columns', [])
+            matrix_data = [[Paragraph('Row', table_head_style)]]
+            matrix_data[0].extend([Paragraph(str(column), table_head_style) for column in matrix_columns])
+            matrix_data[0].append(Paragraph('Total', table_head_style))
+            for row in insight.get('matrix_rows', []):
+                row_cells = [Paragraph(row['label'], body_style)]
+                for cell in row.get('cells', []):
+                    cell_style = ParagraphStyle(
+                        'MatrixCellTmp',
+                        parent=table_cell_style,
+                        textColor=colors.white if cell.get('use_light_text') else colors.HexColor('#1d4ed8'),
+                    )
+                    row_cells.append(Paragraph(str(cell['count']), cell_style))
+                row_cells.append(Paragraph(str(row.get('total', 0)), table_cell_style))
+                matrix_data.append(row_cells)
+            matrix_table = Table(matrix_data, repeatRows=1)
+            matrix_style = [
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 7),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('BACKGROUND', (0, 1), (0, -1), colors.white),
+                ('BACKGROUND', (-1, 1), (-1, -1), colors.HexColor('#f8fafc')),
+            ]
+            for row_index, row in enumerate(insight.get('matrix_rows', []), start=1):
+                for col_index, cell in enumerate(row.get('cells', []), start=1):
+                    if cell.get('intensity'):
+                        matrix_style.append(('BACKGROUND', (col_index, row_index), (col_index, row_index), colors.Color(37/255, 99/255, 235/255, alpha=min(cell['intensity'] / 100, 0.95))))
+                    else:
+                        matrix_style.append(('BACKGROUND', (col_index, row_index), (col_index, row_index), colors.HexColor('#f8fafc')))
+            matrix_table.setStyle(TableStyle(matrix_style))
+            elements.extend([matrix_table, Spacer(1, 16)])
+
+        else:
+            all_text_answers = list(insight.get('text_answers', []))
+            longest_text_answers = sorted(all_text_answers, key=lambda answer: (len(answer or ''), answer or ''), reverse=True)[:10]
+            elements.append(Paragraph(f"{insight.get('response_count', 0)} text response(s) captured for this question. Showing the 10 longest responses in the PDF summary.", body_style))
+            elements.append(Spacer(1, 8))
+            text_rows = [[Paragraph('No.', table_head_style), Paragraph('Response', table_head_style)]]
+            for answer_index, answer in enumerate(longest_text_answers, start=1):
+                text_rows.append([
+                    Paragraph(str(answer_index), table_cell_style),
+                    Paragraph(answer.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br/>'), answer_style),
+                ])
+            if len(text_rows) == 1:
+                text_rows.append([Paragraph('-', table_cell_style), Paragraph('No saved text responses yet.', body_style)])
+            text_table = Table(text_rows, colWidths=[0.45 * inch, 9.1 * inch], repeatRows=1)
+            text_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 7),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.extend([text_table, Spacer(1, 16)])
+
+    elements.append(PageBreak())
+    elements.append(Paragraph('PARTICIPANT APPENDIX', section_kicker_style))
+    elements.append(Paragraph('Submitted participant response index', title_style))
+    elements.append(Paragraph('This appendix lists submitted participants and their eligibility-related status at the time of export.', subtitle_style))
+    elements.append(Spacer(1, 12))
+
+    appendix_rows = [[
+        Paragraph('Participant', appendix_head_style),
+        Paragraph('Email', appendix_head_style),
+        Paragraph('Invoice', appendix_head_style),
+        Paragraph('Approved', appendix_head_style),
+        Paragraph('Payment', appendix_head_style),
+        Paragraph('Kit', appendix_head_style),
+        Paragraph('Answered', appendix_head_style),
+    ]]
+    for row in report_data.get('rows', []):
+        appendix_rows.append([
+            Paragraph((row['participant'].name or '-').replace('&', '&amp;'), appendix_cell_style),
+            Paragraph((row['participant'].email or '-').replace('&', '&amp;'), appendix_cell_style),
+            Paragraph((row.get('invoice_number') or '-').replace('&', '&amp;'), appendix_cell_style),
+            Paragraph('Yes' if row['participant'].approved else 'No', appendix_cell_style),
+            Paragraph(getattr(row.get('payment_status'), 'status', 'Unpaid').title() if row.get('payment_status') else 'Unpaid', appendix_cell_style),
+            Paragraph('Issued' if row.get('kit_issued') else 'Not issued', appendix_cell_style),
+            Paragraph(f"{row.get('answered_questions', 0)}/{len(report_data.get('questions', []))}", appendix_cell_style),
+        ])
+    appendix_table = Table(appendix_rows, colWidths=[1.7 * inch, 2.2 * inch, 1.4 * inch, 0.65 * inch, 0.9 * inch, 0.8 * inch, 0.8 * inch], repeatRows=1)
+    appendix_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(appendix_table)
+
+    doc.build(elements, canvasmaker=FeedbackReportCanvas)
+    buffer.seek(0)
+    return buffer

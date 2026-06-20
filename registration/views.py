@@ -7068,6 +7068,16 @@ def dashboard_certificate_center(request):
                     ] + [answer['display_value'] for answer in row['question_answers']])
                 return response
 
+            elif action == 'export_feedback_report_pdf':
+                from .pdf_utils import generate_feedback_report_pdf
+
+                report_data = _build_feedback_report_data(selected_event, search_query)
+                pdf_buffer = generate_feedback_report_pdf(selected_event, report_data, site_settings=site_settings)
+                safe_event_name = slugify(f"{selected_event.name}-{selected_event.year}") or f"event-{selected_event.id}"
+                response = HttpResponse(pdf_buffer, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="feedback-report-{safe_event_name}.pdf"'
+                return response
+
             elif action == 'save_thank_you_template':
                 subject = (request.POST.get('thank_you_subject') or '').strip()
                 body = (request.POST.get('thank_you_body') or '').strip()
@@ -7137,7 +7147,7 @@ def dashboard_certificate_center(request):
             messages.error(request, str(exc))
         if action in ('add_signatory', 'delete_signatory', 'clear_signatory_signature'):
             redirect_url = f"{redirect_url}#signatories"
-        elif action in ('add_question', 'update_question', 'remove_question', 'export_feedback_report_csv'):
+        elif action in ('add_question', 'update_question', 'remove_question', 'export_feedback_report_csv', 'export_feedback_report_pdf'):
             redirect_url = f"{redirect_url}#feedback"
         elif action in ('save_thank_you_template', 'send_selected_thank_you', 'resend_selected_thank_you'):
             redirect_url = f"{redirect_url}#thank-you-email"
