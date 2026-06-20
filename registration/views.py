@@ -3146,6 +3146,23 @@ def _queue_thank_you_emails_for_kits(kits, event, subject, body, sent_by=None, f
     return counts
 
 
+def _certificate_center_kit_rows_queryset(event, search_query=''):
+    qs = RegistrationKit.objects.select_related(
+        'payment_status__participant',
+        'payment_status__event',
+    ).filter(event=event, status='issued').order_by('-issued_at', 'payment_status__participant__name')
+    query_text = (search_query or '').strip()
+    if query_text:
+        qs = qs.filter(
+            Q(payment_status__participant__name__icontains=query_text)
+            | Q(payment_status__participant__email__icontains=query_text)
+            | Q(payment_status__participant__phone__icontains=query_text)
+            | Q(payment_status__participant__organization__icontains=query_text)
+            | Q(payment_status__merchant_invoice_number__icontains=query_text)
+        )
+    return qs
+
+
 def _get_chrome_executable():
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -6761,22 +6778,28 @@ def dashboard_certificate_center(request):
                 if not subject or not body:
                     raise ValueError('Save the event email first before sending or resending participant thank-you emails.')
 
-                selected_kit_ids = [
-                    int(value) for value in request.POST.getlist('selected_kit_ids')
-                    if str(value).strip().isdigit()
-                ]
-                if not selected_kit_ids:
-                    raise ValueError('Select at least one participant before sending or resending emails.')
+                select_all_matching = str(request.POST.get('select_all_matching_kits') or '').strip() == '1'
+                if select_all_matching:
+                    selected_kits = list(_certificate_center_kit_rows_queryset(selected_event, search_query))
+                    if not selected_kits:
+                        raise ValueError('No eligible issued-kit participants were found for the selected action.')
+                else:
+                    selected_kit_ids = [
+                        int(value) for value in request.POST.getlist('selected_kit_ids')
+                        if str(value).strip().isdigit()
+                    ]
+                    if not selected_kit_ids:
+                        raise ValueError('Select at least one participant before sending or resending emails.')
 
-                selected_kits = list(
-                    RegistrationKit.objects.select_related('payment_status__participant').filter(
-                        event=selected_event,
-                        status='issued',
-                        id__in=selected_kit_ids,
+                    selected_kits = list(
+                        RegistrationKit.objects.select_related('payment_status__participant').filter(
+                            event=selected_event,
+                            status='issued',
+                            id__in=selected_kit_ids,
+                        )
                     )
-                )
-                if not selected_kits:
-                    raise ValueError('No eligible issued-kit participants were found for the selected action.')
+                    if not selected_kits:
+                        raise ValueError('No eligible issued-kit participants were found for the selected action.')
 
                 force_resend = action == 'resend_selected_thank_you'
                 counts = _queue_thank_you_emails_for_kits(
@@ -6788,15 +6811,16 @@ def dashboard_certificate_center(request):
                     force_resend=force_resend,
                 )
                 action_label = 'resent' if force_resend else 'sent'
+                selection_scope = 'all filtered issued-kit participants' if select_all_matching else 'selected issued-kit participants'
                 dashboard_log_action(
                     request,
                     selected_event,
                     CHANGE,
-                    f'Participant thank-you emails {action_label} from Certificate Center. queued={counts["queued"]}, already_sent={counts["already_sent"]}, missing_email={counts["missing_email"]}, failed={counts["failed"]}',
+                    f'Participant thank-you emails {action_label} from Certificate Center for {selection_scope}. queued={counts["queued"]}, already_sent={counts["already_sent"]}, missing_email={counts["missing_email"]}, failed={counts["failed"]}',
                 )
                 messages.success(
                     request,
-                    f'Participant thank-you email action complete. Queued: {counts["queued"]}, already sent: {counts["already_sent"]}, missing email: {counts["missing_email"]}, failed: {counts["failed"]}.',
+                    f'Participant thank-you email action complete for {selection_scope}. Queued: {counts["queued"]}, already sent: {counts["already_sent"]}, missing email: {counts["missing_email"]}, failed: {counts["failed"]}.',
                 )
 
             else:
@@ -6825,18 +6849,7 @@ def dashboard_certificate_center(request):
         certificate = Certificate.objects.filter(event=selected_event).prefetch_related('signatories').first()
         signatories = certificate.signatories.all() if certificate else CertificateSignatory.objects.none()
         feedback_questions = selected_event.feedback_questions.all().order_by('order', 'id')
-        kit_rows_qs = RegistrationKit.objects.select_related(
-            'payment_status__participant',
-            'payment_status__event',
-        ).filter(event=selected_event, status='issued').order_by('-issued_at', 'payment_status__participant__name')
-        if search_query:
-            kit_rows_qs = kit_rows_qs.filter(
-                Q(payment_status__participant__name__icontains=search_query)
-                | Q(payment_status__participant__email__icontains=search_query)
-                | Q(payment_status__participant__phone__icontains=search_query)
-                | Q(payment_status__participant__organization__icontains=search_query)
-                | Q(payment_status__merchant_invoice_number__icontains=search_query)
-            )
+        kit_rows_qs = _certificate_center_kit_rows_queryset(selected_event, search_query)
         feedback_participant_ids = set(
             FeedbackResponse.objects.filter(event=selected_event).values_list('participant_id', flat=True).distinct()
         )

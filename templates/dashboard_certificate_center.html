@@ -720,18 +720,31 @@
                 </section>
 
                 <section id="participant-thank-you-controls" class="mb-3 rounded-2xl border border-line bg-slate-50 px-4 py-4">
-                    <form id="participant-thank-you-bulk-form" method="post" class="flex flex-wrap items-end justify-between gap-4">
+                    <form id="participant-thank-you-bulk-form" method="post" class="space-y-4">
                         {% csrf_token %}
                         <input type="hidden" name="event" value="{{ selected_event.id }}">
                         <input type="hidden" name="q" value="{{ current_filters.q }}">
-                        <div>
-                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Participant email actions</div>
-                            <h3 class="mt-1 text-lg font-black text-ink">Select participants, then send or resend</h3>
-                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Bulk controls live here. Use send for first-time delivery and resend for people who already received the thank-you email.</p>
+                        <input type="hidden" name="select_all_matching_kits" id="select-all-matching-kits" value="0">
+                        <div class="flex flex-wrap items-end justify-between gap-4">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Participant email actions</div>
+                                <h3 class="mt-1 text-lg font-black text-ink">Select participants, then send or resend</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Bulk controls live here. Use send for first-time delivery and resend for people who already received the thank-you email.</p>
+                            </div>
+                            <div class="flex flex-wrap gap-3">
+                                <button type="submit" name="certificate_action" value="send_selected_thank_you" class="rounded-xl border border-bsbcs-blue bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50">Send selected</button>
+                                <button type="submit" name="certificate_action" value="resend_selected_thank_you" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Resend selected</button>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button type="submit" name="certificate_action" value="send_selected_thank_you" class="rounded-xl border border-bsbcs-blue bg-white px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:bg-blue-50">Send selected</button>
-                            <button type="submit" name="certificate_action" value="resend_selected_thank_you" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Resend selected</button>
+                        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3">
+                            <div>
+                                <div class="text-sm font-black text-ink">Bulk selection scope</div>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">Showing {{ page_obj|length }} of {{ page_obj.paginator.count }} issued-kit participants in this filtered list.</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" id="select-all-matching-trigger" class="rounded-xl border border-line bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Select all ({{ page_obj.paginator.count }})</button>
+                                <button type="button" id="clear-participant-selection" class="rounded-xl border border-line bg-white px-4 py-2 text-sm font-black text-slate-600 hover:border-slate-400 hover:text-slate-800">Clear selection</button>
+                            </div>
                         </div>
                     </form>
                 </section>
@@ -872,6 +885,9 @@
         (function () {
             const selectAll = document.getElementById('select-all-issued-kits');
             const rowCheckboxes = Array.from(document.querySelectorAll('.participant-kit-checkbox'));
+            const selectAllMatchingInput = document.getElementById('select-all-matching-kits');
+            const selectAllMatchingTrigger = document.getElementById('select-all-matching-trigger');
+            const clearSelectionTrigger = document.getElementById('clear-participant-selection');
             if (!selectAll || !rowCheckboxes.length) return;
 
             const syncHeader = () => {
@@ -880,17 +896,67 @@
                 selectAll.indeterminate = checked > 0 && checked < rowCheckboxes.length;
             };
 
+            const syncBulkScope = () => {
+                if (!selectAllMatchingInput || !selectAllMatchingTrigger) return;
+                const allSelected = selectAllMatchingInput.value === '1';
+                selectAllMatchingTrigger.classList.toggle('border-bsbcs-blue', allSelected);
+                selectAllMatchingTrigger.classList.toggle('bg-blue-50', allSelected);
+                selectAllMatchingTrigger.classList.toggle('text-bsbcs-blue', allSelected);
+                selectAllMatchingTrigger.textContent = allSelected ? 'All filtered participants selected' : selectAllMatchingTrigger.dataset.defaultLabel;
+            };
+
+            const clearSelection = () => {
+                rowCheckboxes.forEach((box) => {
+                    box.checked = false;
+                });
+                if (selectAllMatchingInput) {
+                    selectAllMatchingInput.value = '0';
+                }
+                syncHeader();
+                syncBulkScope();
+            };
+
             selectAll.addEventListener('change', () => {
                 rowCheckboxes.forEach((box) => {
                     box.checked = selectAll.checked;
                 });
+                if (selectAllMatchingInput) {
+                    selectAllMatchingInput.value = '0';
+                }
                 syncHeader();
+                syncBulkScope();
             });
 
             rowCheckboxes.forEach((box) => {
-                box.addEventListener('change', syncHeader);
+                box.addEventListener('change', () => {
+                    if (selectAllMatchingInput) {
+                        selectAllMatchingInput.value = '0';
+                    }
+                    syncHeader();
+                    syncBulkScope();
+                });
             });
+
+            if (selectAllMatchingTrigger) {
+                selectAllMatchingTrigger.dataset.defaultLabel = selectAllMatchingTrigger.textContent;
+                selectAllMatchingTrigger.addEventListener('click', () => {
+                    rowCheckboxes.forEach((box) => {
+                        box.checked = true;
+                    });
+                    if (selectAllMatchingInput) {
+                        selectAllMatchingInput.value = '1';
+                    }
+                    syncHeader();
+                    syncBulkScope();
+                });
+            }
+
+            if (clearSelectionTrigger) {
+                clearSelectionTrigger.addEventListener('click', clearSelection);
+            }
+
             syncHeader();
+            syncBulkScope();
         })();
 
         (function () {
