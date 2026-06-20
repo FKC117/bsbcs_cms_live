@@ -136,7 +136,15 @@ DASHBOARD_PERMISSION_GROUPS["dashboard"] = {
         for permission in permission_group["read"]
         if area != "staff_activity"
     ),
-    "write": (),
+    # The main dashboard itself does not mutate business records.
+    # POST is used for export-style actions like PDF generation, so it should
+    # follow the same access gate as the read-only dashboard view.
+    "write": tuple(
+        permission
+        for area, permission_group in DASHBOARD_PERMISSION_GROUPS.items()
+        for permission in permission_group["read"]
+        if area != "staff_activity"
+    ),
 }
 
 

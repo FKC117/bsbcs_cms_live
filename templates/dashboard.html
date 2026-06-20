@@ -194,6 +194,39 @@
                 ],
                 indexAxis: 'y',
             });
+
+            const eventReport = data.event_report || {};
+            renderBarChart('eventReportStatus', 'eventReportStatusChart', {
+                labels: (eventReport.registration_status || {}).labels || [],
+                datasets: [
+                    { label: 'Participants', data: (eventReport.registration_status || {}).counts || [], backgroundColor: ['rgba(17,120,70,.88)', 'rgba(166,111,0,.88)', 'rgba(23,105,194,.86)'], borderRadius: 10 },
+                ],
+            });
+            renderBarChart('eventReportType', 'eventReportTypeChart', {
+                labels: (eventReport.registration_types || {}).labels || [],
+                datasets: [
+                    { label: 'Participants', data: (eventReport.registration_types || {}).counts || [], backgroundColor: ['rgba(23,105,194,.88)', 'rgba(8,127,140,.88)', 'rgba(17,120,70,.88)', 'rgba(166,111,0,.88)'], borderRadius: 10 },
+                ],
+            });
+            renderBarChart('eventReportPayment', 'eventReportPaymentChart', {
+                labels: (eventReport.payment_status || {}).labels || [],
+                datasets: [
+                    { label: 'Participants', data: (eventReport.payment_status || {}).counts || [], backgroundColor: ['rgba(17,120,70,.9)', 'rgba(166,111,0,.9)', 'rgba(23,105,194,.88)'], borderRadius: 10 },
+                ],
+            });
+            renderBarChart('eventReportCountry', 'eventReportCountryChart', {
+                labels: (eventReport.countries || {}).labels || [],
+                datasets: [
+                    { label: 'Participants', data: (eventReport.countries || {}).counts || [], backgroundColor: 'rgba(8,127,140,.82)', borderRadius: 10 },
+                ],
+                indexAxis: 'y',
+            });
+            renderBarChart('eventReportAbstract', 'eventReportAbstractChart', {
+                labels: (eventReport.abstracts || {}).labels || [],
+                datasets: [
+                    { label: 'Abstracts', data: (eventReport.abstracts || {}).counts || [], backgroundColor: ['rgba(23,105,194,.88)', 'rgba(17,120,70,.9)', 'rgba(8,127,140,.88)', 'rgba(166,111,0,.9)'], borderRadius: 10 },
+                ],
+            });
         }
 
         document.addEventListener('DOMContentLoaded', initDashboardCharts);

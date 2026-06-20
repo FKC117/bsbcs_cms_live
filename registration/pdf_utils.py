@@ -1186,3 +1186,654 @@ def generate_feedback_report_pdf(event, report_data, site_settings=None):
     doc.build(elements, canvasmaker=FeedbackReportCanvas)
     buffer.seek(0)
     return buffer
+
+
+
+def generate_event_report_pdf(event, report_data, site_settings=None, feedback_report_data=None):
+    from datetime import datetime
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
+    from reportlab.graphics.shapes import Drawing, Rect
+    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=0.55 * inch,
+        rightMargin=0.55 * inch,
+        topMargin=0.68 * inch,
+        bottomMargin=0.55 * inch,
+    )
+    styles = getSampleStyleSheet()
+
+    organizer_name = ''
+    if site_settings and getattr(site_settings, 'site_name', None):
+        organizer_name = site_settings.site_name
+    elif site_settings and getattr(site_settings, 'abbreviation', None):
+        organizer_name = site_settings.abbreviation
+    else:
+        organizer_name = 'BSBCS'
+
+    title_style = ParagraphStyle(
+        'EventPDFTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=22,
+        leading=26,
+        textColor=colors.HexColor('#0f172a'),
+        spaceAfter=4,
+    )
+    section_kicker_style = ParagraphStyle(
+        'EventPDFKicker',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=11,
+        textColor=colors.HexColor('#0f8aa8'),
+        spaceAfter=2,
+    )
+    subtitle_style = ParagraphStyle(
+        'EventPDFSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#475569'),
+    )
+    body_style = ParagraphStyle(
+        'EventPDFBody',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor('#334155'),
+    )
+    muted_style = ParagraphStyle(
+        'EventPDFMuted',
+        parent=body_style,
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor('#64748b'),
+    )
+    card_value_style = ParagraphStyle(
+        'EventPDFCardValue',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor('#0f172a'),
+        alignment=TA_CENTER,
+    )
+    card_label_style = ParagraphStyle(
+        'EventPDFCardLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#64748b'),
+        alignment=TA_CENTER,
+    )
+    metric_label_style = ParagraphStyle(
+        'EventPDFMetricLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#64748b'),
+    )
+    metric_value_style = ParagraphStyle(
+        'EventPDFMetricValue',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=14,
+        leading=16,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    table_head_style = ParagraphStyle(
+        'EventPDFTableHead',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    table_cell_style = ParagraphStyle(
+        'EventPDFTableCell',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#1e293b'),
+    )
+    right_meta_style = ParagraphStyle(
+        'EventPDFRightMeta',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.HexColor('#475569'),
+        alignment=TA_RIGHT,
+    )
+    feedback_question_title_style = ParagraphStyle(
+        'EventPDFFeedbackQuestionTitle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    feedback_answer_style = ParagraphStyle(
+        'EventPDFFeedbackAnswer',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=12,
+        textColor=colors.HexColor('#334155'),
+    )
+    feedback_appendix_cell_style = ParagraphStyle(
+        'EventPDFFeedbackAppendixCell',
+        parent=styles['Normal'],
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.HexColor('#334155'),
+    )
+    feedback_appendix_head_style = ParagraphStyle(
+        'EventPDFFeedbackAppendixHead',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=7.5,
+        leading=9,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+
+    overview = report_data.get('overview', {})
+    institutions = report_data.get('institutions', [])
+    countries = report_data.get('countries', [])
+    feedback_report_data = feedback_report_data or {}
+
+    def esc(value):
+        if value is None:
+            return ''
+        return str(value).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    def format_event_date_range():
+        start = getattr(event, 'start_date', None)
+        end = getattr(event, 'end_date', None)
+        if start and end:
+            if start == end:
+                return start.strftime('%d %B %Y')
+            if start.year == end.year and start.month == end.month:
+                return f"{start.strftime('%d')} - {end.strftime('%d %B %Y')}"
+            if start.year == end.year:
+                return f"{start.strftime('%d %B')} - {end.strftime('%d %B %Y')}"
+            return f"{start.strftime('%d %B %Y')} - {end.strftime('%d %B %Y')}"
+        if start:
+            return start.strftime('%d %B %Y')
+        return 'Date not available'
+
+    def safe_image(path_value, width, height):
+        if path_value and os.path.exists(path_value):
+            image = Image(path_value, width=width, height=height)
+            image.hAlign = 'LEFT'
+            return image
+        return Spacer(width, height)
+
+    def stat_card(label, value, note, border_color, fill_color, value_color):
+        table = Table([
+            [Paragraph(label.upper(), card_label_style)],
+            [Paragraph(esc(value), ParagraphStyle('TmpEventValue', parent=card_value_style, textColor=value_color))],
+            [Paragraph(esc(note), ParagraphStyle('TmpEventNote', parent=muted_style, alignment=TA_CENTER))],
+        ], colWidths=[2.45 * inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), fill_color),
+            ('BOX', (0, 0), (-1, -1), 0.85, border_color),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ]))
+        return table
+
+    def metric_panel(title, rows, border_color, fill_color):
+        panel_rows = [[Paragraph(title.upper(), ParagraphStyle('TmpMetricHead', parent=metric_label_style, textColor=colors.HexColor('#0f8aa8'))), '', '']]
+        for label, value in rows:
+            panel_rows.append([Paragraph(esc(label), metric_label_style), Paragraph(esc(value), metric_value_style), ''])
+        table = Table(panel_rows, colWidths=[1.6 * inch, 0.9 * inch, 0.01 * inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), fill_color),
+            ('BOX', (0, 0), (-1, -1), 0.8, border_color),
+            ('SPAN', (0, 0), (-1, 0)),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LINEBELOW', (0, 1), (-1, -2), 0.35, colors.HexColor('#dbe4f0')),
+        ]))
+        return table
+
+    def ranked_bar(percent, color_hex):
+        drawing = Drawing(180, 14)
+        drawing.add(Rect(0, 3, 180, 8, rx=4, ry=4, fillColor=colors.HexColor('#e2e8f0'), strokeColor=colors.HexColor('#e2e8f0')))
+        fill_width = max(8, 180 * (percent / 100.0)) if percent else 0
+        if fill_width:
+            drawing.add(Rect(0, 3, fill_width, 8, rx=4, ry=4, fillColor=colors.HexColor(color_hex), strokeColor=colors.HexColor(color_hex)))
+        return drawing
+
+    class EventReportCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            page_count = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self.draw_footer(page_count)
+                canvas.Canvas.showPage(self)
+            canvas.Canvas.save(self)
+
+        def draw_footer(self, page_count):
+            width, _height = landscape(A4)
+            self.saveState()
+            self.setStrokeColor(colors.HexColor('#dbe4f0'))
+            self.line(doc.leftMargin, 24, width - doc.rightMargin, 24)
+            self.setFont('Helvetica', 8)
+            self.setFillColor(colors.HexColor('#64748b'))
+            self.drawString(doc.leftMargin, 12, f"{event.name} {event.year} Event report")
+            self.drawRightString(width - doc.rightMargin, 12, f"Page {self._pageNumber} of {page_count}")
+            self.restoreState()
+
+    logo_path = getattr(getattr(site_settings, 'logo', None), 'path', None) if site_settings and getattr(site_settings, 'logo', None) else None
+    event_logo_path = getattr(getattr(event, 'event_logo', None), 'path', None) if getattr(event, 'event_logo', None) else None
+
+    meta_lines = [
+        f"<b>Organizer:</b> {esc(organizer_name)}",
+        f"<b>Event:</b> {esc(event.name)} {esc(event.year)}",
+        f"<b>Date:</b> {esc(format_event_date_range())}",
+        f"<b>Location:</b> {esc(getattr(event, 'location', None) or 'Not specified')}",
+        f"<b>Status:</b> {esc(getattr(event, 'get_event_status_display', lambda: event.event_status)())} / {esc(getattr(event, 'registration', None) or '-')}",
+        f"<b>Generated:</b> {datetime.now().strftime('%d %B %Y, %I:%M %p')}",
+    ]
+
+    header_table = Table([[
+        safe_image(logo_path, 0.86 * inch, 0.86 * inch),
+        [
+            Paragraph('EVENT REPORT', section_kicker_style),
+            Paragraph(f"{esc(event.name)} {esc(event.year)}", title_style),
+            Paragraph('A board-ready event snapshot covering registration health, payment completion, attendance proxy, participation mix, geography, institutions, corporate activity, and abstract outcomes.', subtitle_style),
+        ],
+        [Paragraph(line, right_meta_style) for line in meta_lines],
+        safe_image(event_logo_path, 0.86 * inch, 0.86 * inch),
+    ]], colWidths=[0.95 * inch, 5.0 * inch, 3.15 * inch, 0.95 * inch])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    summary_cards = Table([[
+        stat_card('Registrations started', overview.get('registrations_started', 0), 'All participant rows created for this event', colors.HexColor('#bfdbfe'), colors.HexColor('#eff6ff'), colors.HexColor('#1d4ed8')),
+        stat_card('Approved', overview.get('approved', 0), f"Denied {overview.get('denied', 0)} / Pending {overview.get('pending', 0)}", colors.HexColor('#bbf7d0'), colors.HexColor('#f0fdf4'), colors.HexColor('#15803d')),
+        stat_card('Attendance proxy', overview.get('attended_count', 0), f"Kit issued rows / {overview.get('attendance_rate', 0)}% of approved", colors.HexColor('#fde68a'), colors.HexColor('#fffbeb'), colors.HexColor('#a16207')),
+        stat_card('Total revenue', f"BDT {overview.get('total_revenue', 0):,.0f}", f"Participant BDT {overview.get('participant_revenue', 0):,.0f} / Corporate BDT {overview.get('corporate_revenue', 0):,.0f}", colors.HexColor('#bae6fd'), colors.HexColor('#ecfeff'), colors.HexColor('#0f766e')),
+    ]], colWidths=[2.48 * inch, 2.48 * inch, 2.48 * inch, 2.48 * inch])
+    summary_cards.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+
+    registration_panel = metric_panel('Registration mix', [
+        ('Members', overview.get('member_count', 0)),
+        ('Regular', overview.get('regular_count', 0)),
+        ('Company person', overview.get('company_person_count', 0)),
+        ('Complementary', overview.get('complementary_count', 0)),
+        ('Bangladesh', overview.get('bangladesh_count', 0)),
+        ('Abroad', overview.get('abroad_count', 0)),
+    ], colors.HexColor('#cbd5e1'), colors.HexColor('#f8fafc'))
+
+    payment_panel = metric_panel('Payment pulse', [
+        ('Paid / completed', overview.get('participant_paid_count', 0)),
+        ('Open / unpaid', overview.get('participant_unpaid_count', 0)),
+        ('Failed / cancelled', overview.get('participant_failed_count', 0)),
+        ('Participant revenue', f"BDT {overview.get('participant_revenue', 0):,.0f}"),
+        ('Corporate revenue', f"BDT {overview.get('corporate_revenue', 0):,.0f}"),
+        ('Total revenue', f"BDT {overview.get('total_revenue', 0):,.0f}"),
+    ], colors.HexColor('#bae6fd'), colors.HexColor('#f8fdff'))
+
+    corporate_panel = metric_panel('Corporate and abstracts', [
+        ('Corporate registrations', overview.get('corporate_registrations', 0)),
+        ('Corporate attendees', overview.get('corporate_total_attendees', 0)),
+        ('Corporate approved', overview.get('corporate_approved', 0)),
+        ('Corporate pending', overview.get('corporate_pending', 0)),
+        ('Abstract submitted', overview.get('abstracts_submitted', 0)),
+        ('Presentation approved', overview.get('abstracts_presentation', 0)),
+        ('Poster approved', overview.get('abstracts_poster', 0)),
+        ('Abstract pending', overview.get('abstracts_pending', 0)),
+    ], colors.HexColor('#fde68a'), colors.HexColor('#fffdf6'))
+
+    detail_row = Table([[registration_panel, payment_panel, corporate_panel]], colWidths=[3.2 * inch, 3.2 * inch, 3.7 * inch])
+    detail_row.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+
+    executive_summary = Paragraph(
+        f"<b>Executive summary:</b> {overview.get('approved', 0)} approved participants, {overview.get('participant_paid_count', 0)} paid/completed registrations, {overview.get('attended_count', 0)} issued kits, and BDT {overview.get('total_revenue', 0):,.0f} total revenue captured for this event.",
+        body_style,
+    )
+
+    elements = [header_table, Spacer(1, 10), executive_summary, Spacer(1, 10), summary_cards, Spacer(1, 12), detail_row, Spacer(1, 12)]
+
+    elements.append(Paragraph('GEOGRAPHY AND INSTITUTION MIX', section_kicker_style))
+    elements.append(Paragraph('Where participants are coming from and which institutions are most represented', ParagraphStyle('EventPDFSectionTitle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=15, leading=18, textColor=colors.HexColor('#0f172a'))))
+    elements.append(Paragraph('Rankings are based on participant registration records for the selected event.', muted_style))
+    elements.append(Spacer(1, 8))
+
+    country_cards = []
+    for row in countries[:4]:
+        country_cards.append(stat_card(
+            row.get('label', '-'),
+            row.get('count', 0),
+            'Participant registrations from this country',
+            colors.HexColor('#bae6fd'),
+            colors.HexColor('#f0f9ff'),
+            colors.HexColor('#0f8aa8'),
+        ))
+    if country_cards:
+        while len(country_cards) < 4:
+            country_cards.append(Spacer(2.45 * inch, 0.1 * inch))
+        country_summary = Table([country_cards], colWidths=[2.48 * inch, 2.48 * inch, 2.48 * inch, 2.48 * inch])
+        country_summary.setStyle(TableStyle([
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.extend([country_summary, Spacer(1, 12)])
+
+    max_institution = max([row.get('count', 0) for row in institutions], default=1) or 1
+    institution_rows = [[Paragraph('Institution', table_head_style), Paragraph('Relative share', table_head_style), Paragraph('Count', table_head_style)]]
+    for row in institutions[:10]:
+        percent = round((row.get('count', 0) / max_institution) * 100) if max_institution else 0
+        institution_rows.append([
+            Paragraph(esc(row.get('label', '-')), table_cell_style),
+            ranked_bar(percent, '#2563eb'),
+            Paragraph(esc(row.get('count', 0)), ParagraphStyle('InstitutionCount', parent=table_cell_style, alignment=TA_CENTER, fontName='Helvetica-Bold')),
+        ])
+    if len(institution_rows) == 1:
+        institution_rows.append([Paragraph('No institution data', table_cell_style), '', Paragraph('-', table_cell_style)])
+    institution_table = Table(institution_rows, colWidths=[5.55 * inch, 3.9 * inch, 0.8 * inch], repeatRows=1)
+    institution_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 7),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.extend([institution_table, Spacer(1, 16), PageBreak()])
+
+    elements.append(Paragraph('DETAILED METRIC APPENDIX', section_kicker_style))
+    elements.append(Paragraph('Event-wide operational counts', ParagraphStyle('EventPDFSectionTitleTwo', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=15, leading=18, textColor=colors.HexColor('#0f172a'))))
+    elements.append(Paragraph('This appendix keeps the raw operational counts together for board review, internal reporting, and archive exports.', subtitle_style))
+    elements.append(Paragraph('Attendance is currently represented by issued registration kits because that is the strongest attendance-like signal available in the live dataset. Country and institution rankings are based on participant registration data only.', muted_style))
+    elements.append(Spacer(1, 10))
+
+    detail_metrics = [
+        ('Registrations started', overview.get('registrations_started', 0)),
+        ('Approved participants', overview.get('approved', 0)),
+        ('Pending participants', overview.get('pending', 0)),
+        ('Denied participants', overview.get('denied', 0)),
+        ('Members', overview.get('member_count', 0)),
+        ('Regular', overview.get('regular_count', 0)),
+        ('Company person', overview.get('company_person_count', 0)),
+        ('Complementary', overview.get('complementary_count', 0)),
+        ('Bangladesh participants', overview.get('bangladesh_count', 0)),
+        ('Abroad participants', overview.get('abroad_count', 0)),
+        ('Paid / completed participants', overview.get('participant_paid_count', 0)),
+        ('Open / unpaid participants', overview.get('participant_unpaid_count', 0)),
+        ('Failed / cancelled participants', overview.get('participant_failed_count', 0)),
+        ('Attendance proxy (issued kit)', overview.get('attended_count', 0)),
+        ('Attendance rate vs approved', f"{overview.get('attendance_rate', 0)}%"),
+        ('Participant revenue', f"BDT {overview.get('participant_revenue', 0):,.2f}"),
+        ('Corporate revenue', f"BDT {overview.get('corporate_revenue', 0):,.2f}"),
+        ('Total revenue', f"BDT {overview.get('total_revenue', 0):,.2f}"),
+        ('Corporate registrations', overview.get('corporate_registrations', 0)),
+        ('Corporate attendees', overview.get('corporate_total_attendees', 0)),
+        ('Corporate approved', overview.get('corporate_approved', 0)),
+        ('Corporate pending', overview.get('corporate_pending', 0)),
+        ('Corporate denied', overview.get('corporate_denied', 0)),
+        ('Abstracts submitted', overview.get('abstracts_submitted', 0)),
+        ('Approved for presentation', overview.get('abstracts_presentation', 0)),
+        ('Approved for poster', overview.get('abstracts_poster', 0)),
+        ('Abstracts pending', overview.get('abstracts_pending', 0)),
+        ('Abstracts with files', overview.get('abstracts_with_files', 0)),
+    ]
+
+    metric_value_cell_style = ParagraphStyle('MetricValueCell', parent=table_cell_style, fontName='Helvetica-Bold')
+
+    def build_metric_table(metric_rows):
+        metrics_table_data = [[Paragraph('Metric', table_head_style), Paragraph('Value', table_head_style)]]
+        for label, value in metric_rows:
+            metrics_table_data.append([Paragraph(esc(label), table_cell_style), Paragraph(esc(value), metric_value_cell_style)])
+        metrics_table = Table(metrics_table_data, colWidths=[2.9 * inch, 1.15 * inch], repeatRows=1)
+        metrics_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 7),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        return metrics_table
+
+    midpoint = (len(detail_metrics) + 1) // 2
+    metrics_left = build_metric_table(detail_metrics[:midpoint])
+    metrics_right = build_metric_table(detail_metrics[midpoint:])
+
+    appendix_table = Table([[metrics_left, metrics_right]], colWidths=[4.2 * inch, 4.2 * inch])
+    appendix_table.setStyle(TableStyle([
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(appendix_table)
+
+    feedback_questions = feedback_report_data.get('questions', [])
+    feedback_rows = feedback_report_data.get('rows', [])
+    if feedback_questions or feedback_rows:
+        feedback_totals = feedback_report_data.get('totals', {})
+        elements.extend([
+            PageBreak(),
+            Paragraph('FEEDBACK REPORT', section_kicker_style),
+            Paragraph('Participant feedback insights and response appendix', title_style),
+            Paragraph('This section is appended to the event report and mirrors the full feedback-report content for the same event.', subtitle_style),
+            Spacer(1, 14),
+        ])
+
+        feedback_summary_cards = Table([[
+            stat_card('Participants', feedback_totals.get('participants', 0), 'Submitted participants in this feedback report', colors.HexColor('#bfdbfe'), colors.HexColor('#eff6ff'), colors.HexColor('#1d4ed8')),
+            stat_card('Submitted', feedback_totals.get('submitted', 0), 'Participants included in the feedback dataset', colors.HexColor('#bbf7d0'), colors.HexColor('#f0fdf4'), colors.HexColor('#15803d')),
+            stat_card('Issued kits', feedback_totals.get('issued', 0), 'Submitted participants whose kits are already issued', colors.HexColor('#cbd5e1'), colors.HexColor('#f8fafc'), colors.HexColor('#0f172a')),
+        ]], colWidths=[2.8 * inch, 2.8 * inch, 2.8 * inch])
+        feedback_summary_cards.setStyle(TableStyle([
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.extend([feedback_summary_cards, Spacer(1, 18)])
+
+        for index, insight in enumerate(feedback_report_data.get('insights', []), start=1):
+            elements.append(Paragraph(f"QUESTION {index}", section_kicker_style))
+            elements.append(Paragraph(insight['question'].question_text or f'Question {index}', feedback_question_title_style))
+            elements.append(Paragraph(
+                f"Type: <b>{insight['question'].get_question_type_display()}</b> &nbsp;&nbsp; | &nbsp;&nbsp; Answered by <b>{insight.get('answered_participants', 0)}/{insight.get('submitted_participants', 0)}</b> submitted participants.",
+                body_style,
+            ))
+            elements.append(Spacer(1, 10))
+
+            if insight.get('kind') == 'radio':
+                radio_rows = [[
+                    Paragraph('Option', table_head_style),
+                    Paragraph('Count', table_head_style),
+                    Paragraph('Share', table_head_style),
+                    Paragraph('Distribution', table_head_style),
+                ]]
+                for bar in insight.get('bars', []):
+                    radio_rows.append([
+                        Paragraph(bar['label'], body_style),
+                        Paragraph(str(bar['count']), table_cell_style),
+                        Paragraph(f"{bar['percent']}%", table_cell_style),
+                        ranked_bar(bar['percent'], '#2563eb'),
+                    ])
+                radio_table = Table(radio_rows, colWidths=[2.8 * inch, 0.8 * inch, 0.8 * inch, 3.3 * inch], repeatRows=1)
+                radio_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                    ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                elements.extend([radio_table, Spacer(1, 16)])
+
+            elif insight.get('kind') == 'matrix':
+                matrix_columns = insight.get('matrix_columns', [])
+                matrix_data = [[Paragraph('Row', table_head_style)]]
+                matrix_data[0].extend([Paragraph(str(column), table_head_style) for column in matrix_columns])
+                matrix_data[0].append(Paragraph('Total', table_head_style))
+                for row in insight.get('matrix_rows', []):
+                    row_cells = [Paragraph(row['label'], body_style)]
+                    for cell in row.get('cells', []):
+                        cell_style = ParagraphStyle(
+                            'EventPDFFeedbackMatrixCell',
+                            parent=table_cell_style,
+                            textColor=colors.white if cell.get('use_light_text') else colors.HexColor('#1d4ed8'),
+                        )
+                        row_cells.append(Paragraph(str(cell['count']), cell_style))
+                    row_cells.append(Paragraph(str(row.get('total', 0)), table_cell_style))
+                    matrix_data.append(row_cells)
+                matrix_table = Table(matrix_data, repeatRows=1)
+                matrix_style = [
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                    ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                    ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 7),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('BACKGROUND', (0, 1), (0, -1), colors.white),
+                    ('BACKGROUND', (-1, 1), (-1, -1), colors.HexColor('#f8fafc')),
+                ]
+                for row_index, row in enumerate(insight.get('matrix_rows', []), start=1):
+                    for col_index, cell in enumerate(row.get('cells', []), start=1):
+                        if cell.get('intensity'):
+                            matrix_style.append(('BACKGROUND', (col_index, row_index), (col_index, row_index), colors.Color(37/255, 99/255, 235/255, alpha=min(cell['intensity'] / 100, 0.95))))
+                        else:
+                            matrix_style.append(('BACKGROUND', (col_index, row_index), (col_index, row_index), colors.HexColor('#f8fafc')))
+                matrix_table.setStyle(TableStyle(matrix_style))
+                elements.extend([matrix_table, Spacer(1, 16)])
+
+            else:
+                all_text_answers = list(insight.get('text_answers', []))
+                longest_text_answers = sorted(all_text_answers, key=lambda answer: (len(answer or ''), answer or ''), reverse=True)[:10]
+                elements.append(Paragraph(f"{insight.get('response_count', 0)} text response(s) captured for this question. Showing the 10 longest responses in the PDF summary.", body_style))
+                elements.append(Spacer(1, 8))
+                text_rows = [[Paragraph('No.', table_head_style), Paragraph('Response', table_head_style)]]
+                for answer_index, answer in enumerate(longest_text_answers, start=1):
+                    text_rows.append([
+                        Paragraph(str(answer_index), table_cell_style),
+                        Paragraph(answer.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br/>'), feedback_answer_style),
+                    ])
+                if len(text_rows) == 1:
+                    text_rows.append([Paragraph('-', table_cell_style), Paragraph('No saved text responses yet.', body_style)])
+                text_table = Table(text_rows, colWidths=[0.45 * inch, 9.1 * inch], repeatRows=1)
+                text_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+                    ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+                    ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 7),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                elements.extend([text_table, Spacer(1, 16)])
+
+        elements.extend([
+            PageBreak(),
+            Paragraph('PARTICIPANT APPENDIX', section_kicker_style),
+            Paragraph('Submitted participant response index', title_style),
+            Paragraph('This appendix lists submitted participants and their eligibility-related status at the time of export.', subtitle_style),
+            Spacer(1, 12),
+        ])
+
+        appendix_rows = [[
+            Paragraph('Participant', feedback_appendix_head_style),
+            Paragraph('Email', feedback_appendix_head_style),
+            Paragraph('Invoice', feedback_appendix_head_style),
+            Paragraph('Approved', feedback_appendix_head_style),
+            Paragraph('Payment', feedback_appendix_head_style),
+            Paragraph('Kit', feedback_appendix_head_style),
+            Paragraph('Answered', feedback_appendix_head_style),
+        ]]
+        for row in feedback_rows:
+            appendix_rows.append([
+                Paragraph((row['participant'].name or '-').replace('&', '&amp;'), feedback_appendix_cell_style),
+                Paragraph((row['participant'].email or '-').replace('&', '&amp;'), feedback_appendix_cell_style),
+                Paragraph((row.get('invoice_number') or '-').replace('&', '&amp;'), feedback_appendix_cell_style),
+                Paragraph('Yes' if row['participant'].approved else 'No', feedback_appendix_cell_style),
+                Paragraph(getattr(row.get('payment_status'), 'status', 'Unpaid').title() if row.get('payment_status') else 'Unpaid', feedback_appendix_cell_style),
+                Paragraph('Issued' if row.get('kit_issued') else 'Not issued', feedback_appendix_cell_style),
+                Paragraph(f"{row.get('answered_questions', 0)}/{len(feedback_questions)}", feedback_appendix_cell_style),
+            ])
+        appendix_feedback_table = Table(appendix_rows, colWidths=[1.7 * inch, 2.2 * inch, 1.4 * inch, 0.65 * inch, 0.9 * inch, 0.8 * inch, 0.8 * inch], repeatRows=1)
+        appendix_feedback_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#102033')),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#dbe4f0')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5edf6')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fbff')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(appendix_feedback_table)
+
+    doc.build(elements, canvasmaker=EventReportCanvas)
+    buffer.seek(0)
+    return buffer

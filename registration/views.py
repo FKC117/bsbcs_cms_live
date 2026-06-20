@@ -70,7 +70,7 @@ from .tasks import (
     send_speaker_certificate_email,
     send_pending_bulk_email_campaign,
 )
-from .pdf_utils import generate_abstract_pdf, generate_invoice
+from .pdf_utils import generate_abstract_pdf, generate_event_report_pdf, generate_invoice
 
 
 # Payment logger (writes to payment.log via settings)
@@ -3759,6 +3759,7 @@ from registration.models import (
     CorporateEventRegistration,
     CorporateEventAttendee,
     CorporatePayment,
+    RegistrationKit,
     BulkEmail,
     BulkEmailRecipient,
     BulkEmailSendLog,
@@ -3848,6 +3849,175 @@ def get_dashboard_scoped_events(events, event_filter=None):
     if event_filter:
         scoped_events = scoped_events.filter(id=event_filter)
     return scoped_events
+
+
+def build_event_report(event):
+    participants_qs = Participant.objects.filter(event=event)
+    payment_qs = PaymentStatus.objects.filter(event=event).select_related('participant')
+    kit_qs = RegistrationKit.objects.filter(event=event)
+    abstracts_qs = AbstractSubmission.objects.filter(event=event)
+    corporate_reg_qs = CorporateEventRegistration.objects.filter(event=event)
+    corporate_attendee_qs = CorporateEventAttendee.objects.filter(registration__event=event)
+    corporate_payment_qs = CorporatePayment.objects.filter(event=event)
+
+    registrations_started = participants_qs.count()
+    approved_count = participants_qs.filter(approved=True).count()
+    denied_count = participants_qs.filter(denied=True).count()
+    pending_count = participants_qs.filter(approved=False, denied=False).count()
+
+    member_count = participants_qs.filter(registration_type='member').count()
+    regular_count = participants_qs.filter(registration_type='regular').count()
+    company_person_count = participants_qs.filter(registration_type='company_person').count()
+    complementary_count = participants_qs.filter(registration_type='complementary').count()
+
+    bangladesh_count = 0
+    abroad_count = 0
+
+    participant_paid_count = payment_qs.filter(status__in=['paid', 'completed']).count()
+    participant_unpaid_count = payment_qs.filter(status__in=UNPAID_PAYMENT_STATUSES).count()
+    participant_failed_count = payment_qs.filter(status__in=['failed', 'cancelled', 'refunded']).count()
+    participant_missing_payment_count = max(registrations_started - payment_qs.count(), 0)
+
+    participant_revenue = payment_qs.filter(status__in=['paid', 'completed']).aggregate(total=Sum('amount'))['total'] or 0
+    corporate_revenue = corporate_payment_qs.filter(status__in=['paid', 'completed']).aggregate(total=Sum('amount'))['total'] or 0
+    total_revenue = participant_revenue + corporate_revenue
+
+    completed_participant_ids = set(payment_qs.filter(status__in=['paid', 'completed']).values_list('participant_id', flat=True))
+    issued_participant_ids = set(kit_qs.filter(status='issued').values_list('payment_status__participant_id', flat=True))
+    feedback_participant_ids = set(FeedbackResponse.objects.filter(event=event).values_list('participant_id', flat=True).distinct())
+    unlocked_certificate_ids = set(participants_qs.filter(approved=True).values_list('id', flat=True)) & completed_participant_ids & issued_participant_ids & feedback_participant_ids
+
+    attended_count = kit_qs.filter(status='issued').count()
+    attendance_rate = round((attended_count / approved_count) * 100) if approved_count else 0
+
+    abstracts_submitted = abstracts_qs.count()
+    abstracts_presentation = abstracts_qs.filter(approved_for_presentation=True).count()
+    abstracts_poster = abstracts_qs.filter(approved_for_poster=True).count()
+    abstracts_pending = abstracts_qs.filter(approved_for_presentation=False, approved_for_poster=False).count()
+    abstracts_with_files = abstracts_qs.exclude(presentation_file='').count()
+
+    institution_counts = Counter()
+    country_counts = Counter()
+
+    def normalize_whitespace(value):
+        return ' '.join(str(value or '').split()).strip()
+
+    def normalize_country(value):
+        normalized = normalize_whitespace(value)
+        if not normalized:
+            return 'Not specified'
+        lowered = normalized.lower()
+        if lowered in {'bd', 'b.d.', 'bangladesh'}:
+            return 'Bangladesh'
+        return normalized
+
+    for participant in participants_qs.values('organization', 'country'):
+        organization = normalize_whitespace(participant.get('organization')) or 'Not specified'
+        country = normalize_country(participant.get('country'))
+        institution_counts[organization] += 1
+        country_counts[country] += 1
+
+    bangladesh_count = country_counts.get('Bangladesh', 0)
+    abroad_count = max(registrations_started - bangladesh_count, 0)
+
+    institution_rows = [
+        {'label': label, 'count': count}
+        for label, count in institution_counts.most_common(10)
+    ]
+    country_rows = [
+        {'label': label, 'count': count}
+        for label, count in country_counts.most_common(10)
+    ]
+
+    corporate_total_attendees = corporate_attendee_qs.count()
+    corporate_approved = corporate_attendee_qs.filter(review_status='approved').count()
+    corporate_pending = corporate_attendee_qs.filter(review_status='pending').count()
+    corporate_denied = corporate_attendee_qs.filter(review_status='denied').count()
+
+    thank_you_records_total = ThankYouEmail.objects.filter(registration_kit__event=event).count()
+    thank_you_sent_total = ThankYouEmail.objects.filter(registration_kit__event=event, email_sent=True).count()
+    speaker_certificate_issued_total = SpeakerCertificate.objects.filter(event=event).count()
+    speaker_certificate_sent_total = SpeakerCertificateEmailLog.objects.filter(event=event, status=SpeakerCertificateEmailLog.STATUS_SENT).values('certificate_id').distinct().count()
+    show_post_event_certificate_summary = bool(
+        event
+        and event.event_status == 'closed'
+        and (
+            unlocked_certificate_ids
+            or feedback_participant_ids
+            or thank_you_records_total
+            or speaker_certificate_issued_total
+        )
+    )
+
+    return {
+        'event': event,
+        'overview': {
+            'registrations_started': registrations_started,
+            'approved': approved_count,
+            'denied': denied_count,
+            'pending': pending_count,
+            'member_count': member_count,
+            'regular_count': regular_count,
+            'company_person_count': company_person_count,
+            'complementary_count': complementary_count,
+            'bangladesh_count': bangladesh_count,
+            'abroad_count': abroad_count,
+            'participant_paid_count': participant_paid_count,
+            'participant_unpaid_count': participant_unpaid_count + participant_missing_payment_count,
+            'participant_failed_count': participant_failed_count,
+            'attended_count': attended_count,
+            'attendance_rate': attendance_rate,
+            'participant_revenue': participant_revenue,
+            'corporate_revenue': corporate_revenue,
+            'total_revenue': total_revenue,
+            'corporate_registrations': corporate_reg_qs.count(),
+            'corporate_total_attendees': corporate_total_attendees,
+            'corporate_approved': corporate_approved,
+            'corporate_pending': corporate_pending,
+            'corporate_denied': corporate_denied,
+            'abstracts_submitted': abstracts_submitted,
+            'abstracts_presentation': abstracts_presentation,
+            'abstracts_poster': abstracts_poster,
+            'abstracts_pending': abstracts_pending,
+            'abstracts_with_files': abstracts_with_files,
+            'participant_certificate_unlocked': len(unlocked_certificate_ids),
+            'feedback_submitted_total': len(feedback_participant_ids),
+            'thank_you_records_total': thank_you_records_total,
+            'thank_you_sent_total': thank_you_sent_total,
+            'thank_you_pending_total': max(attended_count - thank_you_sent_total, 0),
+            'speaker_certificate_issued_total': speaker_certificate_issued_total,
+            'speaker_certificate_sent_total': speaker_certificate_sent_total,
+            'show_post_event_certificate_summary': show_post_event_certificate_summary,
+        },
+        'institutions': institution_rows,
+        'countries': country_rows,
+        'chart_data': {
+            'registration_status': {
+                'labels': ['Approved', 'Pending', 'Denied'],
+                'counts': [approved_count, pending_count, denied_count],
+            },
+            'registration_types': {
+                'labels': ['Member', 'Regular', 'Company person', 'Complementary'],
+                'counts': [member_count, regular_count, company_person_count, complementary_count],
+            },
+            'payment_status': {
+                'labels': ['Paid/Completed', 'Open/Unpaid', 'Failed/Cancelled'],
+                'counts': [participant_paid_count, participant_unpaid_count + participant_missing_payment_count, participant_failed_count],
+            },
+            'countries': {
+                'labels': [row['label'] for row in country_rows],
+                'counts': [row['count'] for row in country_rows],
+            },
+            'institutions': {
+                'labels': [row['label'] for row in institution_rows],
+                'counts': [row['count'] for row in institution_rows],
+            },
+            'abstracts': {
+                'labels': ['Submitted', 'Presentation', 'Poster', 'Pending'],
+                'counts': [abstracts_submitted, abstracts_presentation, abstracts_poster, abstracts_pending],
+            },
+        },
+    }
 
 
 QUEUE_TYPE_CHOICES = [
@@ -4168,8 +4338,8 @@ def get_staff_activity_filters(request):
 def staff_activity_query_params(request, filters=None):
     filters = filters or get_staff_activity_filters(request)
     query_params = {}
-    event_filter = request.GET.get('event')
-    event_status_filter = request.GET.get('event_status')
+    event_filter = request.POST.get('event') or request.GET.get('event')
+    event_status_filter = request.POST.get('event_status') or request.GET.get('event_status')
     if event_filter:
         query_params['event'] = event_filter
     if event_status_filter:
@@ -4393,8 +4563,8 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
 def global_dashboard(request):
     from website.models import SiteSettings
 
-    event_filter = request.GET.get('event')
-    event_status_filter = request.GET.get('event_status')
+    event_filter = request.POST.get('event') or request.GET.get('event')
+    event_status_filter = request.POST.get('event_status') or request.GET.get('event_status')
     page_number = request.GET.get('page')
     event_page_number = request.GET.get('event_page')
     org_page_number = request.GET.get('org_page')
@@ -4416,6 +4586,35 @@ def global_dashboard(request):
     )
 
     event_metrics = build_event_metrics(events, event_filter)
+    selected_event = get_dashboard_scoped_events(events, event_filter).first() if event_filter else None
+    event_report = build_event_report(selected_event) if selected_event else None
+
+    if request.method == 'POST':
+        dashboard_action = (request.POST.get('dashboard_action') or '').strip()
+        if dashboard_action == 'export_event_report_pdf':
+            if not selected_event or not event_report:
+                messages.error(request, 'Select an event first to export the event report PDF.')
+                redirect_params = {}
+                if event_filter:
+                    redirect_params['event'] = event_filter
+                if event_status_filter:
+                    redirect_params['event_status'] = event_status_filter
+                redirect_url = reverse('global_dashboard')
+                if redirect_params:
+                    redirect_url = f"{redirect_url}?{urlencode(redirect_params)}"
+                return redirect(redirect_url)
+            from website.models import SiteSettings
+            feedback_report_data = _build_feedback_report_data(selected_event, '')
+            pdf_buffer = generate_event_report_pdf(
+                selected_event,
+                event_report,
+                site_settings=SiteSettings.objects.first(),
+                feedback_report_data=feedback_report_data,
+            )
+            safe_event_name = slugify(f"{selected_event.name}-{selected_event.year}") or f"event-{selected_event.id}"
+            response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="event-report-{safe_event_name}.pdf"'
+            return response
 
     event_paginator = Paginator(event_metrics, 8)
     event_page_obj = event_paginator.get_page(event_page_number)
@@ -4457,7 +4656,10 @@ def global_dashboard(request):
             'event_metrics': build_event_metrics_chart_data(event_metrics),
             'participant_status': participant_chart_data,
             'organizations': organization_chart_data,
+            'event_report': event_report['chart_data'] if event_report else {},
         },
+        'selected_event': selected_event,
+        'event_report': event_report,
         'operations': operations,
         'current_filters': {
             'event': event_filter,

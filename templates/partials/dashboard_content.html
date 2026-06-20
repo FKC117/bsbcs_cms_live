@@ -84,6 +84,210 @@
   </div>
 </section>
 
+
+{% if event_report and selected_event %}
+<section class="mt-3 rounded-3xl border border-line bg-white p-5 shadow-quiet">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Event report</div>
+      <h2 class="mt-1 text-2xl font-black text-ink">{{ selected_event.name }} {{ selected_event.year }}</h2>
+      <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">A full event snapshot across registrations, payments, attendance proxy, geography, institution mix, corporate participation, and abstracts.</p>
+    </div>
+    <div class="flex flex-wrap items-start justify-end gap-3">
+      <div class="rounded-2xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div><span class="font-black text-slate-500">Dates:</span> {{ selected_event.start_date }}{% if selected_event.end_date and selected_event.end_date != selected_event.start_date %} to {{ selected_event.end_date }}{% endif %}</div>
+        <div class="mt-1"><span class="font-black text-slate-500">Venue:</span> {{ selected_event.location|default:"Not set" }}</div>
+        <div class="mt-1"><span class="font-black text-slate-500">Status:</span> {{ selected_event.get_event_status_display }} / {{ selected_event.registration }}</div>
+      </div>
+      <form method="post" action="{% url 'global_dashboard' %}" class="flex items-start">
+        {% csrf_token %}
+        <input type="hidden" name="dashboard_action" value="export_event_report_pdf">
+        <input type="hidden" name="event" value="{{ selected_event.id }}">
+        <input type="hidden" name="event_status" value="{{ current_filters.event_status|default:'' }}">
+        <button type="submit" class="inline-flex items-center justify-center rounded-2xl border border-bsbcs-blue bg-bsbcs-blue px-5 py-3 text-sm font-black text-white transition hover:bg-[#1f5fb5] hover:border-[#1f5fb5]">Generate PDF report</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+      <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Registrations started</div>
+      <div class="mt-2 text-4xl font-black text-bsbcs-blue">{{ event_report.overview.registrations_started }}</div>
+      <div class="mt-2 text-sm font-semibold text-slate-600">All participant rows created for this event</div>
+    </div>
+    <div class="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+      <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Approved</div>
+      <div class="mt-2 text-4xl font-black text-bsbcs-green">{{ event_report.overview.approved }}</div>
+      <div class="mt-2 text-sm font-semibold text-slate-600">Denied {{ event_report.overview.denied }} / Pending {{ event_report.overview.pending }}</div>
+    </div>
+    <div class="rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+      <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Attendance proxy</div>
+      <div class="mt-2 text-4xl font-black text-[#9A6700]">{{ event_report.overview.attended_count }}</div>
+      <div class="mt-2 text-sm font-semibold text-slate-600">Kit issued rows / {{ event_report.overview.attendance_rate }}% of approved</div>
+    </div>
+    <div class="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4">
+      <div class="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Total revenue</div>
+      <div class="mt-2 text-4xl font-black text-bsbcs-teal">BDT {{ event_report.overview.total_revenue|floatformat:0 }}</div>
+      <div class="mt-2 text-sm font-semibold text-slate-600">Participant BDT {{ event_report.overview.participant_revenue|floatformat:0 }} / Corporate BDT {{ event_report.overview.corporate_revenue|floatformat:0 }}</div>
+    </div>
+  </div>
+
+  <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)]">
+    <div class="grid gap-4">
+      <div class="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+        <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Registration mix</div>
+          <div class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-3"><span>Members</span><span class="font-black text-ink">{{ event_report.overview.member_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Regular</span><span class="font-black text-ink">{{ event_report.overview.regular_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Company person</span><span class="font-black text-ink">{{ event_report.overview.company_person_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Complementary</span><span class="font-black text-ink">{{ event_report.overview.complementary_count }}</span></div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Payment pulse</div>
+          <div class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-3"><span>Paid / completed</span><span class="font-black text-bsbcs-green">{{ event_report.overview.participant_paid_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Open / unpaid</span><span class="font-black text-[#9A6700]">{{ event_report.overview.participant_unpaid_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Failed / cancelled</span><span class="font-black text-bsbcs-blue">{{ event_report.overview.participant_failed_count }}</span></div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Geography</div>
+          <div class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-3"><span>Bangladesh</span><span class="font-black text-ink">{{ event_report.overview.bangladesh_count }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Abroad</span><span class="font-black text-ink">{{ event_report.overview.abroad_count }}</span></div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Corporate block</div>
+          <div class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+            <div class="flex items-center justify-between gap-3"><span>Registrations</span><span class="font-black text-ink">{{ event_report.overview.corporate_registrations }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Attendees</span><span class="font-black text-ink">{{ event_report.overview.corporate_total_attendees }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Approved</span><span class="font-black text-bsbcs-green">{{ event_report.overview.corporate_approved }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Pending</span><span class="font-black text-[#9A6700]">{{ event_report.overview.corporate_pending }}</span></div>
+            <div class="flex items-center justify-between gap-3"><span>Denied</span><span class="font-black text-bsbcs-blue">{{ event_report.overview.corporate_denied }}</span></div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-slate-50/70 p-4 lg:col-span-2 2xl:col-span-2">
+          <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Abstract pipeline</div>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div class="rounded-xl border border-line bg-white px-3 py-3">
+              <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Submitted</div>
+              <div class="mt-1 text-2xl font-black text-ink">{{ event_report.overview.abstracts_submitted }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3">
+              <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Presentation</div>
+              <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ event_report.overview.abstracts_presentation }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3">
+              <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Poster</div>
+              <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ event_report.overview.abstracts_poster }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3">
+              <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Pending</div>
+              <div class="mt-1 text-2xl font-black text-[#9A6700]">{{ event_report.overview.abstracts_pending }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3">
+              <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Files uploaded</div>
+              <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ event_report.overview.abstracts_with_files }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-3 xl:grid-cols-2">
+        <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+          <div class="mb-3">
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Registration status</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Approved vs pending vs denied</h3>
+          </div>
+          <div class="dashboard-chart-frame">
+            <canvas id="eventReportStatusChart" aria-label="Event report registration status chart"></canvas>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+          <div class="mb-3">
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Registration types</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Member, regular, corporate and complementary mix</h3>
+          </div>
+          <div class="dashboard-chart-frame">
+            <canvas id="eventReportTypeChart" aria-label="Event report registration type chart"></canvas>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+          <div class="mb-3">
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Payment status</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Who paid and who is still open</h3>
+          </div>
+          <div class="dashboard-chart-frame">
+            <canvas id="eventReportPaymentChart" aria-label="Event report payment status chart"></canvas>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+          <div class="mb-3">
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Abstract decisions</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Submission outcomes</h3>
+          </div>
+          <div class="dashboard-chart-frame">
+            <canvas id="eventReportAbstractChart" aria-label="Event report abstract chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid gap-4">
+      <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Country distribution</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Top countries</h3>
+          </div>
+          <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-line">{{ event_report.countries|length }} rows</span>
+        </div>
+        {% if event_report.countries %}
+          <div class="dashboard-chart-frame">
+            <canvas id="eventReportCountryChart" aria-label="Event report top countries chart"></canvas>
+          </div>
+          <div class="mt-3 space-y-2">
+            {% for row in event_report.countries|slice:":8" %}
+              <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                <span class="truncate">{{ row.label }}</span>
+                <span class="font-black text-ink">{{ row.count }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="rounded-xl bg-white p-4 text-sm font-semibold text-slate-500">No country data yet for this event.</div>
+        {% endif %}
+      </div>
+
+      <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Institution distribution</div>
+            <h3 class="mt-1 text-lg font-black text-ink">Top institutions</h3>
+          </div>
+          <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-line">{{ event_report.institutions|length }} rows</span>
+        </div>
+        {% if event_report.institutions %}
+          <div class="space-y-2">
+            {% for row in event_report.institutions %}
+              <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                <span class="truncate">{{ row.label }}</span>
+                <span class="font-black text-ink">{{ row.count }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="rounded-xl bg-white p-4 text-sm font-semibold text-slate-500">No institution data yet for this event.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_440px]">
   <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
