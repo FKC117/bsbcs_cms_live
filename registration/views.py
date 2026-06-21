@@ -12,6 +12,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.utils.text import slugify
@@ -3064,7 +3065,20 @@ def _participant_certificate_requirements_met(participant, event):
     }
 
 
-def _queue_thank_you_email_for_kit(kit, event, subject, body, sent_by=None, force_resend=False):
+def _read_email_button_fields(source, text_key='button_text', url_key='button_url'):
+    button_text = (source.get(text_key) or '').strip()
+    button_url = (source.get(url_key) or '').strip()
+    if bool(button_text) != bool(button_url):
+        raise ValueError('Provide both button text and button link, or leave both blank.')
+    if button_url:
+        try:
+            URLValidator(schemes=['http', 'https'])(button_url)
+        except ValidationError as exc:
+            raise ValueError('Enter a valid full button link starting with http:// or https://.') from exc
+    return button_text or None, button_url or None
+
+
+def _queue_thank_you_email_for_kit(kit, event, subject, body, button_text=None, button_url=None, sent_by=None, force_resend=False):
     participant = kit.payment_status.participant if kit.payment_status_id else None
     recipient_email = participant.email if participant and participant.email else ''
     if not recipient_email:
@@ -3075,6 +3089,8 @@ def _queue_thank_you_email_for_kit(kit, event, subject, body, sent_by=None, forc
         defaults={
             'subject': subject,
             'body': body,
+            'button_text': button_text,
+            'button_url': button_url,
         },
     )
 
@@ -3085,6 +3101,12 @@ def _queue_thank_you_email_for_kit(kit, event, subject, body, sent_by=None, forc
     if thank_you_email.body != body:
         thank_you_email.body = body
         update_fields.append('body')
+    if thank_you_email.button_text != button_text:
+        thank_you_email.button_text = button_text
+        update_fields.append('button_text')
+    if thank_you_email.button_url != button_url:
+        thank_you_email.button_url = button_url
+        update_fields.append('button_url')
     if update_fields:
         thank_you_email.save(update_fields=update_fields)
 
@@ -3121,7 +3143,7 @@ def _queue_thank_you_email_for_kit(kit, event, subject, body, sent_by=None, forc
     return 'queued', thank_you_email
 
 
-def _queue_thank_you_emails_for_kits(kits, event, subject, body, sent_by=None, force_resend=False):
+def _queue_thank_you_emails_for_kits(kits, event, subject, body, button_text=None, button_url=None, sent_by=None, force_resend=False):
     counts = {
         'queued': 0,
         'already_sent': 0,
@@ -3135,6 +3157,8 @@ def _queue_thank_you_emails_for_kits(kits, event, subject, body, sent_by=None, f
                 event,
                 subject,
                 body,
+                button_text=button_text,
+                button_url=button_url,
                 sent_by=sent_by,
                 force_resend=force_resend,
             )
@@ -7504,17 +7528,26 @@ def dashboard_certificate_center(request):
             elif action == 'save_thank_you_template':
                 subject = (request.POST.get('thank_you_subject') or '').strip()
                 body = (request.POST.get('thank_you_body') or '').strip()
+                button_text, button_url = _read_email_button_fields(
+                    request.POST,
+                    text_key='thank_you_button_text',
+                    url_key='thank_you_button_url',
+                )
                 if not subject or not body:
                     raise ValueError('Thank-you email subject and body are required before saving.')
                 selected_event.email_subject = subject
                 selected_event.email_body = body
-                selected_event.save(update_fields=['email_subject', 'email_body', 'updated_at'])
+                selected_event.email_button_text = button_text
+                selected_event.email_button_url = button_url
+                selected_event.save(update_fields=['email_subject', 'email_body', 'email_button_text', 'email_button_url', 'updated_at'])
                 dashboard_log_action(request, selected_event, CHANGE, 'Updated thank-you email template from Certificate Center dashboard.')
                 messages.success(request, f'Thank-you event email saved for {selected_event.name}.')
 
             elif action in ('send_selected_thank_you', 'resend_selected_thank_you'):
                 subject = (selected_event.email_subject or '').strip()
                 body = (selected_event.email_body or '').strip()
+                button_text = (selected_event.email_button_text or '').strip() or None
+                button_url = (selected_event.email_button_url or '').strip() or None
                 if not subject or not body:
                     raise ValueError('Save the event email first before sending or resending participant thank-you emails.')
 
@@ -7547,6 +7580,8 @@ def dashboard_certificate_center(request):
                     selected_event,
                     subject,
                     body,
+                    button_text=button_text,
+                    button_url=button_url,
                     sent_by=request.user,
                     force_resend=force_resend,
                 )
@@ -7704,6 +7739,8 @@ def dashboard_certificate_center(request):
         },
         'thank_you_subject': selected_event.email_subject if selected_event and selected_event.email_subject else '',
         'thank_you_body': selected_event.email_body if selected_event and selected_event.email_body else '',
+        'thank_you_button_text': selected_event.email_button_text if selected_event and selected_event.email_button_text else '',
+        'thank_you_button_url': selected_event.email_button_url if selected_event and selected_event.email_button_url else '',
         'totals': {
             'certificate_ready': certificate_ready,
             'html_assets_ready': html_assets_ready,
@@ -7910,11 +7947,19 @@ def dashboard_bulk_email_center(request):
         if action == 'create_campaign':
             subject = (request.POST.get('subject') or '').strip()
             body = (request.POST.get('body') or '').strip()
+            button_error = None
+            try:
+                button_text, button_url = _read_email_button_fields(request.POST)
+            except ValueError as exc:
+                button_text, button_url = None, None
+                button_error = str(exc)
             audience_type = request.POST.get('audience_type') or BulkEmail.AUDIENCE_MANUAL
             event = Event.objects.filter(pk=request.POST.get('event') or None).first()
             email_group = EmailGroup.objects.filter(pk=request.POST.get('email_group') or None).first()
 
-            if not subject or not body:
+            if button_error:
+                messages.error(request, button_error)
+            elif not subject or not body:
                 messages.error(request, 'Subject and message body are required.')
             elif audience_type not in dict(BulkEmail.AUDIENCE_CHOICES):
                 messages.error(request, 'Choose a valid audience.')
@@ -7930,6 +7975,8 @@ def dashboard_bulk_email_center(request):
                 campaign = BulkEmail.objects.create(
                     subject=subject,
                     body=body,
+                    button_text=button_text,
+                    button_url=button_url,
                     attachment=request.FILES.get('attachment'),
                     audience_type=audience_type,
                     event=event if audience_type in [

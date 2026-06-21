@@ -317,6 +317,8 @@ class Event(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     email_subject = models.CharField(max_length=255, blank=True, null=True, help_text='Thank You email subject text')
     email_body = models.TextField(blank=True, null=True, help_text='Thank You email body text')
+    email_button_text = models.CharField(max_length=120, blank=True, null=True, help_text='Optional thank-you email button text')
+    email_button_url = models.URLField(max_length=500, blank=True, null=True, help_text='Optional thank-you email button URL')
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -352,6 +354,8 @@ class ThankYouEmail(models.Model):
     )
     subject = models.CharField(max_length=255)  # Copied from Event at the time of creation
     body = models.TextField()  # Copied from Event at the time of creation
+    button_text = models.CharField(max_length=120, blank=True, null=True)
+    button_url = models.URLField(max_length=500, blank=True, null=True)
     email_sent = models.BooleanField(default=False)
     sent_at = models.DateTimeField(blank=True, null=True)
 
@@ -1753,6 +1757,8 @@ class BulkEmail(models.Model):
 
     subject = models.CharField(max_length=255)
     body = models.TextField()
+    button_text = models.CharField(max_length=120, blank=True, null=True)
+    button_url = models.URLField(max_length=500, blank=True, null=True)
     attachment = models.FileField(upload_to='attachments/', blank=True, null=True)
     audience_type = models.CharField(max_length=40, choices=AUDIENCE_CHOICES, default=AUDIENCE_MANUAL)
     event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_emails')
@@ -1855,6 +1861,8 @@ class BulkEmailSendLog(models.Model):
 class BulkEmailsReporting(models.Model):  # Tracking sent emails
     subject = models.CharField(max_length=255)
     body = models.TextField()
+    button_text = models.CharField(max_length=120, blank=True, null=True)
+    button_url = models.URLField(max_length=500, blank=True, null=True)
     recipients = models.TextField()  # Store as comma-separated list
     sent_date = models.DateTimeField(auto_now_add=True)
     attachment = models.FileField(upload_to='attachments/', blank=True, null=True)

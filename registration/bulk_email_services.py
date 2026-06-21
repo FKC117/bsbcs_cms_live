@@ -3,10 +3,13 @@ import time
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.html import strip_tags
+
+from .email_rendering import render_rich_email_html
 
 from .models import (
     AbstractSubmission,
@@ -228,12 +231,19 @@ def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
     last_error = ''
 
     for attempt in range(1, 4):
-        email = EmailMessage(
+        html_message = render_rich_email_html(
+            bulk_email.subject,
+            bulk_email.body,
+            button_text=bulk_email.button_text,
+            button_url=bulk_email.button_url,
+        )
+        email = EmailMultiAlternatives(
             subject=bulk_email.subject,
-            body=bulk_email.body,
+            body=strip_tags(html_message),
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv("EMAIL_HOST_USER"),
             to=[recipient.email],
         )
+        email.attach_alternative(html_message, 'text/html')
         if bulk_email.attachment:
             email.attach_file(bulk_email.attachment.path)
 
@@ -337,6 +347,8 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
         BulkEmailsReporting.objects.create(
             subject=bulk_email.subject,
             body=bulk_email.body,
+            button_text=bulk_email.button_text,
+            button_url=bulk_email.button_url,
             recipients=', '.join(sent_emails),
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )

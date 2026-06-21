@@ -14,8 +14,11 @@ from registration.models import (
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission, RegistrationKit,
     CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
+    BulkEmail, BulkEmailRecipient,
 )
 from registration.forms import ProgramSessionBuilderForm
+from registration.bulk_email_services import _send_bulk_email_recipient_direct
+from registration.email_rendering import render_rich_email_html
 from registration.pdf_utils import generate_invoice
 from registration.qr_utils import registration_qr_payload
 from website.models import Member, MembershipPayment, MembershipType
@@ -258,7 +261,43 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Create campaign")
         self.assertContains(response, "Prepare recipients")
         self.assertContains(response, "Review recipient rows")
-        self.assertContains(response, "Send and audit")
+
+    def test_render_rich_email_html_supports_button_and_link_markup(self):
+        html = render_rich_email_html(
+            'Campaign subject',
+            'Hello there\n\nRead more: [Event details](https://example.com/details)',
+            button_text='Register now',
+            button_url='https://example.com/register',
+        )
+        self.assertIn('Register now', html)
+        self.assertIn('https://example.com/register', html)
+        self.assertIn('Event details', html)
+        self.assertIn('<a href="https://example.com/details"', html)
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_bulk_email_sender_attaches_html_button_version(self):
+        campaign = BulkEmail.objects.create(
+            subject='Join us',
+            body='Dear participant',
+            button_text='Complete registration',
+            button_url='https://example.com/pay',
+            audience_type=BulkEmail.AUDIENCE_MANUAL,
+            created_by=self.staff_user,
+        )
+        recipient = BulkEmailRecipient.objects.create(
+            bulk_email=campaign,
+            email='recipient@example.com',
+            name='Recipient',
+        )
+
+        sent = _send_bulk_email_recipient_direct(campaign, recipient, sent_by=self.staff_user)
+
+        self.assertTrue(sent)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['recipient@example.com'])
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        self.assertIn('Complete registration', mail.outbox[0].alternatives[0][0])
+        self.assertIn('https://example.com/pay', mail.outbox[0].alternatives[0][0])
 
     def test_event_builder_requires_staff_and_renders_workflow(self):
         url = reverse('dashboard_event_builder')

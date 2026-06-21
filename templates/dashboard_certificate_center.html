@@ -971,8 +971,19 @@
                                     <textarea id="thank_you_body" name="thank_you_body" class="workflow-textarea min-h-[220px]" placeholder="Thank-you email body" required>{{ thank_you_body }}</textarea>
                                 </div>
 
+                                <div class="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label class="compact-label" for="thank_you_button_text">Button text</label>
+                                        <input id="thank_you_button_text" name="thank_you_button_text" value="{{ thank_you_button_text }}" class="workflow-input" placeholder="Optional button label">
+                                    </div>
+                                    <div>
+                                        <label class="compact-label" for="thank_you_button_url">Button link</label>
+                                        <input id="thank_you_button_url" name="thank_you_button_url" value="{{ thank_you_button_url }}" class="workflow-input" type="url" placeholder="https://example.com/page">
+                                    </div>
+                                </div>
+
                                 <div class="flex flex-wrap items-end justify-between gap-4 border-t border-line pt-4">
-                                    <p class="max-w-2xl text-xs font-semibold leading-5 text-slate-500">Saving updates this event email. Use the participant list controls below to select people, send first-time emails, or resend to specific participants.</p>
+                                    <p class="max-w-2xl text-xs font-semibold leading-5 text-slate-500">Saving updates this event email. Add an optional button with plain fields, then use the participant list controls below to select people, send first-time emails, or resend to specific participants.</p>
                                     <div class="flex flex-wrap gap-3">
                                         <button type="submit" name="certificate_action" value="save_thank_you_template" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Save event email</button>
                                                                             </div>

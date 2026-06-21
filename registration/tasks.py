@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
+from .email_rendering import render_rich_email_html
 from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, ThankYouEmailLog
 
 
@@ -140,11 +141,18 @@ def send_thank_you_email_task(self, thank_you_email_id, log_id=None, sent_by_use
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv('EMAIL_HOST_USER')
     try:
+        html_message = render_rich_email_html(
+            thank_you_email.subject,
+            thank_you_email.body,
+            button_text=thank_you_email.button_text,
+            button_url=thank_you_email.button_url,
+        )
         result = _send_email(
             subject=thank_you_email.subject,
             body=thank_you_email.body,
             from_email=from_email,
             recipient_list=[participant.email],
+            html_message=html_message,
         )
     except Exception as exc:
         _update_thank_you_email_log(log_id, status=ThankYouEmailLog.STATUS_FAILED, message=str(exc))
