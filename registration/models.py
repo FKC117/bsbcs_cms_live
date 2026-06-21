@@ -309,7 +309,7 @@ class Event(models.Model):
         help_text='Optional company person registration fee.'
     )
     show_publication_tab = models.BooleanField(default=False, help_text="Show or hide the Publication tab on the event page.")
-    slug = models.SlugField(unique=True, blank=True)
+    slug = models.SlugField(max_length=250, unique=True, blank=True)
     description = models.TextField(max_length=1000, blank=True, null=True)
     keywords = models.CharField(max_length=1000, blank=True, null=True, help_text='Enter Keywords seperated by comma')
     author = models.CharField(max_length=100, blank=True, null=True)
@@ -320,7 +320,16 @@ class Event(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(f"{self.name} {self.year}")
+            base_slug = slugify(f"{self.name} {self.year}")[:250] or f"event-{self.year}"
+            slug_candidate = base_slug
+            suffix = 2
+            while Event.objects.exclude(pk=self.pk).filter(slug=slug_candidate).exists():
+                suffix_text = f"-{suffix}"
+                slug_candidate = f"{base_slug[:250 - len(suffix_text)]}{suffix_text}"
+                suffix += 1
+            self.slug = slug_candidate
+        else:
+            self.slug = self.slug[:250]
         super().save(*args, **kwargs)
 
     def __str__(self):
