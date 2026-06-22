@@ -3054,33 +3054,40 @@ def _speaker_outreach_row(event, person):
     return row
 
 
+def _clean_message_block(value):
+    cleaned = (value or '').strip()
+    return '' if cleaned.lower() == 'none' else cleaned
+
+
 def _speaker_outreach_compose_message(event, person, template, coordination):
     role_label = _speaker_role_labels(person, event)
     blocks = [f"Dear {person.name},"]
 
-    intro_body = (template.intro_body or '').strip() or _default_speaker_outreach_intro(event, role_label=role_label)
+    intro_body = _clean_message_block(template.intro_body) or _default_speaker_outreach_intro(event, role_label=role_label)
     blocks.append(intro_body)
 
     amenity_blocks = []
-    if coordination.offer_airfare and (template.airfare_body or '').strip():
-        amenity_blocks.append(template.airfare_body.strip())
-    if coordination.offer_hotel and (template.hotel_body or '').strip():
-        amenity_blocks.append(template.hotel_body.strip())
-    if coordination.offer_allowance and (template.allowance_body or '').strip():
-        amenity_blocks.append(template.allowance_body.strip())
-    if coordination.offer_local_transport and (template.local_transport_body or '').strip():
-        amenity_blocks.append(template.local_transport_body.strip())
-    if coordination.offer_special_support and (template.special_support_body or '').strip():
-        amenity_blocks.append(template.special_support_body.strip())
+    airfare_body = _clean_message_block(template.airfare_body)
+    hotel_body = _clean_message_block(template.hotel_body)
+    allowance_body = _clean_message_block(template.allowance_body)
+    local_transport_body = _clean_message_block(template.local_transport_body)
+    special_support_body = _clean_message_block(template.special_support_body)
+    if coordination.offer_airfare and airfare_body:
+        amenity_blocks.append(airfare_body)
+    if coordination.offer_hotel and hotel_body:
+        amenity_blocks.append(hotel_body)
+    if coordination.offer_allowance and allowance_body:
+        amenity_blocks.append(allowance_body)
+    if coordination.offer_local_transport and local_transport_body:
+        amenity_blocks.append(local_transport_body)
+    if coordination.offer_special_support and special_support_body:
+        amenity_blocks.append(special_support_body)
 
     if amenity_blocks:
         blocks.append('To support your participation, we would also be pleased to confirm the following arrangements:')
-        blocks.extend(amenity_blocks)
+        blocks.append('\n'.join(f'- {item}' for item in amenity_blocks))
 
-    if (coordination.custom_notes or '').strip():
-        blocks.append(coordination.custom_notes.strip())
-
-    closing_body = (template.closing_body or '').strip()
+    closing_body = _clean_message_block(template.closing_body)
     if closing_body:
         blocks.append(closing_body)
 
@@ -3141,6 +3148,53 @@ def _speaker_outreach_library_queryset(search_query=''):
     return qs
 
 
+def _speaker_outreach_profile_queryset(search_query=''):
+    qs = UserProfile.objects.select_related('member').order_by('name', 'email')
+    query_text = (search_query or '').strip()
+    if query_text:
+        qs = qs.filter(
+            Q(name__icontains=query_text)
+            | Q(email__icontains=query_text)
+            | Q(phone__icontains=query_text)
+            | Q(country__icontains=query_text)
+            | Q(member__institution__icontains=query_text)
+            | Q(member__position__icontains=query_text)
+        )
+    return qs.distinct()[:8]
+
+
+def _speaker_outreach_profile_rows(search_query='', event=None, selected_profile_id=None):
+    profiles = list(_speaker_outreach_profile_queryset(search_query))
+    if not profiles:
+        return []
+    profile_ids = [profile.id for profile in profiles]
+    linked_people = {person.profile_id: person for person in ProgramPerson.objects.filter(profile_id__in=profile_ids).prefetch_related('events')}
+    rows = []
+    for profile in profiles:
+        linked_person = linked_people.get(profile.id)
+        is_in_event = bool(event and linked_person and linked_person.events.filter(pk=event.pk).exists())
+        rows.append({
+            'profile': profile,
+            'linked_person': linked_person,
+            'is_in_event': is_in_event,
+            'is_selected': bool(selected_profile_id and str(profile.id) == str(selected_profile_id)),
+        })
+    return rows
+
+
+def _speaker_outreach_profile_seed_data(profile):
+    member = getattr(profile, 'member', None)
+    return {
+        'name': profile.name or '',
+        'degree': '',
+        'designation': getattr(member, 'position', '') or '',
+        'institution': getattr(member, 'institution', '') or '',
+        'email': profile.email or '',
+        'phone': profile.phone or '',
+        'country': profile.country or 'Bangladesh',
+    }
+
+
 def _apply_speaker_outreach_preset_to_template(preset, template):
     template.subject = preset.subject
     template.intro_body = preset.intro_body
@@ -3197,7 +3251,7 @@ def _save_speaker_outreach_row_options(event, people, source):
         coordination.offer_allowance = bool(source.get(f'offer_allowance_{person.id}'))
         coordination.offer_local_transport = bool(source.get(f'offer_local_transport_{person.id}'))
         coordination.offer_special_support = bool(source.get(f'offer_special_support_{person.id}'))
-        coordination.custom_notes = (source.get(f'custom_notes_{person.id}') or '').strip() or None
+        coordination.custom_notes = None
         coordination.save()
         saved += 1
     return saved
@@ -8165,9 +8219,15 @@ def dashboard_speaker_outreach_center(request):
     selected_event = events.filter(pk=request.GET.get('event') or request.POST.get('event') or None).first()
     search_query = (request.GET.get('q') or request.POST.get('q') or '').strip()
     library_query = (request.GET.get('library_q') or request.POST.get('library_q') or '').strip()
+    speaker_profile_query = (request.GET.get('speaker_profile_q') or request.POST.get('speaker_profile_q') or '').strip()
+    selected_profile_id = request.GET.get('speaker_profile_id') or request.POST.get('profile_id')
+    speaker_partial = (request.GET.get('speaker_partial') or '').strip()
     preview_person_id = request.GET.get('preview_person')
     edit_preset_id = request.GET.get('edit_preset') or request.POST.get('edit_preset')
-    person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
+    selected_profile = UserProfile.objects.select_related('member').filter(pk=selected_profile_id).first() if str(selected_profile_id or '').isdigit() else None
+    selected_profile_person = ProgramPerson.objects.filter(profile=selected_profile).first() if selected_profile else None
+    selected_profile_in_event = bool(selected_event and selected_profile_person and selected_profile_person.events.filter(pk=selected_event.pk).exists())
+    person_form = ProgramPersonQuickCreateForm(initial=_speaker_outreach_profile_seed_data(selected_profile) if selected_profile else {'country': 'Bangladesh'})
 
     base_params = {}
     if selected_event:
@@ -8194,20 +8254,26 @@ def dashboard_speaker_outreach_center(request):
         try:
             if action == 'add_person':
                 person_form = ProgramPersonQuickCreateForm(request.POST)
+                selected_profile = UserProfile.objects.select_related('member').filter(pk=request.POST.get('profile_id')).first() if str(request.POST.get('profile_id') or '').isdigit() else None
                 if not person_form.is_valid():
                     raise ValueError('Please complete the global prospect form with at least name and a valid email if provided.')
                 cleaned_data = person_form.cleaned_data
                 add_to_event_now = bool(request.POST.get('add_to_event_now'))
-                person = _speaker_outreach_existing_global_person(cleaned_data)
+                person = ProgramPerson.objects.filter(profile=selected_profile).first() if selected_profile else None
+                if not person:
+                    person = _speaker_outreach_existing_global_person(cleaned_data)
                 event_added = False
                 if person:
                     updated_fields = []
                     for field in ['degree', 'designation', 'institution', 'email', 'phone', 'country']:
                         incoming_value = cleaned_data.get(field)
-                        if incoming_value and not getattr(person, field):
+                        if incoming_value and getattr(person, field) != incoming_value and not getattr(person, field):
                             setattr(person, field, incoming_value)
                             updated_fields.append(field)
-                    if updated_fields:
+                    if selected_profile and person.profile_id != selected_profile.id:
+                        person.profile = selected_profile
+                        updated_fields.append('profile')
+                    if updated_fields := list(dict.fromkeys(updated_fields)):
                         person.save(update_fields=updated_fields)
                     if add_to_event_now and not person.events.filter(pk=selected_event.pk).exists():
                         person.events.add(selected_event)
@@ -8225,7 +8291,10 @@ def dashboard_speaker_outreach_center(request):
                     else:
                         messages.success(request, f'Existing prospect "{person.name}" was matched in the global library, so we refreshed details without creating a duplicate.')
                 else:
-                    person = person_form.save()
+                    person = person_form.save(commit=False)
+                    if selected_profile:
+                        person.profile = selected_profile
+                    person.save()
                     if add_to_event_now:
                         person.events.add(selected_event)
                         event_added = True
@@ -8234,7 +8303,7 @@ def dashboard_speaker_outreach_center(request):
                         messages.success(request, f'Global prospect "{person.name}" created and added to {selected_event.name}.')
                     else:
                         messages.success(request, f'Global prospect "{person.name}" created in the shared speaker library.')
-                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#prospects")
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#builder")
 
             if action == 'add_selected_library_to_event':
                 selected_library_ids = [
@@ -8254,7 +8323,37 @@ def dashboard_speaker_outreach_center(request):
                     added += 1
                 dashboard_log_action(request, selected_event, CHANGE, f'Added shared prospects into speaker outreach workflow. added={added}, already={already}.')
                 messages.success(request, f'Added {added} prospect(s) into {selected_event.name}. Already there: {already}.')
-                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#prospects")
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#builder")
+
+            if action == 'remove_from_event':
+                person_id = request.POST.get('person_id')
+                person = ProgramPerson.objects.filter(events=selected_event, pk=person_id).first()
+                if not person:
+                    raise ValueError('Choose a valid linked speaker to remove from this event workflow.')
+                SpeakerOutreachCoordination.objects.filter(event=selected_event, person=person).delete()
+                person.events.remove(selected_event)
+                dashboard_log_action(request, selected_event, CHANGE, f'Removed {person.name} from speaker outreach workflow for {selected_event.name}.')
+                messages.success(request, f'"{person.name}" was removed from {selected_event.name} only. The shared library record is still kept.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#workflow")
+
+            if action == 'remove_selected':
+                selected_person_ids = [
+                    int(value) for value in request.POST.getlist('selected_person_ids')
+                    if str(value).strip().isdigit()
+                ]
+                if not selected_person_ids:
+                    raise ValueError('Select at least one speaker before removing them from this event workflow.')
+                selected_people = list(ProgramPerson.objects.filter(events=selected_event, id__in=selected_person_ids).distinct())
+                if not selected_people:
+                    raise ValueError('No valid linked speakers were found for the selected remove action.')
+                removed = 0
+                for person in selected_people:
+                    SpeakerOutreachCoordination.objects.filter(event=selected_event, person=person).delete()
+                    person.events.remove(selected_event)
+                    removed += 1
+                dashboard_log_action(request, selected_event, CHANGE, f'Removed {removed} speaker(s) from speaker outreach workflow for {selected_event.name}.')
+                messages.success(request, f'Removed {removed} speaker(s) from {selected_event.name}. The shared library records are still kept.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#workflow")
 
             if action == 'save_template':
                 subject = (request.POST.get('subject') or '').strip()
@@ -8422,6 +8521,8 @@ def dashboard_speaker_outreach_center(request):
         'template_presets': template_presets.count(),
     }
 
+    speaker_profile_results = _speaker_outreach_profile_rows(speaker_profile_query, event=selected_event, selected_profile_id=selected_profile_id) if speaker_profile_query and not selected_profile else []
+
     context = {
         'site_settings': site_settings,
         'events': events,
@@ -8442,7 +8543,16 @@ def dashboard_speaker_outreach_center(request):
         },
         'query_string': urlencode(base_params),
         'person_form': person_form,
+        'speaker_profile_query': speaker_profile_query,
+        'speaker_profile_results': speaker_profile_results,
+        'selected_profile': selected_profile,
+        'selected_profile_person': selected_profile_person,
+        'selected_profile_in_event': selected_profile_in_event,
     }
+    if request.method == 'GET' and request.headers.get('HX-Request'):
+        if speaker_partial == 'add':
+            return render(request, 'partials/dashboard_speaker_outreach_add_card.html', context)
+        return render(request, 'partials/dashboard_speaker_outreach_library_panel.html', context)
     return render(request, 'dashboard_speaker_outreach_center.html', context)
 
 

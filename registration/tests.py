@@ -275,6 +275,25 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertIn('https://example.com/register', html)
         self.assertIn('Event details', html)
         self.assertIn('<a href="https://example.com/details"', html)
+        self.assertNotIn('This email was sent from the BSBCS dashboard.', html)
+        self.assertIn('line-height:1.55', html)
+        self.assertIn('padding:28px', html)
+
+    def test_render_rich_email_html_filters_none_lines(self):
+        html = render_rich_email_html('Speaker note', 'Dear Speaker\n\nNone\n\nWarm regards')
+        self.assertNotIn('>None<', html)
+        self.assertIn('Dear Speaker', html)
+        self.assertIn('Warm regards', html)
+
+    def test_render_rich_email_html_renders_bullet_support_block(self):
+        html = render_rich_email_html(
+            'Speaker note',
+            'Dear Speaker\n\nSupport details:\n- Return airfare will be arranged.\n- Hotel accommodation will be arranged.\n\nWarm regards'
+        )
+        self.assertIn('Support for your participation', html)
+        self.assertIn('background:#ffffff;border:1px solid #d7e5f6', html)
+        self.assertIn('Return airfare will be arranged.', html)
+        self.assertIn('Hotel accommodation will be arranged.', html)
 
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_bulk_email_sender_attaches_html_button_version(self):

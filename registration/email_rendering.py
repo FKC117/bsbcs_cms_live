@@ -2,6 +2,11 @@ import re
 from html import escape
 
 
+def _clean_content_value(value):
+    cleaned = (value or '').strip()
+    return '' if cleaned.lower() == 'none' else cleaned
+
+
 BUTTON_LINE_RE = re.compile(
     r"^\{\{\s*button\s*:\s*(?P<label>.+?)\s*\|\s*(?P<url>(?:https?://|mailto:)[^\s{}]+)\s*\}\}$",
     re.IGNORECASE,
@@ -11,6 +16,7 @@ INLINE_LINK_RE = re.compile(
     r"|(?P<raw_url>(?:https?://|mailto:)[^\s<]+)",
     re.IGNORECASE,
 )
+BULLET_LINE_RE = re.compile(r"^[-*]\s+(?P<item>.+)$")
 
 
 def _render_inline_links(text):
@@ -39,8 +45,8 @@ def _render_inline_links(text):
 
 
 def _button_block(label, url):
-    safe_label = escape(label.strip())
-    safe_url = escape(url.strip(), quote=True)
+    safe_label = escape(_clean_content_value(label))
+    safe_url = escape(_clean_content_value(url), quote=True)
     return (
         '<div style="margin:24px 0;text-align:center;">'
         f'<a href="{safe_url}" '
@@ -53,45 +59,71 @@ def _button_block(label, url):
 
 
 def render_rich_email_html(subject, body, button_text=None, button_url=None):
-    normalized = (body or '').replace('\r\n', '\n').replace('\r', '\n')
+    normalized = _clean_content_value(body).replace('\r\n', '\n').replace('\r', '\n')
     blocks = []
     paragraph_lines = []
+    bullet_lines = []
 
     def flush_paragraph():
         nonlocal paragraph_lines
         if paragraph_lines:
             blocks.append(
-                '<p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:#243b53;">'
+                '<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#243b53;">'
                 + '<br>'.join(paragraph_lines)
                 + '</p>'
             )
             paragraph_lines = []
 
+    def flush_bullets():
+        nonlocal bullet_lines
+        if bullet_lines:
+            items = ''.join(
+                '<div style="margin:0 0 10px 0;padding:12px 14px;border-radius:14px;background:#ffffff;border:1px solid #d7e5f6;font-size:15px;line-height:1.55;color:#17324d;">' + item + '</div>'
+                for item in bullet_lines
+            )
+            blocks.append(
+                '<div style="margin:4px 0 16px 0;padding:18px 20px;border:1px solid #cfe0f5;border-radius:20px;background:#f4f9ff;">'
+                '<div style="margin:0 0 12px 0;font-size:11px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:#0b7fab;">Support for your participation</div>'
+                + items +
+                '</div>'
+            )
+            bullet_lines = []
+
     for line in normalized.split('\n'):
-        stripped = line.strip()
+        stripped = _clean_content_value(line)
         if not stripped:
             flush_paragraph()
+            flush_bullets()
             continue
 
         button_match = BUTTON_LINE_RE.match(stripped)
         if button_match:
             flush_paragraph()
+            flush_bullets()
             blocks.append(_button_block(button_match.group('label'), button_match.group('url')))
             continue
 
+        bullet_match = BULLET_LINE_RE.match(stripped)
+        if bullet_match:
+            flush_paragraph()
+            bullet_lines.append(_render_inline_links(bullet_match.group('item')))
+            continue
+
+        flush_bullets()
         paragraph_lines.append(_render_inline_links(stripped))
 
     flush_paragraph()
+    flush_bullets()
 
-    if button_text and button_url:
+    if _clean_content_value(button_text) and _clean_content_value(button_url):
         blocks.append(_button_block(button_text, button_url))
 
     if not blocks:
         blocks.append(
-            '<p style="margin:0;font-size:15px;line-height:1.75;color:#243b53;">No message provided.</p>'
+            '<p style="margin:0;font-size:15px;line-height:1.55;color:#243b53;">No message provided.</p>'
         )
 
-    safe_subject = escape(subject or 'BSBCS message')
+    safe_subject = escape(_clean_content_value(subject) or 'BSBCS message')
     return ''.join([
         '<!doctype html>',
         '<html>',
@@ -102,11 +134,8 @@ def render_rich_email_html(subject, body, button_text=None, button_url=None):
         '<div style="font-size:12px;font-weight:700;letter-spacing:0.28em;color:#0b7fab;text-transform:uppercase;">BSBCS</div>',
         f'<div style="margin-top:10px;font-size:28px;font-weight:800;line-height:1.2;color:#10213b;">{safe_subject}</div>',
         '</td></tr>',
-        '<tr><td style="background:#ffffff;border:1px solid #cfe0f5;border-radius:24px;padding:32px;box-shadow:0 20px 40px rgba(15, 23, 42, 0.06);">',
+        '<tr><td style="background:#ffffff;border:1px solid #cfe0f5;border-radius:24px;padding:28px;box-shadow:0 20px 40px rgba(15, 23, 42, 0.06);">',
         ''.join(blocks),
-        '</td></tr>',
-        '<tr><td style="padding:18px 8px 0 8px;text-align:center;font-size:12px;line-height:1.6;color:#5f7490;">',
-        'This email was sent from the BSBCS dashboard.',
         '</td></tr>',
         '</table>',
         '</body></html>',

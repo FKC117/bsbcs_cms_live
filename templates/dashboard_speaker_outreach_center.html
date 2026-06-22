@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Speaker Outreach Center</title>
+    <script src="{% static 'js/htmx.js' %}"></script>
     <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
     <style>
         body { margin: 0; background: #EEF6FB; }
@@ -174,124 +175,9 @@
                 </div>
 
                 <div class="outreach-workspace-grid">
-                    <section class="subcard self-start p-4">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Add to shared library</div>
-                                <h3 class="mt-1 text-xl font-black text-ink">Create a global speaker prospect</h3>
-                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">This person can later be pulled into any event. They do not need a website account.</p>
-                            </div>
-                            <span class="pill bg-blue-50 text-bsbcs-blue ring-1 ring-blue-100">Global record</span>
-                        </div>
-                        <div class="mt-4 rounded-2xl border border-dashed border-line bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-600">
-                            Duplicate protection checks email, phone, and name with institution before creating a new global prospect.
-                        </div>
+                    {% include "partials/dashboard_speaker_outreach_add_card.html" %}
 
-                        <form method="post" class="mt-4 space-y-4">
-                            {% csrf_token %}
-                            <input type="hidden" name="event" value="{{ selected_event.id }}">
-                            <input type="hidden" name="q" value="{{ current_filters.q }}">
-                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
-                            <input type="hidden" name="speaker_action" value="add_person">
-
-                            <div>
-                                <label class="compact-label" for="{{ person_form.name.id_for_label }}">Full name</label>
-                                {{ person_form.name }}
-                            </div>
-                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                                <div>
-                                    <label class="compact-label" for="{{ person_form.degree.id_for_label }}">Degree</label>
-                                    {{ person_form.degree }}
-                                </div>
-                                <div>
-                                    <label class="compact-label" for="{{ person_form.designation.id_for_label }}">Designation</label>
-                                    {{ person_form.designation }}
-                                </div>
-                                <div class="md:col-span-2 xl:col-span-1 2xl:col-span-2">
-                                    <label class="compact-label" for="{{ person_form.institution.id_for_label }}">Institution</label>
-                                    {{ person_form.institution }}
-                                </div>
-                                <div>
-                                    <label class="compact-label" for="{{ person_form.email.id_for_label }}">Email</label>
-                                    {{ person_form.email }}
-                                </div>
-                                <div>
-                                    <label class="compact-label" for="{{ person_form.phone.id_for_label }}">Phone</label>
-                                    {{ person_form.phone }}
-                                </div>
-                                <div class="md:col-span-2 xl:col-span-1 2xl:col-span-2">
-                                    <label class="compact-label" for="{{ person_form.country.id_for_label }}">Country</label>
-                                    {{ person_form.country }}
-                                </div>
-                            </div>
-                            <label class="flex items-start gap-3 rounded-2xl border border-line bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-                                <input type="checkbox" name="add_to_event_now" value="1" checked class="mt-1 h-4 w-4 rounded border-line text-bsbcs-blue">
-                                <span>Add this person to <span class="font-black text-ink">{{ selected_event.name }}</span> right now after saving the global record.</span>
-                            </label>
-                            <button type="submit" class="w-full rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save prospect to shared library</button>
-                        </form>
-                    </section>
-
-                    <section id="template" class="subcard self-start p-4">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Shared prospect list</div>
-                                <h3 class="mt-1 text-xl font-black text-ink">Select multiple prospects and add them to this event</h3>
-                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this list when your team already has names saved globally and only wants to bring selected people into the current event workflow.</p>
-                            </div>
-                            <span class="pill bg-emerald-50 text-bsbcs-green ring-1 ring-emerald-100">Multi-select enabled</span>
-                        </div>
-
-                        <form method="get" class="mt-4 flex flex-wrap items-end gap-3">
-                            <input type="hidden" name="event" value="{{ selected_event.id }}">
-                            <input type="hidden" name="q" value="{{ current_filters.q }}">
-                            <div class="min-w-[260px] flex-1">
-                                <label class="compact-label">Search shared library</label>
-                                <input class="workflow-input" type="text" name="library_q" value="{{ current_filters.library_q }}" placeholder="Name, email, institution, country">
-                            </div>
-                            <button type="submit" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Filter</button>
-                        </form>
-
-                        <form method="post" class="mt-4">
-                            {% csrf_token %}
-                            <input type="hidden" name="event" value="{{ selected_event.id }}">
-                            <input type="hidden" name="q" value="{{ current_filters.q }}">
-                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
-                            <input type="hidden" name="speaker_action" value="add_selected_library_to_event">
-
-                            <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-slate-50/70 p-3">
-                                <div class="text-sm font-semibold text-slate-600">Tick shared prospects from the list and add them into {{ selected_event.name }} in one click.</div>
-                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Add selected to this event</button>
-                            </div>
-
-                            <div class="overflow-x-auto rounded-2xl border border-line">
-                                <table class="min-w-[920px] w-full border-collapse">
-                                    <thead class="bg-slate-50/90">
-                                        <tr class="text-left text-xs font-black uppercase tracking-[0.12em] text-slate-500">
-                                            <th class="px-4 py-3"><input type="checkbox" data-select-all="library" class="h-4 w-4 rounded border-line text-bsbcs-blue"></th>
-                                            <th class="px-4 py-3">Person</th>
-                                            <th class="px-4 py-3">Institution</th>
-                                            <th class="px-4 py-3">Country</th>
-                                            <th class="px-4 py-3">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-line bg-white text-sm">
-                                        {% for row in library_page_obj.object_list %}
-                                            <tr class="align-top hover:bg-slate-50/35">
-                                                <td class="px-4 py-4">{% if not row.is_in_event %}<input type="checkbox" name="selected_library_person_ids" value="{{ row.person.id }}" data-select-item="library" class="h-4 w-4 rounded border-line text-bsbcs-blue">{% endif %}</td>
-                                                <td class="px-4 py-4"><div class="font-black text-ink">{{ row.person.name }}</div><div class="mt-1 text-xs font-semibold {% if row.email %}text-slate-500{% else %}text-bsbcs-pink{% endif %}">{{ row.email|default:"No email saved" }}</div></td>
-                                                <td class="px-4 py-4 text-sm font-semibold text-slate-600">{{ row.person.institution|default:"Not set yet" }}</td>
-                                                <td class="px-4 py-4 text-sm font-semibold text-slate-600">{{ row.person.country|default:"-" }}</td>
-                                                <td class="px-4 py-4">{% if row.is_in_event %}<span class="pill bg-emerald-50 text-bsbcs-green ring-1 ring-emerald-100">Already in event workflow</span>{% else %}<span class="pill bg-slate-100 text-slate-600 ring-1 ring-slate-200">Library only</span>{% endif %}</td>
-                                            </tr>
-                                        {% empty %}
-                                            <tr><td colspan="5" class="px-4 py-12 text-center text-sm font-semibold text-slate-500">No shared speaker prospects matched this filter yet.</td></tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </form>
-                    </section>
+                    {% include "partials/dashboard_speaker_outreach_library_panel.html" %}
                 </div>
             </section>
 
@@ -462,6 +348,7 @@
                         <div class="text-sm font-semibold text-slate-600">Save the row selections first if your team is still discussing support. When ready, tick the people and send.</div>
                         <div class="flex flex-wrap gap-3">
                             <button type="submit" name="speaker_action" value="save_options" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Save row settings</button>
+                            <button type="submit" name="speaker_action" value="remove_selected" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-pink hover:text-bsbcs-pink" data-confirm-remove-selected="1">Remove selected</button>
                             <button type="submit" name="speaker_action" value="send_selected" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Send selected invitations</button>
                         </div>
                     </div>
@@ -478,9 +365,9 @@
                                     <th class="px-4 py-3">Allowance</th>
                                     <th class="px-4 py-3">Transport</th>
                                     <th class="px-4 py-3">Special</th>
-                                    <th class="px-4 py-3">Notes</th>
                                     <th class="px-4 py-3">Last activity</th>
                                     <th class="px-4 py-3">Preview</th>
+                                    <th class="px-4 py-3">Remove</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-line bg-white text-sm">
@@ -511,9 +398,6 @@
                                         <td class="px-4 py-4"><input type="checkbox" name="offer_local_transport_{{ row.person.id }}" {% if row.coordination.offer_local_transport %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
                                         <td class="px-4 py-4"><input type="checkbox" name="offer_special_support_{{ row.person.id }}" {% if row.coordination.offer_special_support %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
                                         <td class="px-4 py-4">
-                                            <textarea class="workflow-textarea min-h-[98px]" name="custom_notes_{{ row.person.id }}" placeholder="Anything unique for this person?">{{ row.coordination.custom_notes }}</textarea>
-                                        </td>
-                                        <td class="px-4 py-4">
                                             {% if row.latest_log %}
                                                 <div class="rounded-full {% if row.latest_log.status == 'sent' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.latest_log.status == 'queued' %}bg-blue-50 text-bsbcs-blue ring-blue-100{% else %}bg-pink-50 text-bsbcs-pink ring-pink-100{% endif %} inline-flex px-3 py-1 text-xs font-black ring-1">{{ row.latest_log.get_status_display }}</div>
                                                 <div class="mt-2 text-xs font-semibold text-slate-500">{{ row.latest_log.created_at|date:"M d, Y h:i A" }}</div>
@@ -525,10 +409,13 @@
                                         <td class="px-4 py-4">
                                             <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}&preview_person={{ row.person.id }}#preview" class="inline-flex rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Preview</a>
                                         </td>
+                                        <td class="px-4 py-4">
+                                            <button type="submit" name="speaker_action" value="remove_from_event" formaction="{% url 'dashboard_speaker_outreach_center' %}" formnovalidate data-remove-person-id="{{ row.person.id }}" class="rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-slate-600 hover:border-bsbcs-pink hover:text-bsbcs-pink">Remove</button>
+                                        </td>
                                     </tr>
                                 {% empty %}
                                     <tr>
-                                        <td colspan="11" class="px-4 py-12 text-center text-sm font-semibold text-slate-500">No outreach contacts are linked to this event yet. Pull some names in from the shared prospect library above.</td>
+                                        <td colspan="12" class="px-4 py-12 text-center text-sm font-semibold text-slate-500">No outreach contacts are linked to this event yet. Pull some names in from the shared prospect library above.</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -555,15 +442,45 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('[data-select-all]').forEach(function (master) {
-            master.addEventListener('change', function () {
-                const key = master.getAttribute('data-select-all');
-                document.querySelectorAll('[data-select-item="' + key + '"]').forEach(function (input) {
-                    input.checked = master.checked;
-                });
-            });
+    document.addEventListener('change', function (event) {
+        const master = event.target.closest('[data-select-all]');
+        if (!master) {
+            return;
+        }
+        const key = master.getAttribute('data-select-all');
+        document.querySelectorAll('[data-select-item="' + key + '"]').forEach(function (input) {
+            input.checked = master.checked;
         });
+    });
+
+    document.addEventListener('click', function (event) {
+        const removeButton = event.target.closest('[data-remove-person-id]');
+        if (removeButton) {
+            if (!window.confirm('Remove this person from the current event workflow? The shared library record will be kept.')) {
+                event.preventDefault();
+                return;
+            }
+            const form = removeButton.form;
+            if (!form) {
+                return;
+            }
+            let hidden = form.querySelector('input[name="person_id"]');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'person_id';
+                form.appendChild(hidden);
+            }
+            hidden.value = removeButton.getAttribute('data-remove-person-id') || '';
+            return;
+        }
+
+        const bulkRemoveButton = event.target.closest('[data-confirm-remove-selected]');
+        if (bulkRemoveButton) {
+            if (!window.confirm('Remove the selected people from the current event workflow? Their shared library records will be kept.')) {
+                event.preventDefault();
+            }
+        }
     });
 </script>
 </body>
