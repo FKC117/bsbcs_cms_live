@@ -13,7 +13,7 @@ from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
 from .email_rendering import render_rich_email_html
-from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, ThankYouEmailLog
+from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
 
 
 speaker_certificate_celery_logger = logging.getLogger('speaker_certificate_celery')
@@ -488,3 +488,63 @@ def send_speaker_certificate_email(
         sent_at.isoformat(),
     )
     return {'certificate_id': certificate.id, 'email': recipient_email, 'status': 'sent'}
+
+
+def speaker_outreach_email_log_table_ready():
+    try:
+        return SpeakerOutreachEmailLog._meta.db_table in connection.introspection.table_names()
+    except Exception:
+        return False
+
+
+def _update_speaker_outreach_email_log(log_id, **fields):
+    if not log_id or not speaker_outreach_email_log_table_ready():
+        return
+    SpeakerOutreachEmailLog.objects.filter(pk=log_id).update(**fields, updated_at=timezone.now())
+
+
+@shared_task(bind=True)
+def send_speaker_outreach_email_task(self, log_id):
+    try:
+        log = SpeakerOutreachEmailLog.objects.select_related('coordination', 'event', 'person', 'sent_by').get(pk=log_id)
+    except SpeakerOutreachEmailLog.DoesNotExist:
+        return {'status': 'missing'}
+
+    recipient_email = (log.email or '').strip()
+    if not recipient_email:
+        _update_speaker_outreach_email_log(log_id, status=SpeakerOutreachEmailLog.STATUS_FAILED, message='Recipient email is missing.')
+        return {'status': 'missing_recipient'}
+
+    html_message = render_rich_email_html(log.subject, log.body)
+    try:
+        _send_email(
+            subject=log.subject,
+            body=log.body,
+            from_email=settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
+            recipient_list=[recipient_email],
+            html_message=html_message,
+        )
+    except Exception as exc:
+        _update_speaker_outreach_email_log(log_id, status=SpeakerOutreachEmailLog.STATUS_FAILED, message=str(exc))
+        raise
+
+    sent_at = timezone.now()
+    _update_speaker_outreach_email_log(
+        log_id,
+        status=SpeakerOutreachEmailLog.STATUS_SENT,
+        message='Speaker outreach email sent successfully.',
+        sent_at=sent_at,
+    )
+
+    if log.coordination_id:
+        SpeakerOutreachCoordination.objects.filter(pk=log.coordination_id).update(
+            status=SpeakerOutreachCoordination.STATUS_SENT,
+            send_count=(log.coordination.send_count if log.coordination else 0) + 1,
+            last_subject=log.subject,
+            last_body=log.body,
+            last_sent_at=sent_at,
+            last_sent_by_id=log.sent_by_id,
+            updated_at=sent_at,
+        )
+
+    return {'status': 'sent', 'log_id': log_id, 'email': recipient_email}

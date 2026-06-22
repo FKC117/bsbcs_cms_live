@@ -69,6 +69,7 @@ from .tasks import (
     send_participant_approval_email,
     send_thank_you_email_task,
     send_speaker_certificate_email,
+    send_speaker_outreach_email_task,
     send_pending_bulk_email_campaign,
 )
 from .pdf_utils import generate_abstract_pdf, generate_event_report_pdf, generate_invoice
@@ -3018,6 +3019,226 @@ def _speaker_role_labels(person, event):
     return ', '.join(labels) or 'Speaker'
 
 
+def _default_speaker_outreach_subject(event):
+    return f"Invitation to join {event.name} {event.year} as a speaker"
+
+
+def _default_speaker_outreach_intro(event, role_label='Speaker'):
+    return (
+        f"We are pleased to invite you to join {event.name} {event.year} as {role_label}. "
+        f"The event will be held on {event.start_date}"
+        + (f" to {event.end_date}" if event.end_date and event.end_date != event.start_date else "")
+        + (f" at {event.location}." if event.location else ".")
+    )
+
+
+def _speaker_outreach_template(event):
+    template, _ = SpeakerOutreachTemplate.objects.get_or_create(
+        event=event,
+        defaults={
+            'subject': _default_speaker_outreach_subject(event),
+            'intro_body': _default_speaker_outreach_intro(event),
+            'closing_body': 'We would be grateful for your positive confirmation at your convenience.\n\nWarm regards,\nBSBCS Secretariat',
+            'airfare_body': 'We would be pleased to arrange return air ticket support for your participation.',
+            'hotel_body': 'We would be pleased to arrange your hotel accommodation for the event dates.',
+            'allowance_body': 'We would also be pleased to provide the agreed speaker allowance or honorarium.',
+            'local_transport_body': 'Local transport support will be arranged for your official event movements.',
+            'special_support_body': 'Additional special arrangements are available and will be coordinated with you directly.',
+        },
+    )
+    return template
+
+
+def _speaker_outreach_row(event, person):
+    row, _ = SpeakerOutreachCoordination.objects.get_or_create(event=event, person=person)
+    return row
+
+
+def _speaker_outreach_compose_message(event, person, template, coordination):
+    role_label = _speaker_role_labels(person, event)
+    blocks = [f"Dear {person.name},"]
+
+    intro_body = (template.intro_body or '').strip() or _default_speaker_outreach_intro(event, role_label=role_label)
+    blocks.append(intro_body)
+
+    amenity_blocks = []
+    if coordination.offer_airfare and (template.airfare_body or '').strip():
+        amenity_blocks.append(template.airfare_body.strip())
+    if coordination.offer_hotel and (template.hotel_body or '').strip():
+        amenity_blocks.append(template.hotel_body.strip())
+    if coordination.offer_allowance and (template.allowance_body or '').strip():
+        amenity_blocks.append(template.allowance_body.strip())
+    if coordination.offer_local_transport and (template.local_transport_body or '').strip():
+        amenity_blocks.append(template.local_transport_body.strip())
+    if coordination.offer_special_support and (template.special_support_body or '').strip():
+        amenity_blocks.append(template.special_support_body.strip())
+
+    if amenity_blocks:
+        blocks.append('To support your participation, we would also be pleased to confirm the following arrangements:')
+        blocks.extend(amenity_blocks)
+
+    if (coordination.custom_notes or '').strip():
+        blocks.append(coordination.custom_notes.strip())
+
+    closing_body = (template.closing_body or '').strip()
+    if closing_body:
+        blocks.append(closing_body)
+
+    return '\n\n'.join(block for block in blocks if block)
+
+
+def _speaker_outreach_people_queryset(event, search_query=''):
+    qs = ProgramPerson.objects.filter(
+        events=event,
+    ).select_related('profile').distinct().order_by('name')
+    query_text = (search_query or '').strip()
+    if query_text:
+        qs = qs.filter(
+            Q(name__icontains=query_text)
+            | Q(email__icontains=query_text)
+            | Q(institution__icontains=query_text)
+            | Q(designation__icontains=query_text)
+        )
+    return qs
+
+
+def _speaker_outreach_existing_global_person(cleaned_data):
+    email = (cleaned_data.get('email') or '').strip().lower()
+    phone = (cleaned_data.get('phone') or '').strip()
+    name = (cleaned_data.get('name') or '').strip()
+    institution = (cleaned_data.get('institution') or '').strip()
+
+    base_qs = ProgramPerson.objects.all()
+    if email:
+        match = base_qs.filter(email__iexact=email).first()
+        if match:
+            return match
+    if phone:
+        match = base_qs.filter(phone=phone).first()
+        if match:
+            return match
+    if name:
+        lookup = Q(name__iexact=name)
+        if institution:
+            lookup &= Q(institution__iexact=institution)
+        match = base_qs.filter(lookup).first()
+        if match:
+            return match
+    return None
+
+
+def _speaker_outreach_library_queryset(search_query=''):
+    qs = ProgramPerson.objects.select_related('profile').all().order_by('name')
+    query_text = (search_query or '').strip()
+    if query_text:
+        qs = qs.filter(
+            Q(name__icontains=query_text)
+            | Q(email__icontains=query_text)
+            | Q(institution__icontains=query_text)
+            | Q(designation__icontains=query_text)
+            | Q(country__icontains=query_text)
+        )
+    return qs
+
+
+def _apply_speaker_outreach_preset_to_template(preset, template):
+    template.subject = preset.subject
+    template.intro_body = preset.intro_body
+    template.closing_body = preset.closing_body
+    template.airfare_body = preset.airfare_body
+    template.hotel_body = preset.hotel_body
+    template.allowance_body = preset.allowance_body
+    template.local_transport_body = preset.local_transport_body
+    template.special_support_body = preset.special_support_body
+    template.save()
+
+
+def _speaker_outreach_rows(event, template, search_query=''):
+    people = list(_speaker_outreach_people_queryset(event, search_query))
+    coordinations = {
+        row.person_id: row
+        for row in SpeakerOutreachCoordination.objects.filter(event=event, person__in=people).select_related('last_sent_by', 'person')
+    }
+    latest_logs = {}
+    for log in SpeakerOutreachEmailLog.objects.filter(event=event, person__in=people).select_related('sent_by').order_by('person_id', '-created_at'):
+        latest_logs.setdefault(log.person_id, log)
+
+    rows = []
+    for person in people:
+        coordination = coordinations.get(person.id) or SpeakerOutreachCoordination(event=event, person=person)
+        latest_log = latest_logs.get(person.id)
+        rows.append({
+            'person': person,
+            'coordination': coordination,
+            'role_label': _speaker_outreach_role_label(person, event),
+            'email': (person.email or (person.profile.email if person.profile_id and person.profile and person.profile.email else '') or '').strip(),
+            'latest_log': latest_log,
+            'preview_subject': (template.subject or '').strip() or _default_speaker_outreach_subject(event),
+            'preview_body': _speaker_outreach_compose_message(event, person, template, coordination),
+        })
+    return rows
+
+
+def _speaker_outreach_role_label(person, event):
+    role_label = _speaker_role_labels(person, event)
+    return role_label if role_label and role_label != 'Speaker' else ('Speaker' if ProgramItemFaculty.objects.filter(person=person, item__session__event=event, role=ProgramItemFaculty.ROLE_SPEAKER).exists() else ('Presenter' if ProgramItemFaculty.objects.filter(person=person, item__session__event=event, role=ProgramItemFaculty.ROLE_PRESENTER).exists() else 'Prospect'))
+
+
+def _save_speaker_outreach_row_options(event, people, source):
+    saved = 0
+    coordination_map = {
+        row.person_id: row
+        for row in SpeakerOutreachCoordination.objects.filter(event=event, person__in=people)
+    }
+    for person in people:
+        coordination = coordination_map.get(person.id) or SpeakerOutreachCoordination(event=event, person=person)
+        coordination.offer_airfare = bool(source.get(f'offer_airfare_{person.id}'))
+        coordination.offer_hotel = bool(source.get(f'offer_hotel_{person.id}'))
+        coordination.offer_allowance = bool(source.get(f'offer_allowance_{person.id}'))
+        coordination.offer_local_transport = bool(source.get(f'offer_local_transport_{person.id}'))
+        coordination.offer_special_support = bool(source.get(f'offer_special_support_{person.id}'))
+        coordination.custom_notes = (source.get(f'custom_notes_{person.id}') or '').strip() or None
+        coordination.save()
+        saved += 1
+    return saved
+
+
+def _queue_speaker_outreach_email(event, template, person, coordination, sent_by=None):
+    recipient_email = ((person.email or '').strip() or ((person.profile.email or '').strip() if person.profile_id and person.profile else ''))
+    if not recipient_email:
+        return 'missing_email', None
+
+    subject = (template.subject or '').strip() or _default_speaker_outreach_subject(event)
+    body = _speaker_outreach_compose_message(event, person, template, coordination)
+    email_log = SpeakerOutreachEmailLog.objects.create(
+        coordination=coordination if coordination.pk else None,
+        event=event,
+        person=person,
+        email=recipient_email,
+        subject=subject,
+        body=body,
+        offer_airfare=coordination.offer_airfare,
+        offer_hotel=coordination.offer_hotel,
+        offer_allowance=coordination.offer_allowance,
+        offer_local_transport=coordination.offer_local_transport,
+        offer_special_support=coordination.offer_special_support,
+        custom_notes=coordination.custom_notes,
+        status=SpeakerOutreachEmailLog.STATUS_QUEUED,
+        sent_by=sent_by if getattr(sent_by, 'is_authenticated', False) else None,
+        message='Queued from Speaker Outreach Center.',
+    )
+    try:
+        task = send_speaker_outreach_email_task.delay(email_log.id)
+    except Exception as exc:
+        email_log.status = SpeakerOutreachEmailLog.STATUS_FAILED
+        email_log.message = f'Could not queue outreach email task: {exc}'
+        email_log.save(update_fields=['status', 'message', 'updated_at'])
+        raise
+    email_log.task_id = getattr(task, 'id', '') or ''
+    email_log.save(update_fields=['task_id', 'updated_at'])
+    return 'queued', email_log
+
+
 def _speaker_certificate_requirements_met(person, event, certificate):
     profile = _speaker_profile_for_person(person)
     participant = _speaker_related_participant(person, event, profile)
@@ -3618,7 +3839,7 @@ def _speaker_certificate_rows(event, certificate, search_query=''):
             'profile': profile,
             'participant': requirements['participant'],
             'email': (profile.email if profile else '') or (person.email or ''),
-            'role_label': _speaker_role_labels(person, event),
+            'role_label': _speaker_outreach_role_label(person, event),
             'has_feedback': requirements['has_feedback'],
             'has_kit': requirements['has_kit'],
             'eligible': requirements['eligible'],
@@ -7933,6 +8154,296 @@ def dashboard_presentation_center(request):
             'q': query,
         },
     })
+
+
+@dashboard_permission_required('program')
+def dashboard_speaker_outreach_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', '-id')
+    selected_event = events.filter(pk=request.GET.get('event') or request.POST.get('event') or None).first()
+    search_query = (request.GET.get('q') or request.POST.get('q') or '').strip()
+    library_query = (request.GET.get('library_q') or request.POST.get('library_q') or '').strip()
+    preview_person_id = request.GET.get('preview_person')
+    edit_preset_id = request.GET.get('edit_preset') or request.POST.get('edit_preset')
+    person_form = ProgramPersonQuickCreateForm(initial={'country': 'Bangladesh'})
+
+    base_params = {}
+    if selected_event:
+        base_params['event'] = selected_event.id
+    if search_query:
+        base_params['q'] = search_query
+    if library_query:
+        base_params['library_q'] = library_query
+
+    if request.method == 'POST':
+        action = request.POST.get('speaker_action')
+        redirect_params = dict(base_params)
+        if not selected_event:
+            messages.error(request, 'Choose an event before using the speaker outreach center.')
+            return redirect(reverse('dashboard_speaker_outreach_center'))
+
+        template = _speaker_outreach_template(selected_event)
+        person_ids = [
+            int(value) for value in request.POST.getlist('person_ids')
+            if str(value).strip().isdigit()
+        ]
+        page_people = list(ProgramPerson.objects.filter(events=selected_event, id__in=person_ids).distinct()) if person_ids else []
+
+        try:
+            if action == 'add_person':
+                person_form = ProgramPersonQuickCreateForm(request.POST)
+                if not person_form.is_valid():
+                    raise ValueError('Please complete the global prospect form with at least name and a valid email if provided.')
+                cleaned_data = person_form.cleaned_data
+                add_to_event_now = bool(request.POST.get('add_to_event_now'))
+                person = _speaker_outreach_existing_global_person(cleaned_data)
+                event_added = False
+                if person:
+                    updated_fields = []
+                    for field in ['degree', 'designation', 'institution', 'email', 'phone', 'country']:
+                        incoming_value = cleaned_data.get(field)
+                        if incoming_value and not getattr(person, field):
+                            setattr(person, field, incoming_value)
+                            updated_fields.append(field)
+                    if updated_fields:
+                        person.save(update_fields=updated_fields)
+                    if add_to_event_now and not person.events.filter(pk=selected_event.pk).exists():
+                        person.events.add(selected_event)
+                        event_added = True
+                    dashboard_log_action(
+                        request,
+                        person,
+                        CHANGE,
+                        f'Updated global speaker prospect from Speaker Outreach Center dashboard for {selected_event.name}.',
+                    )
+                    if add_to_event_now and event_added:
+                        messages.success(request, f'Existing prospect "{person.name}" was matched in the global library and added to {selected_event.name}.')
+                    elif add_to_event_now:
+                        messages.success(request, f'Existing prospect "{person.name}" is already in the global library and already linked to {selected_event.name}.')
+                    else:
+                        messages.success(request, f'Existing prospect "{person.name}" was matched in the global library, so we refreshed details without creating a duplicate.')
+                else:
+                    person = person_form.save()
+                    if add_to_event_now:
+                        person.events.add(selected_event)
+                        event_added = True
+                    dashboard_log_action(request, person, ADDITION, 'Added global speaker prospect from Speaker Outreach Center dashboard.')
+                    if event_added:
+                        messages.success(request, f'Global prospect "{person.name}" created and added to {selected_event.name}.')
+                    else:
+                        messages.success(request, f'Global prospect "{person.name}" created in the shared speaker library.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#prospects")
+
+            if action == 'add_selected_library_to_event':
+                selected_library_ids = [
+                    int(value) for value in request.POST.getlist('selected_library_person_ids')
+                    if str(value).strip().isdigit()
+                ]
+                if not selected_library_ids:
+                    raise ValueError('Select at least one person from the shared prospect library first.')
+                selected_people = list(ProgramPerson.objects.filter(id__in=selected_library_ids).distinct())
+                added = 0
+                already = 0
+                for person in selected_people:
+                    if person.events.filter(pk=selected_event.pk).exists():
+                        already += 1
+                        continue
+                    person.events.add(selected_event)
+                    added += 1
+                dashboard_log_action(request, selected_event, CHANGE, f'Added shared prospects into speaker outreach workflow. added={added}, already={already}.')
+                messages.success(request, f'Added {added} prospect(s) into {selected_event.name}. Already there: {already}.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#prospects")
+
+            if action == 'save_template':
+                subject = (request.POST.get('subject') or '').strip()
+                intro_body = (request.POST.get('intro_body') or '').strip()
+                if not subject or not intro_body:
+                    raise ValueError('Speaker invitation subject and introduction are required.')
+                template.subject = subject
+                template.intro_body = intro_body
+                template.closing_body = (request.POST.get('closing_body') or '').strip() or None
+                template.airfare_body = (request.POST.get('airfare_body') or '').strip() or None
+                template.hotel_body = (request.POST.get('hotel_body') or '').strip() or None
+                template.allowance_body = (request.POST.get('allowance_body') or '').strip() or None
+                template.local_transport_body = (request.POST.get('local_transport_body') or '').strip() or None
+                template.special_support_body = (request.POST.get('special_support_body') or '').strip() or None
+                template.save()
+                dashboard_log_action(request, template, CHANGE, 'Updated speaker outreach template from Speaker Outreach Center dashboard.')
+                messages.success(request, f'Speaker outreach email pattern saved for {selected_event.name}.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#templates")
+
+            if action == 'save_template_preset':
+                preset_name = (request.POST.get('preset_name') or '').strip()
+                subject = (request.POST.get('subject') or '').strip()
+                intro_body = (request.POST.get('intro_body') or '').strip()
+                if not preset_name:
+                    raise ValueError('Give the reusable template a short name before saving it.')
+                if not subject or not intro_body:
+                    raise ValueError('Save a subject and introduction before storing this reusable template.')
+                preset = SpeakerOutreachTemplatePreset.objects.create(
+                    name=preset_name,
+                    subject=subject,
+                    intro_body=intro_body,
+                    closing_body=(request.POST.get('closing_body') or '').strip() or None,
+                    airfare_body=(request.POST.get('airfare_body') or '').strip() or None,
+                    hotel_body=(request.POST.get('hotel_body') or '').strip() or None,
+                    allowance_body=(request.POST.get('allowance_body') or '').strip() or None,
+                    local_transport_body=(request.POST.get('local_transport_body') or '').strip() or None,
+                    special_support_body=(request.POST.get('special_support_body') or '').strip() or None,
+                    created_by=request.user if request.user.is_authenticated else None,
+                )
+                dashboard_log_action(request, preset, ADDITION, 'Saved reusable speaker outreach template preset from dashboard.')
+                messages.success(request, f'Reusable invitation template "{preset.name}" saved to the shared library.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#templates")
+
+            if action == 'apply_template_preset':
+                preset_id = request.POST.get('preset_id')
+                preset = SpeakerOutreachTemplatePreset.objects.filter(pk=preset_id).first()
+                if not preset:
+                    raise ValueError('Choose a valid reusable template to apply.')
+                _apply_speaker_outreach_preset_to_template(preset, template)
+                dashboard_log_action(request, template, CHANGE, f'Applied speaker outreach template preset "{preset.name}" to event template.')
+                messages.success(request, f'Applied reusable template "{preset.name}" to {selected_event.name}.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#templates")
+
+            if action == 'update_template_preset':
+                preset_id = request.POST.get('preset_id')
+                preset = SpeakerOutreachTemplatePreset.objects.filter(pk=preset_id).first()
+                if not preset:
+                    raise ValueError('Choose a valid reusable template to update.')
+                preset_name = (request.POST.get('preset_name') or '').strip()
+                subject = (request.POST.get('subject') or '').strip()
+                intro_body = (request.POST.get('intro_body') or '').strip()
+                if not preset_name:
+                    raise ValueError('Give the reusable template a short name before updating it.')
+                if not subject or not intro_body:
+                    raise ValueError('Subject and introduction are required before updating this reusable template.')
+                preset.name = preset_name
+                preset.subject = subject
+                preset.intro_body = intro_body
+                preset.closing_body = (request.POST.get('closing_body') or '').strip() or None
+                preset.airfare_body = (request.POST.get('airfare_body') or '').strip() or None
+                preset.hotel_body = (request.POST.get('hotel_body') or '').strip() or None
+                preset.allowance_body = (request.POST.get('allowance_body') or '').strip() or None
+                preset.local_transport_body = (request.POST.get('local_transport_body') or '').strip() or None
+                preset.special_support_body = (request.POST.get('special_support_body') or '').strip() or None
+                preset.save()
+                dashboard_log_action(request, preset, CHANGE, f'Updated reusable speaker outreach template preset "{preset.name}" from dashboard.')
+                messages.success(request, f'Reusable invitation template "{preset.name}" updated.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#templates")
+
+            if action == 'save_options':
+                if not page_people:
+                    raise ValueError('No visible speaker rows were submitted for saving.')
+                saved = _save_speaker_outreach_row_options(selected_event, page_people, request.POST)
+                dashboard_log_action(request, selected_event, CHANGE, f'Saved speaker outreach options for {saved} speaker row(s).')
+                messages.success(request, f'Saved outreach options for {saved} speaker row(s).')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#workflow")
+
+            if action == 'send_selected':
+                if not page_people:
+                    raise ValueError('No visible speaker rows were submitted.')
+                _save_speaker_outreach_row_options(selected_event, page_people, request.POST)
+                selected_person_ids = [
+                    int(value) for value in request.POST.getlist('selected_person_ids')
+                    if str(value).strip().isdigit()
+                ]
+                if not selected_person_ids:
+                    raise ValueError('Select at least one speaker before sending invitations.')
+                selected_people = list(ProgramPerson.objects.filter(events=selected_event, id__in=selected_person_ids).distinct())
+                if not selected_people:
+                    raise ValueError('No valid speakers were found for the selected invitation action.')
+
+                counts = {'queued': 0, 'missing_email': 0, 'failed': 0}
+                for person in selected_people:
+                    coordination = _speaker_outreach_row(selected_event, person)
+                    try:
+                        result, _ = _queue_speaker_outreach_email(selected_event, template, person, coordination, sent_by=request.user)
+                    except Exception:
+                        counts['failed'] += 1
+                        continue
+                    if result in counts:
+                        counts[result] += 1
+                dashboard_log_action(request, selected_event, CHANGE, f'Speaker outreach invitations queued from dashboard. queued={counts["queued"]}, missing_email={counts["missing_email"]}, failed={counts["failed"]}.')
+                messages.success(request, f'Speaker outreach action complete. Queued: {counts["queued"]}, missing email: {counts["missing_email"]}, failed: {counts["failed"]}.')
+                return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}#workflow")
+
+            messages.error(request, 'Choose a valid speaker outreach action.')
+        except Exception as exc:
+            logger.exception('Speaker outreach action failed: %s', exc)
+            messages.error(request, str(exc))
+        return redirect(f"{reverse('dashboard_speaker_outreach_center')}?{urlencode(redirect_params)}")
+
+    template = _speaker_outreach_template(selected_event) if selected_event else None
+    all_rows = _speaker_outreach_rows(selected_event, template, search_query) if selected_event and template else []
+    workflow_page_obj = Paginator(all_rows, 12).get_page(request.GET.get('page'))
+
+    global_people_qs = _speaker_outreach_library_queryset(library_query)
+    event_person_ids = set(ProgramPerson.objects.filter(events=selected_event).values_list('id', flat=True)) if selected_event else set()
+    library_rows = [
+        {
+            'person': person,
+            'email': (person.email or (person.profile.email if person.profile_id and person.profile and person.profile.email else '') or '').strip(),
+            'is_in_event': person.id in event_person_ids,
+        }
+        for person in global_people_qs
+    ]
+    library_page_obj = Paginator(library_rows, 10).get_page(request.GET.get('library_page'))
+    template_presets = SpeakerOutreachTemplatePreset.objects.select_related('created_by').all().order_by('name', '-updated_at')
+    editing_preset = template_presets.filter(pk=edit_preset_id).first() if str(edit_preset_id or '').isdigit() else None
+    editor_template_source = editing_preset or template
+
+    preview_row = None
+    if selected_event and template and str(preview_person_id or '').isdigit():
+        preview_person = ProgramPerson.objects.filter(events=selected_event, pk=int(preview_person_id)).first()
+        if preview_person:
+            coordination = SpeakerOutreachCoordination.objects.filter(event=selected_event, person=preview_person).first() or SpeakerOutreachCoordination(event=selected_event, person=preview_person)
+            preview_row = {
+                'person': preview_person,
+                'role_label': _speaker_outreach_role_label(preview_person, selected_event),
+                'email': (preview_person.email or (preview_person.profile.email if preview_person.profile_id and preview_person.profile else '') or '').strip(),
+                'coordination': coordination,
+                'preview_subject': (template.subject or '').strip() or _default_speaker_outreach_subject(selected_event),
+                'preview_body': _speaker_outreach_compose_message(selected_event, preview_person, template, coordination),
+            }
+
+    totals = {
+        'speakers': len(all_rows),
+        'with_email': sum(1 for row in all_rows if row['email']),
+        'sent': sum(1 for row in all_rows if row['coordination'].status == SpeakerOutreachCoordination.STATUS_SENT),
+        'airfare': sum(1 for row in all_rows if row['coordination'].offer_airfare),
+        'hotel': sum(1 for row in all_rows if row['coordination'].offer_hotel),
+        'allowance': sum(1 for row in all_rows if row['coordination'].offer_allowance),
+        'prospects': sum(1 for row in all_rows if row['role_label'] == 'Prospect'),
+        'global_people': global_people_qs.count(),
+        'global_available': sum(1 for row in library_rows if not row['is_in_event']),
+        'template_presets': template_presets.count(),
+    }
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'template_row': template,
+        'editor_template_source': editor_template_source,
+        'editing_preset': editing_preset,
+        'workflow_page_obj': workflow_page_obj,
+        'page_obj': workflow_page_obj,
+        'library_page_obj': library_page_obj,
+        'template_presets': template_presets,
+        'preview_row': preview_row,
+        'totals': totals,
+        'current_filters': {
+            'event': str(selected_event.id) if selected_event else '',
+            'q': search_query,
+            'library_q': library_query,
+        },
+        'query_string': urlencode(base_params),
+        'person_form': person_form,
+    }
+    return render(request, 'dashboard_speaker_outreach_center.html', context)
 
 
 @dashboard_permission_required('bulk_email')

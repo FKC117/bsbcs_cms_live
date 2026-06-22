@@ -859,6 +859,124 @@ class ProgramPersonEmailLog(models.Model):
         return f"{self.person} - {self.event} email summary"
 
 
+class SpeakerOutreachTemplate(models.Model):
+    event = models.OneToOneField('Event', on_delete=models.CASCADE, related_name='speaker_outreach_template')
+    subject = models.CharField(max_length=255, blank=True, null=True)
+    intro_body = models.TextField(blank=True, null=True)
+    closing_body = models.TextField(blank=True, null=True)
+    airfare_body = models.TextField(blank=True, null=True, help_text='Optional paragraph shown when return airfare support is offered.')
+    hotel_body = models.TextField(blank=True, null=True, help_text='Optional paragraph shown when hotel accommodation is offered.')
+    allowance_body = models.TextField(blank=True, null=True, help_text='Optional paragraph shown when honorarium or allowance is offered.')
+    local_transport_body = models.TextField(blank=True, null=True, help_text='Optional paragraph shown when local transport support is offered.')
+    special_support_body = models.TextField(blank=True, null=True, help_text='Optional paragraph shown when another special arrangement is offered.')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Speaker outreach template'
+        verbose_name_plural = 'Speaker outreach templates'
+
+    def __str__(self):
+        return f"{self.event.name} {self.event.year} speaker outreach template"
+
+
+class SpeakerOutreachTemplatePreset(models.Model):
+    name = models.CharField(max_length=180)
+    subject = models.CharField(max_length=255, blank=True, null=True)
+    intro_body = models.TextField(blank=True, null=True)
+    closing_body = models.TextField(blank=True, null=True)
+    airfare_body = models.TextField(blank=True, null=True)
+    hotel_body = models.TextField(blank=True, null=True)
+    allowance_body = models.TextField(blank=True, null=True)
+    local_transport_body = models.TextField(blank=True, null=True)
+    special_support_body = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='speaker_outreach_template_presets')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', '-updated_at']
+        verbose_name = 'Speaker outreach template preset'
+        verbose_name_plural = 'Speaker outreach template presets'
+
+    def __str__(self):
+        return self.name
+
+
+class SpeakerOutreachCoordination(models.Model):
+    STATUS_DRAFT = 'draft'
+    STATUS_SENT = 'sent'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_SENT, 'Sent'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='speaker_outreach_rows')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='speaker_outreach_rows')
+    offer_airfare = models.BooleanField(default=False)
+    offer_hotel = models.BooleanField(default=False)
+    offer_allowance = models.BooleanField(default=False)
+    offer_local_transport = models.BooleanField(default=False)
+    offer_special_support = models.BooleanField(default=False)
+    custom_notes = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    send_count = models.PositiveIntegerField(default=0)
+    last_subject = models.CharField(max_length=255, blank=True, null=True)
+    last_body = models.TextField(blank=True, null=True)
+    last_sent_at = models.DateTimeField(blank=True, null=True)
+    last_sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='speaker_outreach_sent_rows')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['event__start_date', 'person__name']
+        unique_together = ('event', 'person')
+        verbose_name = 'Speaker outreach coordination row'
+        verbose_name_plural = 'Speaker outreach coordination rows'
+
+    def __str__(self):
+        return f"{self.person.name} - {self.event.name} outreach"
+
+
+class SpeakerOutreachEmailLog(models.Model):
+    STATUS_QUEUED = 'queued'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, 'Queued'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    coordination = models.ForeignKey('SpeakerOutreachCoordination', on_delete=models.SET_NULL, blank=True, null=True, related_name='email_logs')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='speaker_outreach_email_logs')
+    person = models.ForeignKey(ProgramPerson, on_delete=models.CASCADE, related_name='speaker_outreach_email_logs')
+    email = models.EmailField()
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    offer_airfare = models.BooleanField(default=False)
+    offer_hotel = models.BooleanField(default=False)
+    offer_allowance = models.BooleanField(default=False)
+    offer_local_transport = models.BooleanField(default=False)
+    offer_special_support = models.BooleanField(default=False)
+    custom_notes = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_QUEUED)
+    task_id = models.CharField(max_length=255, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='speaker_outreach_email_logs')
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Speaker outreach email log'
+        verbose_name_plural = 'Speaker outreach email logs'
+
+    def __str__(self):
+        return f"{self.person.name} - speaker outreach - {self.status}"
+
+
 class ProgramSession(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_sessions')
     time_slot = models.ForeignKey(TimeSlot, on_delete=models.SET_NULL, blank=True, null=True, related_name='program_sessions')

@@ -14,11 +14,13 @@ from registration.models import (
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission, RegistrationKit,
     CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
-    BulkEmail, BulkEmailRecipient,
+    BulkEmail, BulkEmailRecipient, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
+    SpeakerOutreachTemplatePreset,
 )
 from registration.forms import ProgramSessionBuilderForm
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
+from registration.tasks import send_speaker_outreach_email_task
 from registration.pdf_utils import generate_invoice
 from registration.qr_utils import registration_qr_payload
 from website.models import Member, MembershipPayment, MembershipType
@@ -298,6 +300,160 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(len(mail.outbox[0].alternatives), 1)
         self.assertIn('Complete registration', mail.outbox[0].alternatives[0][0])
         self.assertIn('https://example.com/pay', mail.outbox[0].alternatives[0][0])
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_speaker_outreach_email_task_marks_coordination_sent(self):
+        self.person1.events.add(self.event)
+        coordination = SpeakerOutreachCoordination.objects.create(
+            event=self.event,
+            person=self.person1,
+            offer_airfare=True,
+            offer_hotel=True,
+        )
+        log = SpeakerOutreachEmailLog.objects.create(
+            coordination=coordination,
+            event=self.event,
+            person=self.person1,
+            email=self.person1.email,
+            subject='Speaker invitation',
+            body='Dear speaker\n\nPlease join us.',
+            offer_airfare=True,
+            offer_hotel=True,
+            sent_by=self.staff_user,
+        )
+
+        result = send_speaker_outreach_email_task.run(log.id)
+
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(len(mail.outbox), 1)
+        coordination.refresh_from_db()
+        log.refresh_from_db()
+        self.assertEqual(coordination.status, SpeakerOutreachCoordination.STATUS_SENT)
+        self.assertEqual(coordination.send_count, 1)
+        self.assertEqual(log.status, SpeakerOutreachEmailLog.STATUS_SENT)
+        self.assertIn('Please join us.', mail.outbox[0].body)
+
+    def test_speaker_outreach_center_renders_for_staff(self):
+        self.person1.events.add(self.event)
+        ProgramItemFaculty.objects.create(
+            item=ProgramSessionItem.objects.create(session=ProgramSession.objects.create(event=self.event, title='Session A'), title='Talk A'),
+            person=self.person1,
+            role=ProgramItemFaculty.ROLE_SPEAKER,
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+        response = self.client.get(f"{reverse('dashboard_speaker_outreach_center')}?event={self.event.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Speaker outreach center')
+        self.assertContains(response, self.person1.name)
+
+    def test_speaker_outreach_center_adds_event_prospect_without_duplicate(self):
+        existing_person = ProgramPerson.objects.create(
+            name='Dr. Existing Prospect',
+            institution='Delta Hospital',
+            email='existing-prospect@example.com',
+        )
+        existing_person.events.add(self.event)
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_speaker_outreach_center'), {
+            'event': self.event.id,
+            'speaker_action': 'add_person',
+            'name': 'Dr. Existing Prospect',
+            'degree': 'MD',
+            'designation': 'Professor',
+            'institution': 'Delta Hospital',
+            'email': 'existing-prospect@example.com',
+            'phone': '01710000000',
+            'country': 'Bangladesh',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ProgramPerson.objects.filter(events=self.event, email='existing-prospect@example.com').count(), 1)
+        existing_person.refresh_from_db()
+        self.assertEqual(existing_person.degree, 'MD')
+        self.assertEqual(existing_person.designation, 'Professor')
+        self.assertEqual(existing_person.phone, '01710000000')
+
+    def test_speaker_outreach_center_adds_selected_library_people_to_event(self):
+        library_person = ProgramPerson.objects.create(
+            name='Dr. Library Prospect',
+            institution='Shared Hospital',
+            email='library-prospect@example.com',
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_speaker_outreach_center'), {
+            'event': self.event.id,
+            'speaker_action': 'add_selected_library_to_event',
+            'selected_library_person_ids': [str(library_person.id)],
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(library_person.events.filter(pk=self.event.pk).exists())
+
+    def test_speaker_outreach_center_saves_template_preset(self):
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_speaker_outreach_center'), {
+            'event': self.event.id,
+            'speaker_action': 'save_template_preset',
+            'preset_name': 'International keynote invitation',
+            'subject': 'Invitation to join BCS Conference 2026 as a speaker',
+            'intro_body': 'We would be honored to invite you.',
+            'closing_body': 'Warm regards',
+            'airfare_body': 'Return airfare support is available.',
+            'hotel_body': '',
+            'allowance_body': '',
+            'local_transport_body': '',
+            'special_support_body': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(SpeakerOutreachTemplatePreset.objects.filter(name='International keynote invitation').exists())
+
+    def test_speaker_outreach_center_updates_template_preset(self):
+        preset = SpeakerOutreachTemplatePreset.objects.create(
+            name='Old pattern',
+            subject='Old subject',
+            intro_body='Old intro',
+        )
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        response = self.client.post(reverse('dashboard_speaker_outreach_center'), {
+            'event': self.event.id,
+            'speaker_action': 'update_template_preset',
+            'preset_id': preset.id,
+            'preset_name': 'Updated pattern',
+            'subject': 'Updated subject',
+            'intro_body': 'Updated intro',
+            'closing_body': 'Updated closing',
+            'airfare_body': 'Airfare available',
+            'hotel_body': '',
+            'allowance_body': '',
+            'local_transport_body': '',
+            'special_support_body': '',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        preset.refresh_from_db()
+        self.assertEqual(preset.name, 'Updated pattern')
+        self.assertEqual(preset.subject, 'Updated subject')
+        self.assertEqual(preset.intro_body, 'Updated intro')
+        self.assertEqual(preset.closing_body, 'Updated closing')
 
     def test_event_builder_requires_staff_and_renders_workflow(self):
         url = reverse('dashboard_event_builder')

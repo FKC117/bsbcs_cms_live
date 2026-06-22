@@ -1,0 +1,570 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Speaker Outreach Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.9rem;
+            background: #fff;
+            padding: 0.7rem 0.9rem;
+            font-size: 0.92rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .workflow-textarea { min-height: 8rem; }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .section-shell {
+            border: 1px solid #CFE0F5;
+            border-radius: 1.75rem;
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
+        }
+        .subcard {
+            border: 1px solid #D9E4EF;
+            border-radius: 1.3rem;
+            background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            padding: 0.35rem 0.7rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .outreach-workspace-grid {
+            display: grid;
+            gap: 1rem;
+        }
+        @media (min-width: 1024px) {
+            .outreach-workspace-grid {
+                grid-template-columns: 360px minmax(0, 1fr);
+                align-items: start;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Speaker invitation workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Speaker outreach center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Keep a global speaker library, pull selected prospects into an event, then send tailored invitations.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">This workspace now separates shared prospect storage from event workflow. Save people once globally, reuse invitation templates, and only move selected prospects into the chosen event when your team is ready.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-end">
+                    <div>
+                        <label class="compact-label">Event</label>
+                        <select class="workflow-select" name="event" required>
+                            <option value="">Choose event</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if selected_event and selected_event.id == event.id %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label">Search</label>
+                        <input class="workflow-input" type="text" name="q" value="{{ current_filters.q }}" placeholder="Name or email">
+                    </div>
+                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Open workspace</button>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">{{ message }}</div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        {% if not selected_event %}
+            <section class="section-shell p-10 text-center">
+                <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Start here</div>
+                <h2 class="mt-2 text-3xl font-black text-ink">Choose an event to open the speaker outreach workspace</h2>
+                <p class="mx-auto mt-3 max-w-3xl text-sm leading-6 text-slate-600">The shared prospect library is reusable across events, but event-specific invitation editing and workflow boards open after you pick an event.</p>
+            </section>
+        {% else %}
+            <section class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Global library</div>
+                    <div class="mt-2 text-3xl font-black text-ink">{{ totals.global_people }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Shared speakers and prospects</div>
+                </div>
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Available to add</div>
+                    <div class="mt-2 text-3xl font-black text-bsbcs-blue">{{ totals.global_available }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Still outside this event</div>
+                </div>
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">In workflow</div>
+                    <div class="mt-2 text-3xl font-black text-bsbcs-teal">{{ totals.speakers }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Linked to {{ selected_event.name }}</div>
+                </div>
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">With email</div>
+                    <div class="mt-2 text-3xl font-black text-bsbcs-green">{{ totals.with_email }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Ready for outreach</div>
+                </div>
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Sent</div>
+                    <div class="mt-2 text-3xl font-black text-[#0f8a9d]">{{ totals.sent }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Already contacted</div>
+                </div>
+                <div class="rounded-2xl border border-line bg-white px-4 py-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-wide text-slate-500">Template presets</div>
+                    <div class="mt-2 text-3xl font-black text-[#9A6700]">{{ totals.template_presets }}</div>
+                    <div class="mt-1 text-sm font-semibold text-slate-500">Reusable invitation patterns</div>
+                </div>
+            </section>
+
+            <section id="builder" class="section-shell mt-4 p-5">
+                <div class="mb-4">
+                    <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Outreach workspace</div>
+                    <h2 class="mt-1 text-2xl font-black text-ink">Save speakers once, then add selected prospects into this event workflow</h2>
+                    <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">This is the shared speaker bank. People can live here before they are attached to a specific event, and you can move multiple selected prospects into {{ selected_event.name }} in one step.</p>
+                </div>
+
+                <div class="outreach-workspace-grid">
+                    <section class="subcard self-start p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Add to shared library</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Create a global speaker prospect</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">This person can later be pulled into any event. They do not need a website account.</p>
+                            </div>
+                            <span class="pill bg-blue-50 text-bsbcs-blue ring-1 ring-blue-100">Global record</span>
+                        </div>
+                        <div class="mt-4 rounded-2xl border border-dashed border-line bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-600">
+                            Duplicate protection checks email, phone, and name with institution before creating a new global prospect.
+                        </div>
+
+                        <form method="post" class="mt-4 space-y-4">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+                            <input type="hidden" name="speaker_action" value="add_person">
+
+                            <div>
+                                <label class="compact-label" for="{{ person_form.name.id_for_label }}">Full name</label>
+                                {{ person_form.name }}
+                            </div>
+                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                                <div>
+                                    <label class="compact-label" for="{{ person_form.degree.id_for_label }}">Degree</label>
+                                    {{ person_form.degree }}
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="{{ person_form.designation.id_for_label }}">Designation</label>
+                                    {{ person_form.designation }}
+                                </div>
+                                <div class="md:col-span-2 xl:col-span-1 2xl:col-span-2">
+                                    <label class="compact-label" for="{{ person_form.institution.id_for_label }}">Institution</label>
+                                    {{ person_form.institution }}
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="{{ person_form.email.id_for_label }}">Email</label>
+                                    {{ person_form.email }}
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="{{ person_form.phone.id_for_label }}">Phone</label>
+                                    {{ person_form.phone }}
+                                </div>
+                                <div class="md:col-span-2 xl:col-span-1 2xl:col-span-2">
+                                    <label class="compact-label" for="{{ person_form.country.id_for_label }}">Country</label>
+                                    {{ person_form.country }}
+                                </div>
+                            </div>
+                            <label class="flex items-start gap-3 rounded-2xl border border-line bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                                <input type="checkbox" name="add_to_event_now" value="1" checked class="mt-1 h-4 w-4 rounded border-line text-bsbcs-blue">
+                                <span>Add this person to <span class="font-black text-ink">{{ selected_event.name }}</span> right now after saving the global record.</span>
+                            </label>
+                            <button type="submit" class="w-full rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save prospect to shared library</button>
+                        </form>
+                    </section>
+
+                    <section id="template" class="subcard self-start p-4">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Shared prospect list</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Select multiple prospects and add them to this event</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this list when your team already has names saved globally and only wants to bring selected people into the current event workflow.</p>
+                            </div>
+                            <span class="pill bg-emerald-50 text-bsbcs-green ring-1 ring-emerald-100">Multi-select enabled</span>
+                        </div>
+
+                        <form method="get" class="mt-4 flex flex-wrap items-end gap-3">
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <div class="min-w-[260px] flex-1">
+                                <label class="compact-label">Search shared library</label>
+                                <input class="workflow-input" type="text" name="library_q" value="{{ current_filters.library_q }}" placeholder="Name, email, institution, country">
+                            </div>
+                            <button type="submit" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Filter</button>
+                        </form>
+
+                        <form method="post" class="mt-4">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+                            <input type="hidden" name="speaker_action" value="add_selected_library_to_event">
+
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-slate-50/70 p-3">
+                                <div class="text-sm font-semibold text-slate-600">Tick shared prospects from the list and add them into {{ selected_event.name }} in one click.</div>
+                                <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Add selected to this event</button>
+                            </div>
+
+                            <div class="overflow-x-auto rounded-2xl border border-line">
+                                <table class="min-w-[920px] w-full border-collapse">
+                                    <thead class="bg-slate-50/90">
+                                        <tr class="text-left text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                                            <th class="px-4 py-3"><input type="checkbox" data-select-all="library" class="h-4 w-4 rounded border-line text-bsbcs-blue"></th>
+                                            <th class="px-4 py-3">Person</th>
+                                            <th class="px-4 py-3">Institution</th>
+                                            <th class="px-4 py-3">Country</th>
+                                            <th class="px-4 py-3">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-line bg-white text-sm">
+                                        {% for row in library_page_obj.object_list %}
+                                            <tr class="align-top hover:bg-slate-50/35">
+                                                <td class="px-4 py-4">{% if not row.is_in_event %}<input type="checkbox" name="selected_library_person_ids" value="{{ row.person.id }}" data-select-item="library" class="h-4 w-4 rounded border-line text-bsbcs-blue">{% endif %}</td>
+                                                <td class="px-4 py-4"><div class="font-black text-ink">{{ row.person.name }}</div><div class="mt-1 text-xs font-semibold {% if row.email %}text-slate-500{% else %}text-bsbcs-pink{% endif %}">{{ row.email|default:"No email saved" }}</div></td>
+                                                <td class="px-4 py-4 text-sm font-semibold text-slate-600">{{ row.person.institution|default:"Not set yet" }}</td>
+                                                <td class="px-4 py-4 text-sm font-semibold text-slate-600">{{ row.person.country|default:"-" }}</td>
+                                                <td class="px-4 py-4">{% if row.is_in_event %}<span class="pill bg-emerald-50 text-bsbcs-green ring-1 ring-emerald-100">Already in event workflow</span>{% else %}<span class="pill bg-slate-100 text-slate-600 ring-1 ring-slate-200">Library only</span>{% endif %}</td>
+                                            </tr>
+                                        {% empty %}
+                                            <tr><td colspan="5" class="px-4 py-12 text-center text-sm font-semibold text-slate-500">No shared speaker prospects matched this filter yet.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </form>
+                    </section>
+                </div>
+            </section>
+
+            <section id="templates" class="section-shell mt-4 p-5">
+                <div class="mb-4">
+                    <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Invitation patterns</div>
+                    <h2 class="mt-1 text-2xl font-black text-ink">Keep one event editor and one shared reusable template library</h2>
+                    <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">Use the event editor for {{ selected_event.name }} right now. When the copy feels right, save it into the reusable library so future speaker prospecting can start from a known pattern.</p>
+                </div>
+
+                <div class="space-y-4">
+                    <section class="subcard p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Reusable template library</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">Review a saved pattern before applying it</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Open any saved pattern to inspect the full invitation body and support blocks before confirming it for this event.</p>
+                            </div>
+                            <span class="pill bg-amber-50 text-[#9A6700] ring-1 ring-amber-100">{{ totals.template_presets }} saved</span>
+                        </div>
+                        <div class="mt-4 space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                            {% for preset in template_presets %}
+                                <details class="rounded-2xl border border-line bg-white p-4 shadow-quiet group">
+                                    <summary class="flex cursor-pointer list-none items-start justify-between gap-3">
+                                        <div>
+                                            <div class="text-sm font-black text-ink">{{ preset.name }}</div>
+                                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ preset.subject|default:"No subject saved" }}</div>
+                                        </div>
+                                        <span class="rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-bsbcs-blue group-open:bg-blue-50">Preview pattern</span>
+                                    </summary>
+                                    <div class="mt-4 space-y-4 border-t border-line pt-4">
+                                        <div class="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+                                            <div class="rounded-2xl border border-line bg-slate-50 px-4 py-4">
+                                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Subject</div>
+                                                <div class="mt-2 text-sm font-black text-ink">{{ preset.subject|default:"No subject saved" }}</div>
+                                            </div>
+                                            <div class="rounded-2xl border border-line bg-slate-50 px-4 py-4">
+                                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Introduction preview</div>
+                                                <div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.intro_body|default:"No introduction saved." }}</div>
+                                            </div>
+                                        </div>
+                                        {% if preset.closing_body %}
+                                            <div class="rounded-2xl border border-line bg-slate-50 px-4 py-4">
+                                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Closing section</div>
+                                                <div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.closing_body }}</div>
+                                            </div>
+                                        {% endif %}
+                                        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                            {% if preset.airfare_body %}<div class="rounded-2xl border border-line bg-cyan-50/50 px-4 py-4"><div class="text-[11px] font-black uppercase tracking-wide text-bsbcs-teal">Airfare block</div><div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.airfare_body }}</div></div>{% endif %}
+                                            {% if preset.hotel_body %}<div class="rounded-2xl border border-line bg-emerald-50/50 px-4 py-4"><div class="text-[11px] font-black uppercase tracking-wide text-bsbcs-green">Hotel block</div><div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.hotel_body }}</div></div>{% endif %}
+                                            {% if preset.allowance_body %}<div class="rounded-2xl border border-line bg-amber-50/50 px-4 py-4"><div class="text-[11px] font-black uppercase tracking-wide text-[#9A6700]">Allowance block</div><div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.allowance_body }}</div></div>{% endif %}
+                                            {% if preset.local_transport_body %}<div class="rounded-2xl border border-line bg-blue-50/50 px-4 py-4"><div class="text-[11px] font-black uppercase tracking-wide text-bsbcs-blue">Transport block</div><div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.local_transport_body }}</div></div>{% endif %}
+                                            {% if preset.special_support_body %}<div class="rounded-2xl border border-line bg-slate-50 px-4 py-4 md:col-span-2 xl:col-span-2"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Special support block</div><div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{{ preset.special_support_body }}</div></div>{% endif %}
+                                        </div>
+                                        <div class="flex flex-wrap justify-end gap-3">
+                                        <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}&edit_preset={{ preset.id }}#templates" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit this pattern</a>
+                                        <form method="post" class="flex">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+                                            <input type="hidden" name="speaker_action" value="apply_template_preset">
+                                            <input type="hidden" name="preset_id" value="{{ preset.id }}">
+                                            <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Use this pattern for {{ selected_event.name }}</button>
+                                        </form>
+                                    </div>
+                                </details>
+                            {% empty %}
+                                <div class="rounded-2xl border border-dashed border-line bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">No reusable speaker invitation templates are saved yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <details class="subcard p-4" {% if editing_preset or not template_presets %}open{% endif %}>
+                        <summary class="flex cursor-pointer list-none items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event invitation editor</div>
+                                <h3 class="mt-1 text-xl font-black text-ink">{% if editing_preset %}Update saved template: {{ editing_preset.name }}{% else %}Create a new template or edit the event version{% endif %}</h3>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">{% if editing_preset %}You are editing a shared reusable pattern. Update it here, or save the event version separately if you only want changes for {{ selected_event.name }}.{% else %}Open this editor when you want to build a fresh pattern or refine the version currently stored for {{ selected_event.name }}.{% endif %}</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3">
+                                {% if editing_preset %}
+                                    <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}#templates" class="rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel editing</a>
+                                {% endif %}
+                                <span class="pill bg-blue-50 text-bsbcs-blue ring-1 ring-blue-100">{% if editing_preset %}Editing saved pattern{% else %}Create new template{% endif %}</span>
+                            </div>
+                        </summary>
+
+                        <form method="post" class="mt-4 space-y-4 border-t border-line pt-4">
+                            {% csrf_token %}
+                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                            <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+                            {% if editing_preset %}<input type="hidden" name="preset_id" value="{{ editing_preset.id }}">{% endif %}
+                            <div><label class="compact-label">Subject</label><input class="workflow-input" type="text" name="subject" value="{{ editor_template_source.subject }}" required></div>
+                            <div class="grid gap-4 xl:grid-cols-2">
+                                <div><label class="compact-label">Invitation introduction</label><textarea class="workflow-textarea min-h-[180px]" name="intro_body" required>{{ editor_template_source.intro_body }}</textarea></div>
+                                <div><label class="compact-label">Closing section</label><textarea class="workflow-textarea min-h-[180px]" name="closing_body">{{ editor_template_source.closing_body }}</textarea></div>
+                            </div>
+                            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                <div><label class="compact-label">Return airfare paragraph</label><textarea class="workflow-textarea min-h-[130px]" name="airfare_body">{{ editor_template_source.airfare_body }}</textarea></div>
+                                <div><label class="compact-label">Hotel paragraph</label><textarea class="workflow-textarea min-h-[130px]" name="hotel_body">{{ editor_template_source.hotel_body }}</textarea></div>
+                                <div><label class="compact-label">Allowance paragraph</label><textarea class="workflow-textarea min-h-[130px]" name="allowance_body">{{ editor_template_source.allowance_body }}</textarea></div>
+                                <div><label class="compact-label">Local transport paragraph</label><textarea class="workflow-textarea min-h-[130px]" name="local_transport_body">{{ editor_template_source.local_transport_body }}</textarea></div>
+                                <div class="md:col-span-2 xl:col-span-2"><label class="compact-label">Other special support paragraph</label><textarea class="workflow-textarea min-h-[130px]" name="special_support_body">{{ editor_template_source.special_support_body }}</textarea></div>
+                            </div>
+                            <div class="grid gap-4 rounded-2xl border border-line bg-slate-50 p-4 xl:grid-cols-[minmax(0,1fr)_auto_auto] xl:items-end">
+                                <div><label class="compact-label">Reusable template name</label><input class="workflow-input" type="text" name="preset_name" value="{% if editing_preset %}{{ editing_preset.name }}{% endif %}" placeholder="Example: International keynote invitation"></div>
+                                {% if editing_preset %}<button type="submit" name="speaker_action" value="update_template_preset" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Update saved template</button>{% else %}<button type="submit" name="speaker_action" value="save_template_preset" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Save as reusable template</button>{% endif %}
+                                <button type="submit" name="speaker_action" value="save_template" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save event invitation</button>
+                            </div>
+                        </form>
+                    </details>
+                </div>
+            </section>
+
+            {% if preview_row %}
+                <section id="preview" class="section-shell mt-4 p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Preview</div>
+                            <h2 class="mt-1 text-2xl font-black text-ink">How the message will look for {{ preview_row.person.name }}</h2>
+                            <p class="mt-2 text-sm font-semibold leading-6 text-slate-600">This preview combines the shared event invitation and this speaker's selected support blocks.</p>
+                        </div>
+                        <div class="rounded-2xl border border-line bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                            <div><span class="font-black text-slate-500">Role:</span> {{ preview_row.role_label }}</div>
+                            <div class="mt-1"><span class="font-black text-slate-500">Email:</span> {{ preview_row.email|default:"No email" }}</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                        <div class="subcard px-4 py-4">
+                            <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Subject</div>
+                            <div class="mt-2 text-lg font-black text-ink">{{ preview_row.preview_subject }}</div>
+                        </div>
+                        <div class="subcard px-4 py-4">
+                            <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Body preview</div>
+                            <div class="mt-2 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-700">{{ preview_row.preview_body }}</div>
+                        </div>
+                    </div>
+                </section>
+            {% endif %}
+
+            <section id="workflow" class="section-shell mt-4 p-5">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Coordination board</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Coordinate the people already linked to {{ selected_event.name }}</h2>
+                        <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">Once prospects enter this event workflow, your team can toggle airfare, hotel, allowance, transport, and special support before sending invitations.</p>
+                    </div>
+                    <form method="get" class="flex flex-wrap items-end gap-3">
+                        <input type="hidden" name="event" value="{{ selected_event.id }}">
+                        <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+                        <div>
+                            <label class="compact-label">Search list</label>
+                            <input class="workflow-input min-w-[220px]" type="text" name="q" value="{{ current_filters.q }}" placeholder="Name, email, institution">
+                        </div>
+                        <button type="submit" class="rounded-xl border border-line bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Filter</button>
+                    </form>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <input type="hidden" name="library_q" value="{{ current_filters.library_q }}">
+
+                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-slate-50/70 p-3">
+                        <div class="text-sm font-semibold text-slate-600">Save the row selections first if your team is still discussing support. When ready, tick the people and send.</div>
+                        <div class="flex flex-wrap gap-3">
+                            <button type="submit" name="speaker_action" value="save_options" class="rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Save row settings</button>
+                            <button type="submit" name="speaker_action" value="send_selected" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Send selected invitations</button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-2xl border border-line">
+                        <table class="min-w-[1460px] w-full border-collapse">
+                            <thead class="bg-slate-50/90">
+                                <tr class="text-left text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                                    <th class="px-4 py-3"><input type="checkbox" data-select-all="workflow" class="h-4 w-4 rounded border-line text-bsbcs-blue"></th>
+                                    <th class="px-4 py-3">Contact</th>
+                                    <th class="px-4 py-3">Stage</th>
+                                    <th class="px-4 py-3">Airfare</th>
+                                    <th class="px-4 py-3">Hotel</th>
+                                    <th class="px-4 py-3">Allowance</th>
+                                    <th class="px-4 py-3">Transport</th>
+                                    <th class="px-4 py-3">Special</th>
+                                    <th class="px-4 py-3">Notes</th>
+                                    <th class="px-4 py-3">Last activity</th>
+                                    <th class="px-4 py-3">Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-line bg-white text-sm">
+                                {% for row in page_obj.object_list %}
+                                    <tr class="align-top hover:bg-slate-50/35">
+                                        <td class="px-4 py-4">
+                                            <input type="hidden" name="person_ids" value="{{ row.person.id }}">
+                                            <input type="checkbox" name="selected_person_ids" value="{{ row.person.id }}" data-select-item="workflow" class="h-4 w-4 rounded border-line text-bsbcs-blue">
+                                        </td>
+                                        <td class="px-4 py-4">
+                                            <div class="font-black text-ink">{{ row.person.name }}</div>
+                                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.person.designation|default:"No designation yet" }}</div>
+                                            {% if row.person.institution %}<div class="mt-1 text-xs font-semibold text-slate-500">{{ row.person.institution }}</div>{% endif %}
+                                            <div class="mt-1 text-xs font-semibold {% if row.email %}text-slate-500{% else %}text-bsbcs-pink{% endif %}">{{ row.email|default:"No email address saved" }}</div>
+                                        </td>
+                                        <td class="px-4 py-4">
+                                            {% if row.role_label == 'Prospect' %}
+                                                <span class="pill bg-slate-100 text-slate-600 ring-1 ring-slate-200">Prospect</span>
+                                            {% elif row.role_label == 'Presenter' %}
+                                                <span class="pill bg-cyan-50 text-bsbcs-teal ring-1 ring-cyan-100">Presenter</span>
+                                            {% else %}
+                                                <span class="pill bg-blue-50 text-bsbcs-blue ring-1 ring-blue-100">{{ row.role_label }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="px-4 py-4"><input type="checkbox" name="offer_airfare_{{ row.person.id }}" {% if row.coordination.offer_airfare %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
+                                        <td class="px-4 py-4"><input type="checkbox" name="offer_hotel_{{ row.person.id }}" {% if row.coordination.offer_hotel %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
+                                        <td class="px-4 py-4"><input type="checkbox" name="offer_allowance_{{ row.person.id }}" {% if row.coordination.offer_allowance %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
+                                        <td class="px-4 py-4"><input type="checkbox" name="offer_local_transport_{{ row.person.id }}" {% if row.coordination.offer_local_transport %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
+                                        <td class="px-4 py-4"><input type="checkbox" name="offer_special_support_{{ row.person.id }}" {% if row.coordination.offer_special_support %}checked{% endif %} class="h-4 w-4 rounded border-line text-bsbcs-blue"></td>
+                                        <td class="px-4 py-4">
+                                            <textarea class="workflow-textarea min-h-[98px]" name="custom_notes_{{ row.person.id }}" placeholder="Anything unique for this person?">{{ row.coordination.custom_notes }}</textarea>
+                                        </td>
+                                        <td class="px-4 py-4">
+                                            {% if row.latest_log %}
+                                                <div class="rounded-full {% if row.latest_log.status == 'sent' %}bg-green-50 text-bsbcs-green ring-green-100{% elif row.latest_log.status == 'queued' %}bg-blue-50 text-bsbcs-blue ring-blue-100{% else %}bg-pink-50 text-bsbcs-pink ring-pink-100{% endif %} inline-flex px-3 py-1 text-xs font-black ring-1">{{ row.latest_log.get_status_display }}</div>
+                                                <div class="mt-2 text-xs font-semibold text-slate-500">{{ row.latest_log.created_at|date:"M d, Y h:i A" }}</div>
+                                                {% if row.coordination.send_count %}<div class="mt-1 text-xs font-semibold text-slate-500">Sent {{ row.coordination.send_count }} time{{ row.coordination.send_count|pluralize }}</div>{% endif %}
+                                            {% else %}
+                                                <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">No outreach yet</div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="px-4 py-4">
+                                            <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}&preview_person={{ row.person.id }}#preview" class="inline-flex rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Preview</a>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="11" class="px-4 py-12 text-center text-sm font-semibold text-slate-500">No outreach contacts are linked to this event yet. Pull some names in from the shared prospect library above.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+
+                {% if page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div class="text-sm font-semibold text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+                        <div class="flex flex-wrap gap-2">
+                            {% if page_obj.has_previous %}
+                                <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}&page={{ page_obj.previous_page_number }}#workflow" class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
+                            {% endif %}
+                            {% if page_obj.has_next %}
+                                <a href="?event={{ selected_event.id }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}{% if current_filters.library_q %}&library_q={{ current_filters.library_q|urlencode }}{% endif %}&page={{ page_obj.next_page_number }}#workflow" class="rounded-xl border border-line bg-white px-3 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+    </main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-select-all]').forEach(function (master) {
+            master.addEventListener('change', function () {
+                const key = master.getAttribute('data-select-all');
+                document.querySelectorAll('[data-select-item="' + key + '"]').forEach(function (input) {
+                    input.checked = master.checked;
+                });
+            });
+        });
+    });
+</script>
+</body>
+</html>
