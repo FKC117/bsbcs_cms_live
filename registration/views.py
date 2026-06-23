@@ -8688,6 +8688,21 @@ def dashboard_bulk_email_center(request):
                         f'Bulk email send queued for {pending_recipients.count()} pending recipients. Task ID: {task.id}.',
                     )
 
+        elif action == 'stop_campaign':
+            campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            elif campaign.status != BulkEmail.STATUS_SENDING:
+                messages.warning(request, 'This campaign is not currently sending.')
+            else:
+                new_status = BulkEmail.STATUS_PARTIAL if campaign.recipients.filter(
+                    status__in=[BulkEmailRecipient.STATUS_SENT, BulkEmailRecipient.STATUS_FAILED]
+                ).exists() else BulkEmail.STATUS_RECIPIENTS_READY
+                campaign.status = new_status
+                campaign.save(update_fields=['status', 'updated_at'])
+                dashboard_log_action(request, campaign, CHANGE, 'Stopped bulk email campaign from dashboard. Pending recipients were kept for later retry.')
+                messages.success(request, 'Campaign stop requested. The worker will halt after the current email cycle and keep pending recipients for later resend.')
+
         url = reverse('dashboard_bulk_email_center')
         if redirect_campaign_id:
             url = f'{url}?campaign={redirect_campaign_id}#active-campaign'

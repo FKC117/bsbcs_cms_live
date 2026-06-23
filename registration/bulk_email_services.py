@@ -29,6 +29,13 @@ User = get_user_model()
 DEFAULT_BULK_EMAIL_DELAY_SECONDS = 0.25
 
 
+def _campaign_stop_status(bulk_email):
+    has_activity = bulk_email.recipients.filter(
+        status__in=[BulkEmailRecipient.STATUS_SENT, BulkEmailRecipient.STATUS_FAILED]
+    ).exists()
+    return BulkEmail.STATUS_PARTIAL if has_activity else BulkEmail.STATUS_RECIPIENTS_READY
+
+
 def sync_bulk_email_status(bulk_email):
     pending_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).count()
     sent_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_SENT).count()
@@ -36,11 +43,14 @@ def sync_bulk_email_status(bulk_email):
     recipient_total = pending_count + sent_count + failed_count
 
     if pending_count:
-        status = (
-            BulkEmail.STATUS_SENDING
-            if sent_count or failed_count or bulk_email.status == BulkEmail.STATUS_SENDING
-            else BulkEmail.STATUS_RECIPIENTS_READY
-        )
+        if bulk_email.status == BulkEmail.STATUS_PARTIAL:
+            status = BulkEmail.STATUS_PARTIAL
+        else:
+            status = (
+                BulkEmail.STATUS_SENDING
+                if sent_count or failed_count or bulk_email.status == BulkEmail.STATUS_SENDING
+                else BulkEmail.STATUS_RECIPIENTS_READY
+            )
     elif recipient_total and sent_count and not failed_count:
         status = BulkEmail.STATUS_SENT
     elif recipient_total and (sent_count or failed_count):
@@ -332,13 +342,28 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
     bulk_email.status = BulkEmail.STATUS_SENDING
     bulk_email.save(update_fields=['status', 'updated_at'])
 
+    delay_seconds = getattr(settings, 'BULK_EMAIL_DELAY_SECONDS', DEFAULT_BULK_EMAIL_DELAY_SECONDS)
+
     for recipient in pending_recipients.iterator():
+        bulk_email.refresh_from_db(fields=['status'])
+        if bulk_email.status != BulkEmail.STATUS_SENDING:
+            break
+
         if _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=sent_by):
             sent += 1
             sent_emails.append(recipient.email)
         else:
             failed += 1
-        time.sleep(getattr(settings, 'BULK_EMAIL_DELAY_SECONDS', DEFAULT_BULK_EMAIL_DELAY_SECONDS))
+
+        remaining_delay = max(float(delay_seconds or 0), 0)
+        while remaining_delay > 0:
+            sleep_slice = min(0.5, remaining_delay)
+            time.sleep(sleep_slice)
+            remaining_delay -= sleep_slice
+            bulk_email.refresh_from_db(fields=['status'])
+            if bulk_email.status != BulkEmail.STATUS_SENDING:
+                remaining_delay = 0
+                break
 
     bulk_email.refresh_from_db()
     sync_bulk_email_status(bulk_email)
