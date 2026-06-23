@@ -8761,7 +8761,7 @@ def dashboard_bulk_email_center(request):
             'detail': 'Send pending recipients individually and inspect per-recipient delivery logs here.',
         },
     ]
-    return render(request, 'dashboard_bulk_email_center.html', {
+    context = {
         'site_settings': SiteSettings.objects.first(),
         'campaigns': campaigns,
         'selected_campaign': selected_campaign,
@@ -8778,7 +8778,10 @@ def dashboard_bulk_email_center(request):
         'audience_choices': BulkEmail.AUDIENCE_CHOICES,
         'totals': totals,
         'workflow_steps': workflow_steps,
-    })
+    }
+    if request.GET.get('bulk_email_partial') == 'active_campaign':
+        return render(request, 'partials/dashboard_bulk_email_active_campaign.html', context)
+    return render(request, 'dashboard_bulk_email_center.html', context)
 
 
 @dashboard_permission_required('payments')
