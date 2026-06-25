@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .email_rendering import render_rich_email_html
-from .email_audit import consume_email_quota_reservations, get_email_quota_snapshot, plan_bulk_email_send, record_email_audit, release_email_quota_reservations, reserve_email_quota
+from .email_audit import consume_email_quota_reservations, get_email_quota_snapshot, plan_bulk_email_send, record_email_audit, release_email_quota_reservations, reserve_email_quota, serialize_email_quota_snapshot
 
 from .models import (
     AbstractSubmission,
@@ -386,7 +386,7 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
             'failed': 0,
             'campaign_id': bulk_email.id,
             'quota_blocked': True,
-            'quota_snapshot': quota_snapshot,
+            'quota_snapshot': serialize_email_quota_snapshot(quota_snapshot),
             'blocked_count': send_plan['blocked_count'],
             'next_task_id': None,
             'processed_in_chunk': 0,
@@ -461,7 +461,7 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
         'failed': failed,
         'campaign_id': bulk_email.id,
         'quota_blocked': send_plan['blocked_count'] > 0,
-        'quota_snapshot': quota_snapshot,
+        'quota_snapshot': serialize_email_quota_snapshot(quota_snapshot),
         'blocked_count': send_plan['blocked_count'],
         'next_task_id': next_task_id,
         'processed_in_chunk': sent + failed,

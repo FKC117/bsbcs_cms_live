@@ -159,6 +159,19 @@ def get_email_quota_snapshot(*, now=None):
     }
 
 
+def serialize_email_quota_snapshot(quota_snapshot):
+    if not quota_snapshot:
+        return {}
+
+    serialized = {}
+    for key, value in quota_snapshot.items():
+        if isinstance(value, set):
+            serialized[key] = sorted(value)
+        else:
+            serialized[key] = value
+    return serialized
+
+
 def plan_email_send(recipients, *, category, quota_snapshot=None):
     from .models import EmailAuditLog
 
