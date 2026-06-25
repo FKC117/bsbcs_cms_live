@@ -211,17 +211,30 @@
                             <div class="text-xs font-semibold text-slate-500">Pending and failed rows will stay saved here so your team can retry them later.</div>
                         </form>
                     {% else %}
-                        <form method="post" class="mt-4">
-                            {% csrf_token %}
-                            <input type="hidden" name="bulk_email_action" value="send_pending">
-                            <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
-                        <input type="hidden" name="scroll_to" value="campaign-audience-step">
-                            {% if selected_campaign.pending_count %}
-                                <button class="w-full rounded-xl bg-bsbcs-green px-4 py-3 text-sm font-black text-white hover:bg-emerald-700" type="submit">Send {{ selected_campaign.pending_count }} Pending</button>
-                            {% else %}
-                                <button class="w-full cursor-not-allowed rounded-xl bg-slate-200 px-4 py-3 text-sm font-black text-slate-500" type="button" disabled>No Pending Recipients</button>
-                            {% endif %}
-                        </form>
+                        <div class="mt-4 space-y-3">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="bulk_email_action" value="send_pending">
+                                <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                                <input type="hidden" name="scroll_to" value="campaign-audience-step">
+                                {% if selected_campaign.pending_count %}
+                                    <button class="w-full rounded-xl bg-bsbcs-green px-4 py-3 text-sm font-black text-white hover:bg-emerald-700" type="submit">Send {{ selected_campaign.pending_count }} Pending</button>
+                                {% else %}
+                                    <button class="w-full cursor-not-allowed rounded-xl bg-slate-200 px-4 py-3 text-sm font-black text-slate-500" type="button" disabled>No Pending Recipients</button>
+                                {% endif %}
+                            </form>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="bulk_email_action" value="send_failed">
+                                <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                                <input type="hidden" name="scroll_to" value="campaign-audience-step">
+                                {% if selected_campaign.failed_count %}
+                                    <button class="w-full rounded-xl bg-bsbcs-pink px-4 py-3 text-sm font-black text-white hover:bg-pink-700" type="submit">Send {{ selected_campaign.failed_count }} Failed</button>
+                                {% else %}
+                                    <button class="w-full cursor-not-allowed rounded-xl bg-slate-200 px-4 py-3 text-sm font-black text-slate-500" type="button" disabled>No Failed Recipients</button>
+                                {% endif %}
+                            </form>
+                        </div>
                     {% endif %}
                 </div>
 
@@ -268,6 +281,8 @@
         <div class="rounded-xl bg-blue-50 p-6 text-center text-sm font-semibold text-bsbcs-blue">Create a campaign first. It will appear here for preparation and sending.</div>
     {% endif %}
 </div>
+
+
 
 
 

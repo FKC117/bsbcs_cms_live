@@ -8758,6 +8758,29 @@ def dashboard_bulk_email_center(request):
                         f'Bulk email send queued for {pending_recipients.count()} pending recipients. Task ID: {task.id}.',
                     )
 
+        elif action == 'send_failed':
+            campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                failed_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED)
+                failed_count = failed_recipients.count()
+                if not failed_count:
+                    messages.warning(request, 'No failed recipients are available for retry in this campaign.')
+                else:
+                    failed_recipients.update(
+                        status=BulkEmailRecipient.STATUS_PENDING,
+                        error_message='',
+                        sent_at=None,
+                    )
+                    campaign.status = BulkEmail.STATUS_SENDING
+                    campaign.save(update_fields=['status', 'updated_at'])
+                    task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
+                    dashboard_log_action(request, campaign, CHANGE, f'Queued bulk email retry from dashboard for {failed_count} failed recipients.')
+                    messages.success(
+                        request,
+                        f'Bulk email retry queued for {failed_count} failed recipients. Task ID: {task.id}.',
+                    )
         elif action == 'stop_campaign':
             campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
             if not campaign:
@@ -9991,6 +10014,7 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
 
 
 
