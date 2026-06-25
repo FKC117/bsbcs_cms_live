@@ -44,7 +44,9 @@ def sync_bulk_email_status(bulk_email):
     failed_count = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED).count()
     recipient_total = pending_count + sent_count + failed_count
 
-    if pending_count:
+    if bulk_email.status == BulkEmail.STATUS_SENDING and (pending_count or failed_count):
+        status = BulkEmail.STATUS_SENDING
+    elif pending_count:
         if bulk_email.status == BulkEmail.STATUS_PARTIAL:
             status = BulkEmail.STATUS_PARTIAL
         else:
