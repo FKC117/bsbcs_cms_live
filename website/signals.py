@@ -11,6 +11,7 @@ from django.conf import settings
 from django.utils.html import strip_tags
 from .models import Member
 from registration.tasks import send_email_task
+from registration.models import EmailAuditLog
 import logging
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,12 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user_email],
             html_message=html_message,
+            audit_category=EmailAuditLog.CATEGORY_MEMBERSHIP,
+            audit_metadata={
+                'member_id': instance.id,
+                'approval_status': instance.approval_status,
+                'user_profile_id': instance.user_profile_id,
+            },
         )
         logger.info(f"[MEMBER SIGNAL] Email task queued successfully for {user_email}")
     except Exception as e:

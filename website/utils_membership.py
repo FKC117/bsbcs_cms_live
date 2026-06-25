@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 from django.conf import settings
 from registration.tasks import send_email_task
+from registration.models import EmailAuditLog
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, inch
@@ -169,6 +170,12 @@ def send_membership_invoice_email(payment):
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[payment.user_profile.email],
                 attachment_paths=[payment.invoice.path],
+                audit_category=EmailAuditLog.CATEGORY_MEMBERSHIP,
+                audit_metadata={
+                    'membership_payment_id': payment.id,
+                    'user_profile_id': payment.user_profile_id,
+                    'merchant_invoice_number': payment.merchant_invoice_number,
+                },
             )
             return True
         except Exception as e:

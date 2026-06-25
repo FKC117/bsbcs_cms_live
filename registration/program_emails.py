@@ -5,6 +5,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.html import strip_tags
 
+from .models import EmailAuditLog
 from registration.tasks import send_email_task
 
 
@@ -110,5 +111,12 @@ def send_program_assignment_email(person, event=None):
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[person.email],
         html_message=html_message,
+        audit_category=EmailAuditLog.CATEGORY_PROGRAM,
+        audit_metadata={
+            'program_person_id': person.id,
+            'event_id': event.id if event else None,
+            'session_count': len(assignments),
+            'talk_count': count_program_assignment_talks(assignments),
+        },
     )
     return True, assignments

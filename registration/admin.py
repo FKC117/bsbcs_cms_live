@@ -11,6 +11,7 @@ from import_export.admin import ImportExportModelAdmin
 from django.core.mail import EmailMessage, send_mail
 from .resources import ParticipantResource, AbstractSubmissionResource, TimeSlotResource, PaymentStatusResource, RegistrationKitResource
 from .tasks import send_email_task
+from .models import EmailAuditLog
 # SchedulingResource
 from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
 import os
@@ -177,6 +178,13 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[obj.email],
             html_message=html_message,
+            audit_category=EmailAuditLog.CATEGORY_CORPORATE,
+            audit_metadata={
+                'corporate_request_id': obj.id,
+                'corporate_account_id': corporate_account.id,
+                'created_user': created_user,
+            },
+            audit_sent_by_user_id=request.user.id,
         )
 
     def _send_corporate_rejection_email(self, request, obj):
@@ -194,6 +202,12 @@ class CorporateAccountRequestAdmin(admin.ModelAdmin):
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[obj.email],
             html_message=html_message,
+            audit_category=EmailAuditLog.CATEGORY_CORPORATE,
+            audit_metadata={
+                'corporate_request_id': obj.id,
+                'status': 'rejected',
+            },
+            audit_sent_by_user_id=request.user.id,
         )
 
 
@@ -519,6 +533,12 @@ def send_consolidated_email(request, participant, password, include_password):
             from_email=from_email,
             recipient_list=recipient_list,
             html_message=html_content,
+            audit_category=EmailAuditLog.CATEGORY_APPROVAL,
+            audit_metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'source': 'admin_approval_payment',
+            },
         )
     except Exception as e:
         print(f"Error queueing consolidated email: {e}")
@@ -569,6 +589,12 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
         recipient_list=[participant.email],
         html_message=html_content,
         attachment_paths=attachment_paths,
+        audit_category=EmailAuditLog.CATEGORY_REGISTRATION,
+        audit_metadata={
+            'participant_id': participant.id,
+            'event_id': event.id,
+            'source': 'admin_free_confirmation',
+        },
     )
 
 
@@ -594,6 +620,13 @@ def send_corporate_attendee_approval_email(participant, event, corporate_account
         from_email=os.getenv("EMAIL_HOST_USER"),
         recipient_list=[participant.email],
         html_message=html_content,
+        audit_category=EmailAuditLog.CATEGORY_CORPORATE,
+        audit_metadata={
+            'participant_id': participant.id,
+            'event_id': event.id,
+            'corporate_account_id': corporate_account.id,
+            'source': 'corporate_attendee_approval',
+        },
     )
 
 
@@ -1138,6 +1171,11 @@ def send_approval_email(abstract, approval_type):
         from_email=from_email,
         recipient_list=recipient_list,
         html_message=html_content,
+        audit_category=EmailAuditLog.CATEGORY_SYSTEM,
+        audit_metadata={
+            'abstract_submission_id': abstract.id,
+            'approval_type': approval_type,
+        },
     )
 # Abstracts approval email END-----------------------------------------------------------------------------#
 # Program Schedule admin view START------------------------------------------------------------------------------#
@@ -1178,6 +1216,12 @@ class ProgramScheduleAdmin(admin.ModelAdmin):
                 from_email=os.getenv("EMAIL_HOST_USER"),
                 recipient_list=participants,
                 html_message=html_content,
+                audit_category=EmailAuditLog.CATEGORY_PROGRAM,
+                audit_metadata={
+                    'program_schedule_id': schedule.id,
+                    'event_id': schedule.event_id,
+                    'source': 'program_schedule',
+                },
             )
             try:
                 schedule.email_sent = True

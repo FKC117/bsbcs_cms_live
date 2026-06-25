@@ -1685,6 +1685,12 @@ def send_registration_form_submission_email(participant):
         from_email=from_email,
         recipient_list=recipient_list,
         html_message=html_content,
+        audit_category=EmailAuditLog.CATEGORY_REGISTRATION,
+        audit_metadata={
+            'participant_id': participant.id,
+            'event_id': participant.event_id,
+            'source': 'registration_submission',
+        },
     )
 
 
@@ -1710,6 +1716,12 @@ def send_approval_email(participant, event):
             from_email=from_email,
             recipient_list=recipient_list,
             html_message=html_content,
+            audit_category=EmailAuditLog.CATEGORY_APPROVAL,
+            audit_metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'source': 'registration_approval',
+            },
         )
     except Exception as e:
         logger.exception("Error queueing approval email: %s", e)
@@ -1742,6 +1754,12 @@ def send_payment_link_email(participant, event):
             from_email=from_email,
             recipient_list=recipient_list,
             html_message=html_content,
+            audit_category=EmailAuditLog.CATEGORY_REGISTRATION,
+            audit_metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'source': 'payment_link',
+            },
         )
     except Exception as e:
         logger.exception("Error queueing payment link email: %s", e)
@@ -2858,6 +2876,12 @@ def send_invoice_email(participant, event, payment_status, invoice_path):
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[recipient],
             attachment_paths=[invoice_path] if invoice_path else None,
+            audit_category=EmailAuditLog.CATEGORY_INVOICE,
+            audit_metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'payment_status_id': payment_status.id,
+            },
         )
         payment_status.email_sent = True
         payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
@@ -2886,6 +2910,13 @@ def send_corporate_participant_invoice_email(participant, event, payment_status,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[participant.email],
             attachment_paths=[invoice_path] if invoice_path else None,
+            audit_category=EmailAuditLog.CATEGORY_CORPORATE,
+            audit_metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'payment_status_id': payment_status.id,
+                'corporate_account_id': corporate_account.id,
+            },
         )
         payment_status.email_sent = True
         payment_status.invoice = os.path.relpath(invoice_path, settings.MEDIA_ROOT)
@@ -8560,6 +8591,45 @@ def dashboard_speaker_outreach_center(request):
 def dashboard_bulk_email_center(request):
     from website.models import SiteSettings
 
+    today = timezone.localdate()
+    audit_start_raw = (request.GET.get('audit_start') or '').strip()
+    audit_end_raw = (request.GET.get('audit_end') or '').strip()
+
+    def _parse_audit_date(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return fallback
+
+    audit_start_date = _parse_audit_date(audit_start_raw, today)
+    audit_end_date = _parse_audit_date(audit_end_raw, audit_start_date)
+    if audit_end_date < audit_start_date:
+        audit_end_date = audit_start_date
+
+    audit_start_at = timezone.make_aware(datetime.combine(audit_start_date, datetime.min.time()))
+    audit_end_at = timezone.make_aware(datetime.combine(audit_end_date + timedelta(days=1), datetime.min.time()))
+    audit_queryset = EmailAuditLog.objects.filter(
+        status=EmailAuditLog.STATUS_SENT,
+        sent_at__gte=audit_start_at,
+        sent_at__lt=audit_end_at,
+    )
+    audit_totals_by_category = {
+        row['category']: row['total'] or 0
+        for row in audit_queryset.values('category').annotate(total=Sum('recipient_count'))
+    }
+    audit_total_sent = sum(audit_totals_by_category.values())
+    audit_total_events = audit_queryset.count()
+    audit_category_cards = [
+        {
+            'key': value,
+            'label': label,
+            'count': audit_totals_by_category.get(value, 0),
+        }
+        for value, label in EmailAuditLog.CATEGORY_CHOICES
+    ]
+
     if request.method == 'POST':
         action = request.POST.get('bulk_email_action')
         selected_campaign_id = request.POST.get('campaign_id')
@@ -8704,8 +8774,14 @@ def dashboard_bulk_email_center(request):
                 messages.success(request, 'Campaign stop requested. The worker will halt after the current email cycle and keep pending recipients for later resend.')
 
         url = reverse('dashboard_bulk_email_center')
+        query = {}
         if redirect_campaign_id:
-            url = f'{url}?campaign={redirect_campaign_id}#active-campaign'
+            query['campaign'] = redirect_campaign_id
+        scroll_to = (request.POST.get('scroll_to') or '').strip()
+        if scroll_to:
+            query['scroll_to'] = scroll_to
+        if query:
+            url = f'{url}?{urlencode(query)}'
         return redirect(url)
 
     campaigns = BulkEmail.objects.select_related('event', 'email_group', 'created_by').order_by('-created_at')
@@ -8737,8 +8813,13 @@ def dashboard_bulk_email_center(request):
             'is_sending': progress_snapshot['status'] == BulkEmail.STATUS_SENDING,
         }
     base_query = {}
+    filter_query = {
+        'audit_start': audit_start_date.isoformat(),
+        'audit_end': audit_end_date.isoformat(),
+    }
     if selected_campaign:
         base_query['campaign'] = selected_campaign.id
+    base_query.update(filter_query)
     group_data_json = json.dumps([
         {
             'id': group.id,
@@ -8793,6 +8874,12 @@ def dashboard_bulk_email_center(request):
         'audience_choices': BulkEmail.AUDIENCE_CHOICES,
         'totals': totals,
         'workflow_steps': workflow_steps,
+        'audit_start': audit_start_date.isoformat(),
+        'audit_end': audit_end_date.isoformat(),
+        'audit_total_sent': audit_total_sent,
+        'audit_total_events': audit_total_events,
+        'audit_category_cards': audit_category_cards,
+        'bulk_email_filter_query': urlencode(filter_query),
     }
     if request.GET.get('bulk_email_partial') == 'active_campaign':
         return render(request, 'partials/dashboard_bulk_email_active_campaign.html', context)
@@ -9902,3 +9989,5 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
+

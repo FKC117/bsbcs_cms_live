@@ -12,8 +12,9 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
+from .email_audit import record_email_audit
 from .email_rendering import render_rich_email_html
-from .models import Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
+from .models import EmailAuditLog, Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
 
 
 speaker_certificate_celery_logger = logging.getLogger('speaker_certificate_celery')
@@ -30,6 +31,9 @@ def _send_email(
     bcc=None,
     reply_to=None,
     headers=None,
+    audit_category=None,
+    audit_metadata=None,
+    audit_sent_by_user_id=None,
 ):
     if html_message:
         body_text = body or strip_tags(html_message)
@@ -61,7 +65,16 @@ def _send_email(
             if attachment_path and os.path.exists(attachment_path):
                 email.attach_file(attachment_path)
 
-    return email.send()
+    result = email.send()
+    if result and audit_category:
+        record_email_audit(
+            category=audit_category,
+            subject=subject,
+            recipients=(recipient_list or []) + (cc or []) + (bcc or []),
+            metadata=audit_metadata,
+            sent_by_user_id=audit_sent_by_user_id,
+        )
+    return result
 
 
 @shared_task(bind=True)
@@ -77,6 +90,9 @@ def send_email_task(
     bcc=None,
     reply_to=None,
     headers=None,
+    audit_category=None,
+    audit_metadata=None,
+    audit_sent_by_user_id=None,
 ):
     return _send_email(
         subject=subject,
@@ -89,6 +105,9 @@ def send_email_task(
         bcc=bcc,
         reply_to=reply_to,
         headers=headers,
+        audit_category=audit_category,
+        audit_metadata=audit_metadata,
+        audit_sent_by_user_id=audit_sent_by_user_id,
     )
 
 
@@ -153,6 +172,13 @@ def send_thank_you_email_task(self, thank_you_email_id, log_id=None, sent_by_use
             from_email=from_email,
             recipient_list=[participant.email],
             html_message=html_message,
+            audit_category=EmailAuditLog.CATEGORY_THANK_YOU,
+            audit_metadata={
+                'thank_you_email_id': thank_you_email.id,
+                'event_id': thank_you_email.registration_kit.event_id,
+                'participant_id': participant.id,
+            },
+            audit_sent_by_user_id=sent_by_user_id,
         )
     except Exception as exc:
         _update_thank_you_email_log(log_id, status=ThankYouEmailLog.STATUS_FAILED, message=str(exc))
@@ -225,6 +251,16 @@ def send_manual_participant_account_email(self, participant_id, password):
     )
     email.attach_alternative(html_content, 'text/html')
     email.send()
+    record_email_audit(
+        category=EmailAuditLog.CATEGORY_REGISTRATION,
+        subject='Your BSBCS profile and login account',
+        recipients=[participant.email],
+        metadata={
+            'participant_id': participant.id,
+            'event_id': participant.event_id,
+            'source': 'manual_participant_account',
+        },
+    )
     return {'participant_id': participant.id, 'email': participant.email, 'status': 'sent'}
 
 
@@ -338,6 +374,21 @@ def send_participant_approval_email(
             if os.path.exists(invoice_path):
                 email.attach_file(invoice_path)
         email.send()
+        record_email_audit(
+            category=(
+                EmailAuditLog.CATEGORY_APPROVAL
+                if email_type == ParticipantEmailLog.TYPE_APPROVAL_PAYMENT
+                else EmailAuditLog.CATEGORY_REGISTRATION
+            ),
+            subject=subject,
+            recipients=[participant.email],
+            metadata={
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'email_type': email_type,
+            },
+            sent_by_user_id=sent_by_user_id,
+        )
         if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and payment_status:
             payment_status.email_sent = True
             payment_status.save(update_fields=['email_sent'])
@@ -453,6 +504,13 @@ def send_speaker_certificate_email(
             recipient_list=[recipient_email],
             html_message=html_content,
             attachment_paths=[attachment_path],
+            audit_category=EmailAuditLog.CATEGORY_SPEAKER_CERTIFICATE,
+            audit_metadata={
+                'certificate_id': certificate.id,
+                'event_id': certificate.event_id,
+                'program_person_id': certificate.program_person_id,
+            },
+            audit_sent_by_user_id=sent_by_user_id,
         )
     except Exception as exc:
         _update_speaker_certificate_email_log(
@@ -523,6 +581,13 @@ def send_speaker_outreach_email_task(self, log_id):
             from_email=settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
             recipient_list=[recipient_email],
             html_message=html_message,
+            audit_category=EmailAuditLog.CATEGORY_SPEAKER_OUTREACH,
+            audit_metadata={
+                'event_id': log.event_id,
+                'program_person_id': log.person_id,
+                'speaker_outreach_log_id': log.id,
+            },
+            audit_sent_by_user_id=log.sent_by_id,
         )
     except Exception as exc:
         _update_speaker_outreach_email_log(log_id, status=SpeakerOutreachEmailLog.STATUS_FAILED, message=str(exc))

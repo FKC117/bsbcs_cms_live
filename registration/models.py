@@ -1765,6 +1765,58 @@ class SpeakerCertificateEmailLog(models.Model):
     def __str__(self):
         return f"{self.person.name} - speaker certificate - {self.status}"
 
+
+class EmailAuditLog(models.Model):
+    CATEGORY_APPROVAL = 'approval'
+    CATEGORY_REGISTRATION = 'registration'
+    CATEGORY_MEMBERSHIP = 'membership'
+    CATEGORY_BULK_EMAIL = 'bulk_email'
+    CATEGORY_THANK_YOU = 'thank_you'
+    CATEGORY_INVOICE = 'invoice'
+    CATEGORY_PROGRAM = 'program'
+    CATEGORY_SPEAKER_CERTIFICATE = 'speaker_certificate'
+    CATEGORY_SPEAKER_OUTREACH = 'speaker_outreach'
+    CATEGORY_CORPORATE = 'corporate'
+    CATEGORY_SYSTEM = 'system'
+
+    CATEGORY_CHOICES = [
+        (CATEGORY_APPROVAL, 'Approval emails'),
+        (CATEGORY_REGISTRATION, 'Registration emails'),
+        (CATEGORY_MEMBERSHIP, 'Membership emails'),
+        (CATEGORY_BULK_EMAIL, 'Bulk emails'),
+        (CATEGORY_THANK_YOU, 'Thank-you emails'),
+        (CATEGORY_INVOICE, 'Invoice emails'),
+        (CATEGORY_PROGRAM, 'Program emails'),
+        (CATEGORY_SPEAKER_CERTIFICATE, 'Speaker certificate emails'),
+        (CATEGORY_SPEAKER_OUTREACH, 'Speaker outreach emails'),
+        (CATEGORY_CORPORATE, 'Corporate emails'),
+        (CATEGORY_SYSTEM, 'System emails'),
+    ]
+
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    category = models.CharField(max_length=40, choices=CATEGORY_CHOICES)
+    subject = models.CharField(max_length=255)
+    recipients = models.JSONField(default=list)
+    recipient_count = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SENT)
+    metadata = models.JSONField(default=dict, blank=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='email_audit_logs')
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-sent_at', '-id']
+        verbose_name = 'Email audit log'
+        verbose_name_plural = 'Email audit logs'
+
+    def __str__(self):
+        return f"{self.get_category_display()} - {self.subject} ({self.recipient_count})"
+
 # Certificate Model Ends Here----------------------------------------------------------------------------#
 # Feedback Form Model Starts here----------------------------------------------------------------------------#
 

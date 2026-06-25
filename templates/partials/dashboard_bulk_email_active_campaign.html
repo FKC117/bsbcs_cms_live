@@ -80,7 +80,7 @@
         </div>
 
         <div class="mt-4 grid gap-3">
-            <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div id="campaign-audience-step" class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div class="max-w-3xl">
                         <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Step 2</div>
@@ -97,6 +97,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="bulk_email_action" value="prepare_recipients">
                         <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                        <input type="hidden" name="scroll_to" value="campaign-audience-step">
                         <button class="w-full rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy sm:w-auto" type="submit">
                             {% if selected_campaign.recipient_count %}Refresh Recipients{% else %}Prepare Recipients{% endif %}
                         </button>
@@ -121,6 +122,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="bulk_email_action" value="add_manual_recipient">
                         <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                        <input type="hidden" name="scroll_to" value="campaign-audience-step">
                         <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px] lg:items-end">
                             <div>
                                 <label class="compact-label">Recipient name</label>
@@ -170,17 +172,17 @@
                         <div class="text-xs font-black uppercase text-slate-500">Page {{ recipient_page_obj.number }} of {{ recipient_page_obj.paginator.num_pages }}</div>
                         <div class="flex flex-wrap gap-2">
                             {% if recipient_page_obj.has_previous %}
-                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.previous_page_number }}&log_page={{ log_page_obj.number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
+                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.previous_page_number }}&log_page={{ log_page_obj.number }}" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
                             {% endif %}
                             {% if recipient_page_obj.has_next %}
-                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.next_page_number }}&log_page={{ log_page_obj.number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
+                                <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.next_page_number }}&log_page={{ log_page_obj.number }}" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
                             {% endif %}
                         </div>
                     </div>
                 {% endif %}
             </div>
 
-            <div class="grid gap-3 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+            <div class="grid gap-3 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]" style="align-items: start;">
                 <div class="rounded-2xl border border-line bg-slate-50 p-4">
                     <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Step 4</div>
                     <h3 class="mt-1 text-lg font-black text-ink">Send and audit</h3>
@@ -204,6 +206,7 @@
                             {% csrf_token %}
                             <input type="hidden" name="bulk_email_action" value="stop_campaign">
                             <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                        <input type="hidden" name="scroll_to" value="campaign-audience-step">
                             <button class="w-full rounded-xl border border-bsbcs-blue bg-white px-4 py-3 text-sm font-black text-bsbcs-blue hover:bg-blue-50" type="submit">Stop campaign</button>
                             <div class="text-xs font-semibold text-slate-500">Pending and failed rows will stay saved here so your team can retry them later.</div>
                         </form>
@@ -212,6 +215,7 @@
                             {% csrf_token %}
                             <input type="hidden" name="bulk_email_action" value="send_pending">
                             <input type="hidden" name="campaign_id" value="{{ selected_campaign.id }}">
+                        <input type="hidden" name="scroll_to" value="campaign-audience-step">
                             {% if selected_campaign.pending_count %}
                                 <button class="w-full rounded-xl bg-bsbcs-green px-4 py-3 text-sm font-black text-white hover:bg-emerald-700" type="submit">Send {{ selected_campaign.pending_count }} Pending</button>
                             {% else %}
@@ -226,7 +230,7 @@
                         <h3 class="text-lg font-black text-ink">Campaign logs</h3>
                         <span class="text-xs font-bold text-slate-500">{{ log_page_obj.start_index }}-{{ log_page_obj.end_index }} of {{ log_page_obj.paginator.count }}</span>
                     </div>
-                    <div class="max-h-72 space-y-2 overflow-auto">
+                    <div class="mt-2 space-y-2 overflow-auto max-h-72">
                         {% for log in selected_logs %}
                             <div class="rounded-xl border border-line bg-slate-50 p-3">
                                 <div class="flex items-start justify-between gap-2">
@@ -249,10 +253,10 @@
                             <div class="text-xs font-black uppercase text-slate-500">Page {{ log_page_obj.number }} of {{ log_page_obj.paginator.num_pages }}</div>
                             <div class="flex flex-wrap gap-2">
                                 {% if log_page_obj.has_previous %}
-                                    <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.previous_page_number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
+                                    <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Previous</a>
                                 {% endif %}
                                 {% if log_page_obj.has_next %}
-                                    <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.next_page_number }}#active-campaign" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
+                                    <a href="?{{ bulk_email_base_query }}&recipient_page={{ recipient_page_obj.number }}&log_page={{ log_page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Next</a>
                                 {% endif %}
                             </div>
                         </div>
@@ -264,3 +268,8 @@
         <div class="rounded-xl bg-blue-50 p-6 text-center text-sm font-semibold text-bsbcs-blue">Create a campaign first. It will appear here for preparation and sending.</div>
     {% endif %}
 </div>
+
+
+
+
+

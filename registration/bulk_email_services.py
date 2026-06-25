@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .email_rendering import render_rich_email_html
+from .email_audit import record_email_audit
 
 from .models import (
     AbstractSubmission,
@@ -19,6 +20,7 @@ from .models import (
     BulkEmailSendLog,
     CorporateAccount,
     CorporateAccountRequest,
+    EmailAuditLog,
     Participant,
     PaymentStatus,
     UserProfile,
@@ -291,6 +293,18 @@ def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
         email=recipient.email,
         status=BulkEmailRecipient.STATUS_SENT,
         sent_by=sent_by,
+    )
+    record_email_audit(
+        category=EmailAuditLog.CATEGORY_BULK_EMAIL,
+        subject=bulk_email.subject,
+        recipients=[recipient.email],
+        metadata={
+            'bulk_email_id': bulk_email.id,
+            'recipient_id': recipient.id,
+            'audience_type': bulk_email.audience_type,
+            'event_id': bulk_email.event_id,
+        },
+        sent_by_user_id=sent_by.id if sent_by else None,
     )
     sync_bulk_email_status(bulk_email)
     return True
