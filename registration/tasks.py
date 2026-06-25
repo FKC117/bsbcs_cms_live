@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
-from .email_audit import record_email_audit
+from .email_audit import consume_email_quota_reservations, record_email_audit, release_email_quota_reservations, reserve_email_quota
 from .email_rendering import render_rich_email_html
 from .models import EmailAuditLog, Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
 
@@ -35,6 +35,24 @@ def _send_email(
     audit_metadata=None,
     audit_sent_by_user_id=None,
 ):
+    all_recipients = (recipient_list or []) + (cc or []) + (bcc or [])
+    reservation_result = None
+
+    if audit_category and all_recipients:
+        reservation_result = reserve_email_quota(
+            all_recipients,
+            category=audit_category,
+            metadata=audit_metadata,
+        )
+        normalized_count = len({recipient.lower() for recipient in reservation_result['allowed_recipients']})
+        expected_count = len({(recipient or '').strip().lower() for recipient in all_recipients if (recipient or '').strip()})
+        if normalized_count < expected_count:
+            release_email_quota_reservations(reservation_result['reservation_key'])
+            quota_snapshot = reservation_result['quota_snapshot']
+            raise RuntimeError(
+                f"24-hour email quota reached. Bulk used: {quota_snapshot['bulk_used']}/{quota_snapshot['bulk_limit']}, total used: {quota_snapshot['total_used']}/{quota_snapshot['total_limit']}."
+            )
+
     if html_message:
         body_text = body or strip_tags(html_message)
         email = EmailMultiAlternatives(
@@ -65,15 +83,29 @@ def _send_email(
             if attachment_path and os.path.exists(attachment_path):
                 email.attach_file(attachment_path)
 
-    result = email.send()
+    try:
+        result = email.send()
+    except Exception:
+        if reservation_result:
+            release_email_quota_reservations(reservation_result['reservation_key'])
+        raise
+
     if result and audit_category:
         record_email_audit(
             category=audit_category,
             subject=subject,
-            recipients=(recipient_list or []) + (cc or []) + (bcc or []),
+            recipients=all_recipients,
             metadata=audit_metadata,
             sent_by_user_id=audit_sent_by_user_id,
         )
+        if reservation_result:
+            consume_email_quota_reservations(
+                reservation_result['reservation_key'],
+                reservation_result['allowed_recipients'],
+            )
+    elif reservation_result:
+        release_email_quota_reservations(reservation_result['reservation_key'])
+
     return result
 
 
@@ -244,19 +276,14 @@ def send_manual_participant_account_email(self, participant_id, password):
     }
     html_content = render_to_string('emails/manual_participant_account_created.html', context)
     text_content = strip_tags(html_content)
-    email = EmailMultiAlternatives(
-        'Your BSBCS profile and login account',
-        text_content,
-        settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
-        [participant.email],
-    )
-    email.attach_alternative(html_content, 'text/html')
-    email.send()
-    record_email_audit(
-        category=EmailAuditLog.CATEGORY_REGISTRATION,
+    _send_email(
         subject='Your BSBCS profile and login account',
-        recipients=[participant.email],
-        metadata={
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
+        recipient_list=[participant.email],
+        html_message=html_content,
+        audit_category=EmailAuditLog.CATEGORY_REGISTRATION,
+        audit_metadata={
             'participant_id': participant.id,
             'event_id': participant.event_id,
             'source': 'manual_participant_account',
@@ -364,31 +391,27 @@ def send_participant_approval_email(
     try:
         html_content = render_to_string(template_name, context)
         text_content = strip_tags(html_content)
-        email = EmailMultiAlternatives(
-            subject,
-            text_content,
-            settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
-            [participant.email],
-        )
-        email.attach_alternative(html_content, 'text/html')
-        if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and invoice_path:
-            if os.path.exists(invoice_path):
-                email.attach_file(invoice_path)
-        email.send()
-        record_email_audit(
-            category=(
+        attachment_paths = []
+        if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and invoice_path and os.path.exists(invoice_path):
+            attachment_paths.append(invoice_path)
+        _send_email(
+            subject=subject,
+            body=text_content,
+            from_email=settings.DEFAULT_FROM_EMAIL or os.getenv('EMAIL_HOST_USER'),
+            recipient_list=[participant.email],
+            html_message=html_content,
+            attachment_paths=attachment_paths,
+            audit_category=(
                 EmailAuditLog.CATEGORY_APPROVAL
                 if email_type == ParticipantEmailLog.TYPE_APPROVAL_PAYMENT
                 else EmailAuditLog.CATEGORY_REGISTRATION
             ),
-            subject=subject,
-            recipients=[participant.email],
-            metadata={
+            audit_metadata={
                 'participant_id': participant.id,
                 'event_id': event.id,
                 'email_type': email_type,
             },
-            sent_by_user_id=sent_by_user_id,
+            audit_sent_by_user_id=sent_by_user_id,
         )
         if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and payment_status:
             payment_status.email_sent = True

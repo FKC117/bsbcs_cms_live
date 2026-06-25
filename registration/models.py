@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
 from django.utils.text import slugify
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 
 
@@ -1816,6 +1817,55 @@ class EmailAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.subject} ({self.recipient_count})"
+
+
+class EmailQuotaLock(models.Model):
+    key = models.CharField(max_length=40, unique=True, default='global')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Email quota lock'
+        verbose_name_plural = 'Email quota locks'
+
+    def __str__(self):
+        return self.key
+
+
+class EmailQuotaReservation(models.Model):
+    STATUS_RESERVED = 'reserved'
+    STATUS_CONSUMED = 'consumed'
+    STATUS_RELEASED = 'released'
+    STATUS_CHOICES = [
+        (STATUS_RESERVED, 'Reserved'),
+        (STATUS_CONSUMED, 'Consumed'),
+        (STATUS_RELEASED, 'Released'),
+    ]
+
+    reservation_key = models.CharField(max_length=120, db_index=True)
+    category = models.CharField(max_length=40, choices=EmailAuditLog.CATEGORY_CHOICES)
+    recipient_email = models.EmailField(max_length=320)
+    recipient_key = models.CharField(max_length=320, db_index=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RESERVED, db_index=True)
+    reserved_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(blank=True, null=True)
+    released_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-reserved_at', '-id']
+        verbose_name = 'Email quota reservation'
+        verbose_name_plural = 'Email quota reservations'
+        constraints = [
+            models.UniqueConstraint(fields=['reservation_key', 'recipient_key'], name='unique_email_quota_reservation_key_recipient'),
+        ]
+
+    def __str__(self):
+        return f"{self.recipient_email} ({self.status})"
+
+    @property
+    def is_active(self):
+        return self.status == self.STATUS_RESERVED and self.expires_at >= timezone.now()
 
 # Certificate Model Ends Here----------------------------------------------------------------------------#
 # Feedback Form Model Starts here----------------------------------------------------------------------------#

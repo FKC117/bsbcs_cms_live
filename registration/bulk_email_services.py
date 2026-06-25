@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .email_rendering import render_rich_email_html
-from .email_audit import get_email_quota_snapshot, plan_bulk_email_send, record_email_audit
+from .email_audit import consume_email_quota_reservations, get_email_quota_snapshot, plan_bulk_email_send, record_email_audit, release_email_quota_reservations, reserve_email_quota
 
 from .models import (
     AbstractSubmission,
@@ -232,7 +232,7 @@ def prepare_bulk_email_recipients(bulk_email):
     return added
 
 
-def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
+def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None, reservation_key=None):
     disconnect_markers = (
         'Connection unexpectedly closed',
         'Server not connected',
@@ -280,6 +280,8 @@ def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
                 message=last_error,
                 sent_by=sent_by,
             )
+            if reservation_key:
+                release_email_quota_reservations(reservation_key, [recipient.email])
             sync_bulk_email_status(bulk_email)
             return False
 
@@ -306,6 +308,8 @@ def _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=None):
         },
         sent_by_user_id=sent_by.id if sent_by else None,
     )
+    if reservation_key:
+        consume_email_quota_reservations(reservation_key, [recipient.email])
     sync_bulk_email_status(bulk_email)
     return True
 
@@ -357,9 +361,23 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
     target_recipients = bulk_email.recipients.filter(status__in=recipient_statuses).order_by('id')
     quota_snapshot = get_email_quota_snapshot()
     send_plan = plan_bulk_email_send(target_recipients, quota_snapshot=quota_snapshot)
-    allowed_recipient_ids = send_plan['recipient_ids']
+    chunk_size = max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1)
 
-    if not allowed_recipient_ids:
+    reservation_result = reserve_email_quota(
+        target_recipients,
+        category=EmailAuditLog.CATEGORY_BULK_EMAIL,
+        metadata={
+            'bulk_email_id': bulk_email.id,
+            'audience_type': bulk_email.audience_type,
+            'event_id': bulk_email.event_id,
+            'recipient_statuses': list(recipient_statuses),
+        },
+        max_allowed=chunk_size,
+    )
+    current_chunk_ids = reservation_result['allowed_recipient_ids']
+    reservation_key = reservation_result['reservation_key']
+
+    if not current_chunk_ids:
         bulk_email.status = _campaign_stop_status(bulk_email)
         bulk_email.save(update_fields=['status', 'updated_at'])
         sync_bulk_email_status(bulk_email)
@@ -372,16 +390,15 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
             'blocked_count': send_plan['blocked_count'],
             'next_task_id': None,
             'processed_in_chunk': 0,
-            'chunk_size': max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1),
+            'chunk_size': chunk_size,
         }
 
-    chunk_size = max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1)
-    current_chunk_ids = allowed_recipient_ids[:chunk_size]
     target_recipients = target_recipients.filter(pk__in=current_chunk_ids).order_by('id')
     sent = 0
     failed = 0
     sent_emails = []
     next_task_id = None
+    processed_recipient_ids = []
     bulk_email.status = BulkEmail.STATUS_SENDING
     bulk_email.save(update_fields=['status', 'updated_at'])
 
@@ -392,7 +409,8 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
         if bulk_email.status != BulkEmail.STATUS_SENDING:
             break
 
-        if _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=sent_by):
+        processed_recipient_ids.append(recipient.id)
+        if _send_bulk_email_recipient_direct(bulk_email, recipient, sent_by=sent_by, reservation_key=reservation_key):
             sent += 1
             sent_emails.append(recipient.email)
         else:
@@ -408,21 +426,21 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, reci
                 remaining_delay = 0
                 break
 
+    release_email_quota_reservations(reservation_key)
+
     bulk_email.refresh_from_db()
-    remaining_recipients = bulk_email.recipients.filter(status__in=recipient_statuses).order_by('id')
+    remaining_recipients = bulk_email.recipients.filter(status__in=recipient_statuses)
+    if processed_recipient_ids:
+        remaining_recipients = remaining_recipients.exclude(pk__in=processed_recipient_ids)
+    remaining_recipients = remaining_recipients.order_by('id')
+
     if bulk_email.status == BulkEmail.STATUS_SENDING and remaining_recipients.exists():
-        next_quota_snapshot = get_email_quota_snapshot()
-        next_send_plan = plan_bulk_email_send(remaining_recipients, quota_snapshot=next_quota_snapshot)
-        if next_send_plan['allowed_count']:
-            next_task = send_pending_bulk_email_campaign.delay(
-                bulk_email.id,
-                sent_by.id if sent_by else None,
-                recipient_statuses,
-            )
-            next_task_id = next_task.id
-        else:
-            bulk_email.status = _campaign_stop_status(bulk_email)
-            bulk_email.save(update_fields=['status', 'updated_at'])
+        next_task = send_pending_bulk_email_campaign.delay(
+            bulk_email.id,
+            sent_by.id if sent_by else None,
+            recipient_statuses,
+        )
+        next_task_id = next_task.id
     elif bulk_email.status == BulkEmail.STATUS_SENDING:
         bulk_email.status = _campaign_stop_status(bulk_email)
         bulk_email.save(update_fields=['status', 'updated_at'])
