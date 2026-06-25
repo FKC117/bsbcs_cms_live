@@ -49,7 +49,8 @@ def write_admin_audit_log(request, obj, action_flag=CHANGE, message='Updated fro
 
 class UserProfileAdmin(ImportExportModelAdmin):
     list_display = ('user', 'name', 'phone', 'country')
-    list_per_page = 15
+    list_per_page = 20
+    list_filter = ('country',)
     search_fields = ('user__username', 'name', 'phone')
     readonly_fields = ('image_preview',)
     fields = ('user', 'name', 'email', 'phone', 'country', 'image', 'image_preview')
