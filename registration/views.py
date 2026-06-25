@@ -60,6 +60,7 @@ from .bulk_email_services import (
     sync_bulk_email_status,
     upsert_bulk_email_recipient,
 )
+from .email_audit import get_email_quota_snapshot, plan_bulk_email_send
 from .tasks import (
     participant_email_log_table_ready,
     speaker_certificate_email_log_table_ready,
@@ -8745,42 +8746,58 @@ def dashboard_bulk_email_center(request):
             else:
                 if not campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).exists():
                     prepare_bulk_email_recipients(campaign)
-                pending_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
+                pending_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).order_by('id')
                 if not pending_recipients.exists():
                     messages.warning(request, 'No pending recipients are available for this campaign.')
                 else:
-                    campaign.status = BulkEmail.STATUS_SENDING
-                    campaign.save(update_fields=['status', 'updated_at'])
-                    task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
-                    dashboard_log_action(request, campaign, CHANGE, f'Queued bulk email send from dashboard for {pending_recipients.count()} pending recipients.')
-                    messages.success(
-                        request,
-                        f'Bulk email send queued for {pending_recipients.count()} pending recipients. Task ID: {task.id}.',
-                    )
-
+                    quota_snapshot = get_email_quota_snapshot()
+                    send_plan = plan_bulk_email_send(pending_recipients, quota_snapshot=quota_snapshot)
+                    if not send_plan['allowed_count']:
+                        messages.warning(
+                            request,
+                            f"Bulk email quota reached for the last {quota_snapshot['window_hours']} hours. Bulk used: {quota_snapshot['bulk_used']}/{quota_snapshot['bulk_limit']}, total used: {quota_snapshot['total_used']}/{quota_snapshot['total_limit']}. Pending recipients remain queued.",
+                        )
+                    else:
+                        campaign.status = BulkEmail.STATUS_SENDING
+                        campaign.save(update_fields=['status', 'updated_at'])
+                        task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
+                        chunk_size = max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1)
+                        dashboard_log_action(request, campaign, CHANGE, f"Queued bulk email send from dashboard for {send_plan['allowed_count']} quota-eligible pending recipients in chunked processing.")
+                        queued_message = f"Bulk email send queued for {send_plan['allowed_count']} quota-eligible pending recipients. The worker will process them in chunks of {chunk_size}. Task ID: {task.id}."
+                        if send_plan['blocked_count']:
+                            queued_message += f" {send_plan['blocked_count']} recipient(s) remain pending until 24-hour quota becomes available."
+                        messages.success(request, queued_message)
         elif action == 'send_failed':
             campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
             if not campaign:
                 messages.error(request, 'Choose a valid campaign first.')
             else:
-                failed_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED)
+                failed_recipients = campaign.recipients.filter(status=BulkEmailRecipient.STATUS_FAILED).order_by('id')
                 failed_count = failed_recipients.count()
                 if not failed_count:
                     messages.warning(request, 'No failed recipients are available for retry in this campaign.')
                 else:
-                    failed_recipients.update(
-                        status=BulkEmailRecipient.STATUS_PENDING,
-                        error_message='',
-                        sent_at=None,
-                    )
-                    campaign.status = BulkEmail.STATUS_SENDING
-                    campaign.save(update_fields=['status', 'updated_at'])
-                    task = send_pending_bulk_email_campaign.delay(campaign.id, request.user.id)
-                    dashboard_log_action(request, campaign, CHANGE, f'Queued bulk email retry from dashboard for {failed_count} failed recipients.')
-                    messages.success(
-                        request,
-                        f'Bulk email retry queued for {failed_count} failed recipients. Task ID: {task.id}.',
-                    )
+                    quota_snapshot = get_email_quota_snapshot()
+                    send_plan = plan_bulk_email_send(failed_recipients, quota_snapshot=quota_snapshot)
+                    if not send_plan['allowed_count']:
+                        messages.warning(
+                            request,
+                            f"Bulk email quota reached for the last {quota_snapshot['window_hours']} hours. Failed recipients remain queued for retry until quota becomes available.",
+                        )
+                    else:
+                        campaign.status = BulkEmail.STATUS_SENDING
+                        campaign.save(update_fields=['status', 'updated_at'])
+                        task = send_pending_bulk_email_campaign.delay(
+                            campaign.id,
+                            request.user.id,
+                            [BulkEmailRecipient.STATUS_FAILED],
+                        )
+                        chunk_size = max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1)
+                        dashboard_log_action(request, campaign, CHANGE, f"Queued bulk email retry from dashboard for {send_plan['allowed_count']} quota-eligible failed recipients in chunked processing.")
+                        queued_message = f"Bulk email retry queued for {send_plan['allowed_count']} quota-eligible failed recipients. The worker will process them in chunks of {chunk_size}. Task ID: {task.id}."
+                        if send_plan['blocked_count']:
+                            queued_message += f" {send_plan['blocked_count']} failed recipient(s) remain queued until 24-hour quota becomes available."
+                        messages.success(request, queued_message)
         elif action == 'stop_campaign':
             campaign = BulkEmail.objects.filter(pk=selected_campaign_id).first()
             if not campaign:
@@ -8818,6 +8835,7 @@ def dashboard_bulk_email_center(request):
     selected_logs_qs = selected_campaign.send_logs.select_related('recipient', 'sent_by').order_by('-created_at') if selected_campaign else BulkEmailSendLog.objects.none()
     selected_recipients_page = Paginator(selected_recipients_qs, 15).get_page(request.GET.get('recipient_page'))
     selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
+    email_quota_snapshot = get_email_quota_snapshot()
     selected_campaign_progress = None
     if selected_campaign:
         progress_snapshot = sync_bulk_email_status(selected_campaign)
@@ -8826,6 +8844,10 @@ def dashboard_bulk_email_center(request):
         failed_total = progress_snapshot['failed']
         pending_total = progress_snapshot['pending']
         completed_total = sent_total + failed_total
+        pending_send_plan = plan_bulk_email_send(
+            selected_campaign.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).order_by('id'),
+            quota_snapshot=email_quota_snapshot,
+        )
         selected_campaign_progress = {
             'total': recipient_total,
             'sent': sent_total,
@@ -8834,6 +8856,7 @@ def dashboard_bulk_email_center(request):
             'completed': completed_total,
             'percent': int((completed_total / recipient_total) * 100) if recipient_total else 0,
             'is_sending': progress_snapshot['status'] == BulkEmail.STATUS_SENDING,
+            'quota_blocked_count': pending_send_plan['blocked_count'],
         }
     base_query = {}
     filter_query = {
@@ -8903,6 +8926,7 @@ def dashboard_bulk_email_center(request):
         'audit_total_events': audit_total_events,
         'audit_category_cards': audit_category_cards,
         'bulk_email_filter_query': urlencode(filter_query),
+        'email_quota': email_quota_snapshot,
     }
     if request.GET.get('bulk_email_partial') == 'active_campaign':
         return render(request, 'partials/dashboard_bulk_email_active_campaign.html', context)
@@ -10014,6 +10038,11 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
+
+
+
+
 
 
 

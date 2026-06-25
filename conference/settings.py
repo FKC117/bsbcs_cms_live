@@ -215,6 +215,12 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('EMAIL_HOST_USER', default='noreply@bsbcs.org')
 
+# 24-hour recipient quota safeguards for Gmail-based sending.
+BULK_EMAIL_UNIQUE_RECIPIENT_LIMIT_24H = config('BULK_EMAIL_UNIQUE_RECIPIENT_LIMIT_24H', default=400, cast=int)
+TOTAL_EMAIL_UNIQUE_RECIPIENT_LIMIT_24H = config('TOTAL_EMAIL_UNIQUE_RECIPIENT_LIMIT_24H', default=470, cast=int)
+EMAIL_QUOTA_WINDOW_HOURS = config('EMAIL_QUOTA_WINDOW_HOURS', default=24, cast=int)
+BULK_EMAIL_CHUNK_SIZE = config('BULK_EMAIL_CHUNK_SIZE', default=50, cast=int)
+
 # Celery / Redis
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
@@ -223,7 +229,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = config('CELERY_TASK_TIME_LIMIT', default=1800, cast=int)
+CELERY_TASK_TIME_LIMIT = config('CELERY_TASK_TIME_LIMIT', default=2700, cast=int)
 CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=False, cast=bool)
 
 # Site Configuration

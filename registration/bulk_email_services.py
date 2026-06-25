@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .email_rendering import render_rich_email_html
-from .email_audit import record_email_audit
+from .email_audit import get_email_quota_snapshot, plan_bulk_email_send, record_email_audit
 
 from .models import (
     AbstractSubmission,
@@ -336,7 +336,9 @@ def send_bulk_email_recipient(bulk_email, recipient, sent_by=None):
         return False
 
 
-def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
+def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None, recipient_statuses=None):
+    from .tasks import send_pending_bulk_email_campaign
+
     bulk_email = BulkEmail.objects.filter(pk=bulk_email_id).first()
     if not bulk_email:
         return {'sent': 0, 'failed': 0, 'error': 'Campaign not found.'}
@@ -346,19 +348,46 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
         sent_by = User.objects.filter(is_superuser=True).order_by('id').first()
     if not sent_by:
         sent_by = User.objects.filter(is_staff=True).order_by('id').first()
-    if not bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).exists():
+
+    recipient_statuses = recipient_statuses or [BulkEmailRecipient.STATUS_PENDING]
+    should_prepare_pending = BulkEmailRecipient.STATUS_PENDING in recipient_statuses
+    if should_prepare_pending and not bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING).exists():
         prepare_bulk_email_recipients(bulk_email)
 
-    pending_recipients = bulk_email.recipients.filter(status=BulkEmailRecipient.STATUS_PENDING)
+    target_recipients = bulk_email.recipients.filter(status__in=recipient_statuses).order_by('id')
+    quota_snapshot = get_email_quota_snapshot()
+    send_plan = plan_bulk_email_send(target_recipients, quota_snapshot=quota_snapshot)
+    allowed_recipient_ids = send_plan['recipient_ids']
+
+    if not allowed_recipient_ids:
+        bulk_email.status = _campaign_stop_status(bulk_email)
+        bulk_email.save(update_fields=['status', 'updated_at'])
+        sync_bulk_email_status(bulk_email)
+        return {
+            'sent': 0,
+            'failed': 0,
+            'campaign_id': bulk_email.id,
+            'quota_blocked': True,
+            'quota_snapshot': quota_snapshot,
+            'blocked_count': send_plan['blocked_count'],
+            'next_task_id': None,
+            'processed_in_chunk': 0,
+            'chunk_size': max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1),
+        }
+
+    chunk_size = max(int(getattr(settings, 'BULK_EMAIL_CHUNK_SIZE', 50) or 50), 1)
+    current_chunk_ids = allowed_recipient_ids[:chunk_size]
+    target_recipients = target_recipients.filter(pk__in=current_chunk_ids).order_by('id')
     sent = 0
     failed = 0
     sent_emails = []
+    next_task_id = None
     bulk_email.status = BulkEmail.STATUS_SENDING
     bulk_email.save(update_fields=['status', 'updated_at'])
 
     delay_seconds = getattr(settings, 'BULK_EMAIL_DELAY_SECONDS', DEFAULT_BULK_EMAIL_DELAY_SECONDS)
 
-    for recipient in pending_recipients.iterator():
+    for recipient in target_recipients.iterator():
         bulk_email.refresh_from_db(fields=['status'])
         if bulk_email.status != BulkEmail.STATUS_SENDING:
             break
@@ -380,6 +409,23 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
                 break
 
     bulk_email.refresh_from_db()
+    remaining_recipients = bulk_email.recipients.filter(status__in=recipient_statuses).order_by('id')
+    if bulk_email.status == BulkEmail.STATUS_SENDING and remaining_recipients.exists():
+        next_quota_snapshot = get_email_quota_snapshot()
+        next_send_plan = plan_bulk_email_send(remaining_recipients, quota_snapshot=next_quota_snapshot)
+        if next_send_plan['allowed_count']:
+            next_task = send_pending_bulk_email_campaign.delay(
+                bulk_email.id,
+                sent_by.id if sent_by else None,
+                recipient_statuses,
+            )
+            next_task_id = next_task.id
+        else:
+            bulk_email.status = _campaign_stop_status(bulk_email)
+            bulk_email.save(update_fields=['status', 'updated_at'])
+    elif bulk_email.status == BulkEmail.STATUS_SENDING:
+        bulk_email.status = _campaign_stop_status(bulk_email)
+        bulk_email.save(update_fields=['status', 'updated_at'])
     sync_bulk_email_status(bulk_email)
 
     if sent_emails:
@@ -392,4 +438,15 @@ def send_pending_bulk_email_recipients(bulk_email_id, sent_by_user_id=None):
             attachment=bulk_email.attachment if bulk_email.attachment else None,
         )
 
-    return {'sent': sent, 'failed': failed, 'campaign_id': bulk_email.id}
+    return {
+        'sent': sent,
+        'failed': failed,
+        'campaign_id': bulk_email.id,
+        'quota_blocked': send_plan['blocked_count'] > 0,
+        'quota_snapshot': quota_snapshot,
+        'blocked_count': send_plan['blocked_count'],
+        'next_task_id': next_task_id,
+        'processed_in_chunk': sent + failed,
+        'chunk_size': chunk_size,
+    }
+
