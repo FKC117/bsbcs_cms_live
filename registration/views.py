@@ -8883,6 +8883,8 @@ def dashboard_bulk_email_center(request):
     }
     if request.GET.get('bulk_email_partial') == 'active_campaign':
         return render(request, 'partials/dashboard_bulk_email_active_campaign.html', context)
+    if request.GET.get('bulk_email_partial') == 'audit_summary':
+        return render(request, 'partials/dashboard_bulk_email_audit.html', context)
     return render(request, 'dashboard_bulk_email_center.html', context)
 
 
@@ -9989,5 +9991,6 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
 
 
