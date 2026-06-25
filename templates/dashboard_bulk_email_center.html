@@ -256,8 +256,8 @@
             </div>
         </section>
 
-        <section class="mt-3 grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
-            <form id="create-campaign" method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px]" style="align-items: start;">
+            <form id="create-campaign" method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet" data-compose-campaign-panel>
                 {% csrf_token %}
                 <input type="hidden" name="bulk_email_action" value="create_campaign">
                 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -330,7 +330,7 @@
                 </div>
             </form>
 
-            <section id="create-group" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <section id="create-group" class="rounded-2xl border border-line bg-white p-4 shadow-quiet overflow-hidden flex flex-col" data-create-group-panel>
                 <div>
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -346,7 +346,7 @@
                     <h3 class="text-sm font-black text-ink">Saved groups</h3>
                     <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black uppercase text-bsbcs-blue">{{ groups|length }} groups</span>
                 </div>
-                <div class="mt-2 max-h-56 space-y-2 overflow-auto pr-1">
+                <div class="mt-2 flex-1 min-h-0 space-y-2 overflow-auto pr-1" data-create-group-scroll>
                     {% for group in groups %}
                         <button type="button" class="group w-full rounded-xl border border-line bg-slate-50 px-3 py-2.5 text-left hover:border-bsbcs-blue hover:bg-white" data-edit-group data-group-id="{{ group.id }}">
                             <div class="flex items-start justify-between gap-3">
@@ -494,6 +494,21 @@
             }
         }
 
+        function syncCreateGroupHeight() {
+            const composePanel = document.querySelector('[data-compose-campaign-panel]');
+            const groupPanel = document.querySelector('[data-create-group-panel]');
+            const groupScroll = document.querySelector('[data-create-group-scroll]');
+            if (!composePanel || !groupPanel || !groupScroll) return;
+            if (window.innerWidth < 1280) {
+                groupPanel.style.height = '';
+                groupScroll.style.maxHeight = '';
+                return;
+            }
+            const composeHeight = composePanel.getBoundingClientRect().height;
+            if (!composeHeight) return;
+            groupPanel.style.height = `${Math.ceil(composeHeight)}px`;
+            groupScroll.style.maxHeight = `${Math.max(0, Math.floor(composeHeight - (groupScroll.offsetTop - groupPanel.offsetTop) - 16))}px`;
+        }
         function syncCampaignListHeight() {
             const listPanel = document.querySelector('[data-campaign-list-panel]');
             const activePanel = document.querySelector('[data-bulk-email-active-campaign]');
@@ -520,7 +535,9 @@
         }
 
         startActiveCampaignRefresh();
+        syncCreateGroupHeight();
         syncCampaignListHeight();
+        window.addEventListener('resize', syncCreateGroupHeight);
         window.addEventListener('resize', syncCampaignListHeight);
 
         document.querySelectorAll('[data-scroll-target]').forEach((button) => {
@@ -571,6 +588,7 @@
                 groupSelect.disabled = !needsGroup;
                 if (!needsGroup) groupSelect.value = '';
             }
+            syncCreateGroupHeight();
         }
 
         if (audienceSelect) {
@@ -685,6 +703,12 @@
 </script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 
