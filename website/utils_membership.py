@@ -10,6 +10,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
 from dateutil.relativedelta import relativedelta
+from invoice_shared import build_footer_block, build_info_table, build_invoice_header, build_invoice_styles, build_invoice_title_block, build_line_items_table, build_total_block, format_bdt
 
 
 def ensure_membership_payment_for_member(member):
@@ -55,100 +56,82 @@ def generate_membership_invoice(payment):
     os.makedirs(invoices_dir, exist_ok=True)
     file_path = os.path.join(invoices_dir, file_name)
 
-    # Create canvas
-    c = canvas.Canvas(file_path, pagesize=letter)
-    width, height = letter
-    margin = 50
-    content_top = height - 50
-
-    # Header section
-    c.setFont("Helvetica-Bold", 20)
-    c.drawCentredString(width / 2, content_top, "MEMBERSHIP INVOICE")
-    
-    # Border below header
-    content_top -= 10
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(1)
-    c.line(margin, content_top, width - margin, content_top)
-    
-    # Site Logo / Branding
-    # We try to get invoice logo from site settings
     from .models import SiteSettings
+
     site_settings = SiteSettings.objects.first()
-    
     logo_path = None
     if site_settings and site_settings.membership_invoice_logo:
         logo_path = site_settings.membership_invoice_logo.path
     elif site_settings and site_settings.logo:
         logo_path = site_settings.logo.path
 
-    content_top -= 60
-    if logo_path and os.path.exists(logo_path):
-        c.drawImage(logo_path, margin, content_top, width=1.5*inch, height=0.6*inch, preserveAspectRatio=True, mask='auto')
-    
-    # Organization Name
-    org_name = site_settings.site_name if site_settings else "BSBCS"
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin, content_top - 20, org_name)
-    c.setFont("Helvetica", 10)
-    c.drawString(margin, content_top - 35, "Bangladesh Society for Breast Cancer Study")
+    abbreviation = (site_settings.abbreviation or '').strip() if site_settings else ''
+    site_name = (site_settings.site_name or '').strip() if site_settings else ''
+    tag_line = (site_settings.tag_line or '').strip() if site_settings else ''
+    org_name = abbreviation or site_name or 'BSBCS'
+    subtitle = site_name if site_name and abbreviation and site_name.lower() != abbreviation.lower() else (tag_line or site_name or 'Bangladesh Society for Breast Cancer Study')
+    styles = build_invoice_styles()
+    status_text = payment.get_status_display() if hasattr(payment, 'get_status_display') else str(payment.status).title()
+    invoice_dt = timezone.localtime(timezone.now())
+    invoice_date = invoice_dt.strftime('%B %d, %Y')
+    invoice_time = invoice_dt.strftime('%I:%M %p')
+    duration_label = (
+        'Lifetime'
+        if (payment.membership_type and payment.membership_type.is_lifetime) or payment.duration_years >= 100
+        else f'{payment.duration_years} Year(s)'
+    )
 
-    # Invoice Info (Right aligned)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawRightString(width - margin, content_top, f"Invoice #: {payment.merchant_invoice_number}")
-    c.setFont("Helvetica", 10)
-    c.drawRightString(width - margin, content_top - 15, f"Date: {payment.created_at.strftime('%B %d, %Y')}")
-    c.drawRightString(width - margin, content_top - 30, f"Status: {payment.status.upper()}")
+    doc = SimpleDocTemplate(
+        file_path,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=42,
+        bottomMargin=42,
+    )
 
-    # Bill To
-    content_top -= 80
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(margin, content_top, "BILL TO:")
-    c.setFont("Helvetica", 11)
-    c.drawString(margin, content_top - 20, payment.user_profile.name)
-    c.drawString(margin, content_top - 35, payment.user_profile.email)
-    c.drawString(margin, content_top - 50, payment.user_profile.phone or "")
+    rows = [[
+        Paragraph('Membership subscription', styles['BodyCell']),
+        Paragraph(payment.membership_type.name if payment.membership_type else 'General', styles['BodyCell']),
+        Paragraph(duration_label, styles['SmallMuted']),
+        Paragraph(format_bdt(payment.amount), styles['BodyCellRight']),
+    ]]
 
-    # Table
-    content_top -= 90
-    data = [
-        ["Description", "Type", "Duration", "Amount"],
-        [
-            f"Membership Subscription",
-            payment.membership_type.name if payment.membership_type else "General",
-            "Lifetime" if (payment.membership_type and payment.membership_type.is_lifetime) or payment.duration_years >= 100 else f"{payment.duration_years} Year(s)",
-            f"BDT {payment.amount}"
-        ]
+    elements = [
+        build_invoice_header(
+            styles,
+            logo_path,
+            'Membership Invoice',
+            payment.merchant_invoice_number,
+            status_text,
+            org_name=org_name,
+            subtitle=subtitle,
+            metadata_lines=[f'Invoice date: {invoice_date}', f'Generated at: {invoice_time}'],
+        ),
+        Spacer(1, 18),
+        build_invoice_title_block(styles, 'Membership Subscription Invoice', 'Membership fee summary and subscription term details.'),
+        Spacer(1, 10),
+        build_info_table(
+            styles,
+            'Bill To',
+            [payment.user_profile.name, payment.user_profile.email, payment.user_profile.phone or ''],
+            'Membership',
+            [
+                payment.membership_type.name if payment.membership_type else 'General',
+                duration_label,
+                payment.created_at.strftime('%B %d, %Y'),
+                f'Status: {status_text}',
+            ],
+        ),
+        Spacer(1, 18),
+        build_line_items_table(styles, ['Description', 'Type', 'Duration', 'Amount'], rows, [250, 100, 80, 80]),
+        Spacer(1, 16),
+        build_total_block(styles, 'Total payable', format_bdt(payment.amount)),
+        Spacer(1, 24),
+        build_footer_block(styles, 'This is a computer-generated invoice and does not require a physical signature.'),
     ]
 
-    table = Table(data, colWidths=[250, 100, 80, 80])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1f2937")), # Gray-800
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-        ('TOPPADDING', (0, 0), (-1, 0), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-    
-    table_height = 40 # Roughly
-    table.wrapOn(c, margin, content_top - table_height)
-    table.drawOn(c, margin, content_top - table_height)
-
-    # Totals
-    content_top -= (table_height + 40)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawRightString(width - margin, content_top, f"TOTAL: BDT {payment.amount}")
-
-    # Footer
-    c.setFont("Helvetica-Oblique", 8)
-    footer_text = "This is a computer-generated invoice and does not require a physical signature."
-    c.drawCentredString(width / 2, margin, footer_text)
-
-    c.save()
+    doc.build(elements)
     return file_path
 
 def send_membership_invoice_email(payment):
