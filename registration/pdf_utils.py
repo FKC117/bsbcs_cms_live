@@ -390,120 +390,124 @@ def generate_invoice(participant, event, payment_status):
 
     invoice_amount = payment_status.amount or 0
     qr_path = ensure_registration_qr(payment_status)
-    # Generate the filename based on payment status ID
     file_name = f"invoice_{payment_status.id}.pdf"
-    
-    # Create the directory if it doesn't exist
     invoices_dir = os.path.join(settings.MEDIA_ROOT, 'invoices')
     os.makedirs(invoices_dir, exist_ok=True)
-    
-    # File path for the invoice PDF
     file_path = os.path.join(invoices_dir, file_name)
 
-    # Create a canvas object for generating the PDF
     c = canvas.Canvas(file_path, pagesize=letter)
+    page_width, page_height = letter
     margin = 50
-    space_between_sections = 30  # Space between sections for visual clarity
-    section_height = 20  # Height for each section's content before adding space
-    content_top = letter[1] - 100  # Start content slightly below the top to make room for the header
+    section_height = 20
+    footer_base_y = margin + 18
+    qr_caption_gap = 10
+    qr_caption_line_height = 10
+    qr_size = 1.25 * inch
+    qr_block_bottom = footer_base_y + 92
+    content_top = page_height - 100
 
-    # First Section: "Invoice" Header (Centered)
     c.setFont("Helvetica-Bold", 18)
-    c.drawString((letter[0] - c.stringWidth("Invoice", "Helvetica-Bold", 18)) / 2, content_top, "Invoice")
+    c.drawString((page_width - c.stringWidth("Invoice", "Helvetica-Bold", 18)) / 2, content_top, "Invoice")
 
-    # Add a bottom border for the header section
     c.setStrokeColor(colors.black)
     c.setLineWidth(1)
-    c.line(margin, content_top - 20, letter[0] - margin, content_top - 20)
+    c.line(margin, content_top - 20, page_width - margin, content_top - 20)
+    content_top -= 20
 
-    # Move down after header
-    content_top -= 20  # Adjust spacing after the header
-
-    # Second Section: Event Logo (if available) and Event Name/Year (now only the logo)
     logo_path = os.path.join(settings.MEDIA_ROOT, event.event_logo.name) if event.event_logo else None
     if logo_path and os.path.exists(logo_path):
-        logo_width = 1.5 * inch  # Adjust width of the logo
-        logo_height = 1.5 * inch  # Adjust height of the logo
+        logo_width = 1.5 * inch
+        logo_height = 1.5 * inch
         c.drawImage(logo_path, margin, content_top, width=logo_width, height=logo_height, preserveAspectRatio=True, mask='auto')
 
-    # Event Date under logo
     c.setFont("Helvetica", 10)
     c.drawString(margin, content_top - 20, f"Event Name: {event.name} {event.year}")
+    c.line(margin, content_top - 30, page_width - margin, content_top - 30)
+    content_top -= 30
 
-    # Add a bottom border for the logo section
-    c.line(margin, content_top - 30, letter[0] - margin, content_top - 30)
-
-    # Move down after the logo section
-    content_top -= 30  # Move down for the next section
-
-    # Third Section: Participant and Event Details
     details = [
         f"Participant Name: {participant.name}",
         f"Merchant Invoice Number: {payment_status.merchant_invoice_number}",
         f"Event Date: {event.start_date.strftime('%B %d, %Y')}",
         f"Location: {event.location}"
     ]
-    
+
     detail_start_y = content_top - 30
     for i, detail in enumerate(details):
         c.drawString(margin, detail_start_y - (i * section_height), detail)
 
     details_bottom_y = detail_start_y - ((len(details) - 1) * section_height)
-    # Add a bottom border for the details section
-    c.line(margin, details_bottom_y - 20, letter[0] - margin, details_bottom_y - 20)
+    c.line(margin, details_bottom_y - 20, page_width - margin, details_bottom_y - 20)
 
-    # Add space before the table
-    content_top -= 1  # Move content down before table
-
-    # Fourth Section: Invoice Table for Fees
+    body_style = ParagraphStyle(
+        name='InvoiceBodyCell',
+        fontName='Helvetica',
+        fontSize=10,
+        leading=13,
+        textColor=colors.black,
+    )
+    amount_style = ParagraphStyle(
+        name='InvoiceAmountCell',
+        parent=body_style,
+        alignment=TA_RIGHT,
+    )
     data = [
         ["Description", "Quantity", "Unit Price", "Total"],
-        [f"Registration fees for {event.name} {event.year}", "1", f"BDT {invoice_amount}", f"BDT {invoice_amount}"]
+        [
+            Paragraph(f"Registration fees for {event.name} {event.year}", body_style),
+            Paragraph("1", body_style),
+            Paragraph(_format_bdt(invoice_amount), amount_style),
+            Paragraph(_format_bdt(invoice_amount), amount_style),
+        ]
     ]
-    
+
     table = Table(data, colWidths=[250, 80, 80, 100])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+        ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
         ('GRID', (0, 0), (-1, -1), 1, colors.black)
     ]))
-    table.wrapOn(c, margin, content_top - 250)
-    table.drawOn(c, margin, content_top - 200)
+    available_table_width = page_width - (margin * 2)
+    _table_width, table_height = table.wrap(available_table_width, 0)
+    table_top_y = details_bottom_y - 40
+    table_bottom_y = table_top_y - table_height
+    table.drawOn(c, margin, table_bottom_y)
 
-    # Add a bottom border for the table section
-    c.line(margin, content_top - 230, letter[0] - margin, content_top - 230)
-
-    # Total Amount Section
+    total_y = table_bottom_y - 24
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(letter[0] - margin - 150, content_top - 250, f"Total: BDT {invoice_amount}")
+    c.drawRightString(page_width - margin, total_y, f"Total: {_format_bdt(invoice_amount)}")
 
-    # Bottom-left QR code block above the footer
     if qr_path and os.path.exists(qr_path):
-        qr_size = 1.25 * inch
         qr_x = margin
-        qr_y = margin + 70
+        qr_y = qr_block_bottom
         c.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, preserveAspectRatio=True, mask='auto')
         c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 10, "SCAN AT REGISTRATION DESK")
+        c.drawCentredString(qr_x + (qr_size / 2), qr_y - qr_caption_gap, "SCAN AT REGISTRATION DESK")
         c.setFont("Helvetica", 7)
-        c.drawCentredString(qr_x + (qr_size / 2), qr_y - 20, f"{participant.name[:32]}")
+        c.drawCentredString(
+            qr_x + (qr_size / 2),
+            qr_y - qr_caption_gap - qr_caption_line_height,
+            f"{participant.name[:32]}"
+        )
 
-    # Footer Section with Thank You and Signature Message
-    footer_y = margin + 45
+    footer_y = footer_base_y + 30
     c.setFont("Helvetica", 10)
     c.drawString(margin, footer_y, "Thank you for registering!")
     c.drawString(margin, footer_y - 20, "This is a computer-generated invoice and does not need any signature.")
+    c.line(margin, footer_base_y, page_width - margin, footer_base_y)
 
-    # Add a bottom border for the footer section
-    c.line(margin, footer_y - 30, letter[0] - margin, footer_y - 30)
-
-    # Save the PDF file
     c.save()
-    
     return file_path
 
 # Invoice Generation End ----------------------------------------------------------------
