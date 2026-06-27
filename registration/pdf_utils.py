@@ -71,7 +71,8 @@ def generate_abstract_pdf(event, abstracts):
 def generate_schedule_pdf(event, schedules):
     custom_paper_size = (11 * inch, 17 * inch)
     buffer = BytesIO()
-    site_logo_path = _get_site_invoice_logo_path()
+    branding = _get_site_invoice_branding(prefer_membership_logo=False)
+    site_logo_path = branding['logo_path']
     event_logo_path = None
     if getattr(event, 'event_logo', None) and getattr(event.event_logo, 'name', None):
         event_logo_path = event.event_logo.path

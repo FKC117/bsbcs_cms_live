@@ -233,6 +233,13 @@ def send_thank_you_email_task(self, thank_you_email_id, log_id=None, sent_by_use
 
 @shared_task(bind=True)
 def send_pending_bulk_email_campaign(self, bulk_email_id, sent_by_user_id=None, recipient_statuses=None):
+    logging.getLogger('registration').info(
+        "Celery received bulk email task: task_id=%s campaign_id=%s sent_by_user_id=%s recipient_statuses=%s",
+        getattr(self.request, 'id', None),
+        bulk_email_id,
+        sent_by_user_id,
+        recipient_statuses,
+    )
     return send_pending_bulk_email_recipients(
         bulk_email_id=bulk_email_id,
         sent_by_user_id=sent_by_user_id,
