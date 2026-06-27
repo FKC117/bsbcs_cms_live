@@ -4776,6 +4776,8 @@ def build_dashboard_operations(events, event_filter=None, event_status_filter=No
             warnings.append('Payment required but regular fee is empty')
         if event.member_registration_enabled and event.member_registration_fee is None:
             warnings.append('Member fee not set, treated as free')
+        if event.member_registration_enabled and event.executive_member_registration_fee is None:
+            warnings.append('EC member fee not set, treated as free')
         if event.registration_audience == 'members_only' and not event.member_registration_enabled:
             warnings.append('Members-only event without member flow enabled')
 
@@ -5306,6 +5308,10 @@ def _executive_member_matches_event_participant(event, member):
     return participant_qs.filter(lookup).select_related('payment_statuses', 'department').first()
 
 
+def _get_executive_member_registration_fee(event):
+    return event.executive_member_registration_fee or 0
+
+
 def _executive_member_sync_needed(event, participant):
     if not participant:
         return True
@@ -5315,6 +5321,13 @@ def _executive_member_sync_needed(event, participant):
     payment_status = getattr(participant, 'payment_statuses', None)
     if not payment_status:
         return True
+
+    executive_member_fee = _get_executive_member_registration_fee(event)
+    if executive_member_fee:
+        if (payment_status.amount or 0) != executive_member_fee:
+            return True
+        return payment_status.status not in ['unpaid', 'initiated', 'pending', *SUCCESS_PAYMENT_STATUSES]
+
     if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
         return True
     if (payment_status.amount or 0) != 0:
@@ -5377,6 +5390,8 @@ def _register_executive_members_for_event(request, event):
         'email_failed': 0,
     }
 
+    executive_member_fee = _get_executive_member_registration_fee(event)
+
     for member in executive_members:
         profile = getattr(member, 'user_profile', None)
         user = getattr(profile, 'user', None) if profile else None
@@ -5434,35 +5449,67 @@ def _register_executive_members_for_event(request, event):
             dashboard_log_action(request, participant, CHANGE, 'Updated executive member participant from Global Dashboard.')
             results['updated'] += 1
 
-        payment_status, _ = PaymentStatus.objects.get_or_create(
-            participant=participant,
-            event=event,
-            defaults={
-                'merchant_invoice_number': f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}",
-                'amount': 0,
-                'status': 'completed',
-            }
-        )
+        if executive_member_fee:
+            payment_status, _ = PaymentStatus.objects.get_or_create(
+                participant=participant,
+                event=event,
+                defaults={
+                    'merchant_invoice_number': f"EC-{event.id}-{participant.id}-{int(time.time())}",
+                    'amount': executive_member_fee,
+                    'status': 'unpaid',
+                }
+            )
+            if not payment_status.merchant_invoice_number:
+                payment_status.merchant_invoice_number = f"EC-{event.id}-{participant.id}-{int(time.time())}"
+            payment_status.amount = executive_member_fee
+            if payment_status.status not in SUCCESS_PAYMENT_STATUSES:
+                payment_status.status = 'unpaid'
+            payment_status.email_sent = False
+            payment_status.save()
+            dashboard_log_action(request, payment_status, CHANGE, 'Prepared executive member payment row from Global Dashboard approval sync.')
 
-        payment_status.merchant_invoice_number = f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}"
-        payment_status.amount = 0
-        payment_status.status = 'completed'
-        payment_status.email_sent = False
-        payment_status.save()
-        RegistrationKit.objects.get_or_create(
-            event=event,
-            payment_status=payment_status,
-            defaults={'status': 'not_issued'},
-        )
-        dashboard_log_action(request, payment_status, CHANGE, 'Marked executive member event registration as complimentary and completed from Global Dashboard.')
+            payment_url = request.build_absolute_uri(reverse('registration:payment', kwargs={
+                'event_id': event.id,
+                'participant_id': participant.id,
+            }))
+            queued = _queue_dashboard_participant_email(
+                request,
+                participant,
+                ParticipantEmailLog.TYPE_APPROVAL_PAYMENT,
+                payment_url=payment_url,
+            )
+        else:
+            payment_status, _ = PaymentStatus.objects.get_or_create(
+                participant=participant,
+                event=event,
+                defaults={
+                    'merchant_invoice_number': f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}",
+                    'amount': 0,
+                    'status': 'completed',
+                }
+            )
 
-        _generate_event_payment_invoice(payment_status)
+            if not payment_status.merchant_invoice_number.startswith(f"EC-FREE-{event.id}-{participant.id}-"):
+                payment_status.merchant_invoice_number = f"EC-FREE-{event.id}-{participant.id}-{int(time.time())}"
+            payment_status.amount = 0
+            payment_status.status = 'completed'
+            payment_status.email_sent = False
+            payment_status.save()
+            RegistrationKit.objects.get_or_create(
+                event=event,
+                payment_status=payment_status,
+                defaults={'status': 'not_issued'},
+            )
+            dashboard_log_action(request, payment_status, CHANGE, 'Marked executive member event registration as complimentary and completed from Global Dashboard.')
 
-        queued = _queue_dashboard_participant_email(
-            request,
-            participant,
-            ParticipantEmailLog.TYPE_FREE_CONFIRMATION,
-        )
+            _generate_event_payment_invoice(payment_status)
+
+            queued = _queue_dashboard_participant_email(
+                request,
+                participant,
+                ParticipantEmailLog.TYPE_FREE_CONFIRMATION,
+            )
+
         if queued:
             results['email_queued'] += 1
         else:

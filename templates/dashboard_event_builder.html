@@ -223,7 +223,7 @@
                                 </span>
                             </label>
                         </div>
-                        <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 lg:col-span-2">
+                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 lg:col-span-2">
                             <label class="flex items-start gap-3 text-sm font-bold text-ink">
                                 {{ form.member_registration_enabled }}
                                 <span>
@@ -231,13 +231,20 @@
                                     <span class="mt-1 block text-xs font-semibold leading-5 text-slate-600">Members can use member pricing or complimentary registration when this is enabled.</span>
                                 </span>
                             </label>
+                            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                <div>
+                                    <label class="compact-label" for="{{ form.member_registration_fee.id_for_label }}">Member fee</label>
+                                    {{ form.member_registration_fee }}
+                                    {% if form.member_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.member_registration_fee.errors }}</div>{% endif %}
+                                </div>
+                                <div>
+                                    <label class="compact-label" for="{{ form.executive_member_registration_fee.id_for_label }}">EC member fee</label>
+                                    {{ form.executive_member_registration_fee }}
+                                    {% if form.executive_member_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.executive_member_registration_fee.errors }}</div>{% endif %}
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="compact-label" for="{{ form.member_registration_fee.id_for_label }}">Member fee</label>
-                            {{ form.member_registration_fee }}
-                            {% if form.member_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.member_registration_fee.errors }}</div>{% endif %}
-                        </div>
-                        <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-3 lg:col-span-2">
+                        <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 lg:col-span-2">
                             <label class="flex items-start gap-3 text-sm font-bold text-ink">
                                 {{ form.company_person_registration_enabled }}
                                 <span>
@@ -245,11 +252,11 @@
                                     <span class="mt-1 block text-xs font-semibold leading-5 text-slate-600">Allow companies to register their people and set a specific fee.</span>
                                 </span>
                             </label>
-                        </div>
-                        <div>
-                            <label class="compact-label" for="{{ form.company_person_registration_fee.id_for_label }}">Company person fee</label>
-                            {{ form.company_person_registration_fee }}
-                            {% if form.company_person_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.company_person_registration_fee.errors }}</div>{% endif %}
+                            <div class="mt-4 max-w-md">
+                                <label class="compact-label" for="{{ form.company_person_registration_fee.id_for_label }}">Company person fee</label>
+                                {{ form.company_person_registration_fee }}
+                                {% if form.company_person_registration_fee.errors %}<div class="mt-1 text-xs font-bold text-bsbcs-pink">{{ form.company_person_registration_fee.errors }}</div>{% endif %}
+                            </div>
                         </div>
                     </div>
                 </section>

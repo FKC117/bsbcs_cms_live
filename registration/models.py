@@ -298,6 +298,13 @@ class Event(models.Model):
         null=True,
         help_text='Optional member-only event fee. Leave blank or set 0 for free member attendance.'
     )
+    executive_member_registration_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text='Optional executive committee member fee. Leave blank or set 0 for complimentary EC registration.'
+    )
     company_person_registration_enabled = models.BooleanField(
         default=False,
         help_text='Allow company people registration for this event.'

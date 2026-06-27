@@ -255,6 +255,61 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertEqual(payment_status.qr_token, original_qr_token)
         self.assertEqual(Participant.objects.filter(event=self.event, email='user@test.com').count(), 1)
 
+    def test_global_dashboard_registers_executive_members_with_unpaid_ec_fee(self):
+        self.event.member_registration_enabled = True
+        self.event.executive_member_registration_fee = '750.00'
+        self.event.save(update_fields=['member_registration_enabled', 'executive_member_registration_fee'])
+
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Executive Member Paid',
+            email='user@test.com',
+            phone='01700000123',
+            country='Bangladesh',
+        )
+        Member.objects.create(
+            user_profile=profile,
+            institution='BSBCS',
+            position='Treasurer',
+            approval_status='approved',
+            is_active_member=True,
+            is_executive_member=True,
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            f"{reverse('global_dashboard')}?event={self.event.id}",
+            {'dashboard_action': 'register_executive_members'},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        participant = Participant.objects.get(event=self.event, email='user@test.com')
+        self.assertTrue(participant.approved)
+        self.assertEqual(participant.registration_type, 'member')
+
+        payment_status = PaymentStatus.objects.get(participant=participant, event=self.event)
+        self.assertEqual(payment_status.status, 'unpaid')
+        self.assertEqual(str(payment_status.amount), '750.00')
+        self.assertTrue(payment_status.merchant_invoice_number.startswith(f'EC-{self.event.id}-{participant.id}-'))
+        self.assertFalse(bool(payment_status.invoice))
+        self.assertFalse(bool(payment_status.qr_token))
+        self.assertFalse(bool(payment_status.qr_code))
+        self.assertFalse(RegistrationKit.objects.filter(event=self.event, payment_status=payment_status).exists())
+
+        second_response = self.client.post(
+            f"{reverse('global_dashboard')}?event={self.event.id}",
+            {'dashboard_action': 'register_executive_members'},
+            follow=True,
+        )
+        self.assertEqual(second_response.status_code, 200)
+        payment_status.refresh_from_db()
+        self.assertEqual(payment_status.status, 'unpaid')
+        self.assertEqual(str(payment_status.amount), '750.00')
+        self.assertEqual(Participant.objects.filter(event=self.event, email='user@test.com').count(), 1)
+
     def test_bulk_email_center_renders_dashboard_workflow(self):
         self.client.force_login(self.staff_user)
         response = self.client.get(reverse('dashboard_bulk_email_center'))
@@ -508,6 +563,7 @@ class ProgramSessionBuilderTests(TestCase):
             'amount': '1500.00',
             'member_registration_enabled': 'on',
             'member_registration_fee': '500.00',
+            'executive_member_registration_fee': '250.00',
             'description': 'A focused oncology event.',
             'next_action': 'program',
         })
@@ -520,6 +576,7 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertTrue(event.member_registration_enabled)
         self.assertEqual(str(event.amount), '1500.00')
         self.assertEqual(str(event.member_registration_fee), '500.00')
+        self.assertEqual(str(event.executive_member_registration_fee), '250.00')
 
     def test_event_builder_rejects_end_date_before_start_date(self):
         self.client.force_login(self.staff_user)

@@ -92,7 +92,7 @@
     <div>
       <div class="text-xs font-black uppercase tracking-[0.18em] text-bsbcs-teal">Executive member registration</div>
       <h2 class="mt-1 text-2xl font-black text-ink">Register EC members for {{ selected_event.name }} {{ selected_event.year }}</h2>
-      <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">This one-click action creates or updates executive members as participant rows, approves them, marks payment completed with amount BDT 0, generates the QR invoice, and queues the confirmation email.</p>
+      <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-600">This one-click action creates or updates executive members as participant rows and approves them. If the EC fee is blank or zero it also completes payment, generates the QR invoice, and prepares the kit row; otherwise it stops after approval and creates the unpaid EC payment row.</p>
     </div>
     <form method="post" class="flex items-center gap-3">
       {% csrf_token %}
@@ -114,12 +114,12 @@
     <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
       <div class="text-xs font-black uppercase tracking-wide text-slate-500">Already synced</div>
       <div class="mt-2 text-3xl font-black text-bsbcs-teal">{{ executive_member_summary.synced_total }}</div>
-      <p class="mt-2 text-sm text-slate-600">Rows already approved with zero-fee completed payment, invoice QR, and kit row.</p>
+      <p class="mt-2 text-sm text-slate-600">Rows already synced for the current EC fee policy, either as free completed registrations or approved payable registrations.</p>
     </div>
     <div class="rounded-2xl border border-line bg-slate-50/70 px-4 py-4">
       <div class="text-xs font-black uppercase tracking-wide text-slate-500">Ready to sync</div>
       <div class="mt-2 text-3xl font-black text-bsbcs-blue">{{ executive_member_summary.pending_total }}</div>
-      <p class="mt-2 text-sm text-slate-600">Executive members who still need approval, payment completion, invoice QR, or kit row sync.</p>
+      <p class="mt-2 text-sm text-slate-600">Executive members who still need participant approval or the correct EC payment state for this event.</p>
     </div>
   </div>
 </section>

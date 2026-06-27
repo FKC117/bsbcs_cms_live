@@ -455,10 +455,10 @@ class ModeratorAdmin(admin.ModelAdmin):
 admin.site.register(Moderator, ModeratorAdmin)
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
+    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
     list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled', 'company_person_registration_enabled')
     search_fields = ('name',)
-    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
+    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
 admin.site.register(Event, EventAdmin)
 
 import os

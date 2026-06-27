@@ -89,6 +89,7 @@ class DashboardEventForm(forms.ModelForm):
             'amount',
             'member_registration_enabled',
             'member_registration_fee',
+            'executive_member_registration_fee',
             'company_person_registration_enabled',
             'company_person_registration_fee',
             'show_publication_tab',
@@ -114,6 +115,7 @@ class DashboardEventForm(forms.ModelForm):
             'registration_audience': forms.Select(attrs={'class': 'workflow-input'}),
             'amount': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': '0.00'}),
             'member_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
+            'executive_member_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
             'company_person_registration_fee': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'step': '0.01', 'placeholder': 'Leave blank or 0 for free'}),
             'event_logo': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
             'event_hero_image': forms.ClearableFileInput(attrs={'class': 'workflow-file'}),
@@ -142,6 +144,7 @@ class DashboardEventForm(forms.ModelForm):
         amount = cleaned_data.get('amount')
         member_registration_enabled = cleaned_data.get('member_registration_enabled')
         member_registration_fee = cleaned_data.get('member_registration_fee')
+        executive_member_registration_fee = cleaned_data.get('executive_member_registration_fee')
         company_person_registration_enabled = cleaned_data.get('company_person_registration_enabled')
         company_person_registration_fee = cleaned_data.get('company_person_registration_fee')
 
@@ -157,8 +160,12 @@ class DashboardEventForm(forms.ModelForm):
         if member_registration_fee is not None and member_registration_fee < 0:
             self.add_error('member_registration_fee', 'Member registration fee cannot be negative.')
 
+        if executive_member_registration_fee is not None and executive_member_registration_fee < 0:
+            self.add_error('executive_member_registration_fee', 'Executive member registration fee cannot be negative.')
+
         if not member_registration_enabled:
             cleaned_data['member_registration_fee'] = None
+            cleaned_data['executive_member_registration_fee'] = None
 
         if company_person_registration_fee is not None and company_person_registration_fee < 0:
             self.add_error('company_person_registration_fee', 'Company person registration fee cannot be negative.')
