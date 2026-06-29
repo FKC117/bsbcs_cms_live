@@ -1,7 +1,10 @@
+import re
+
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django_countries import countries
 
 from .models import *
@@ -11,6 +14,8 @@ DEFAULT_COUNTRY = 'Bangladesh'
 COUNTRY_NAME_CHOICES = [('', 'Select country')] + [(name, name) for _, name in countries]
 COUNTRY_NAME_REQUIRED_CHOICES = [(name, name) for _, name in countries]
 COUNTRY_NAME_LOOKUP = {name.casefold(): name for _, name in countries}
+BD_MOBILE_PATTERN = re.compile(r'^8801[3-9]\d{8}$')
+GENERIC_PHONE_ALLOWED_PATTERN = re.compile(r'^[0-9+()\-\s]+$')
 
 
 def normalize_country_name(value):
@@ -20,6 +25,43 @@ def normalize_country_name(value):
 def setup_country_choice_field(field, css_class, *, include_blank=True):
     field.choices = COUNTRY_NAME_CHOICES if include_blank else COUNTRY_NAME_REQUIRED_CHOICES
     field.widget = forms.Select(attrs={'class': css_class})
+
+
+def normalize_phone_number(raw_phone, country=''):
+    phone = (raw_phone or '').strip()
+    if not phone:
+        return ''
+
+    if not GENERIC_PHONE_ALLOWED_PATTERN.fullmatch(phone):
+        raise ValidationError('Enter a valid phone number.')
+
+    digits = re.sub(r'\D', '', phone)
+    normalized_country = normalize_country_name(country) or (country or '').strip()
+
+    if normalized_country == DEFAULT_COUNTRY:
+        if digits.startswith('00880'):
+            digits = digits[2:]
+        if digits.startswith('8801') and BD_MOBILE_PATTERN.fullmatch(digits):
+            return digits
+        if digits.startswith('01') and len(digits) == 11 and digits[2] in '3456789':
+            candidate = f'88{digits}'
+            if BD_MOBILE_PATTERN.fullmatch(candidate):
+                return candidate
+        if digits.startswith('1') and len(digits) == 10 and digits[1] in '3456789':
+            candidate = f'880{digits}'
+            if BD_MOBILE_PATTERN.fullmatch(candidate):
+                return candidate
+        raise ValidationError('Enter a valid Bangladesh mobile number, like 8801911269258 or 01911269258.')
+
+    if digits.startswith('00') and len(digits) > 2:
+        digits = digits[2:]
+    if not 7 <= len(digits) <= 15:
+        raise ValidationError('Enter a valid phone number.')
+    return digits
+
+
+def is_sms_eligible_phone(country, phone):
+    return normalize_country_name(country) == DEFAULT_COUNTRY and bool(BD_MOBILE_PATTERN.fullmatch((phone or '').strip()))
 
 
 class UserProfileForm(forms.ModelForm):
@@ -46,16 +88,29 @@ class UserProfileForm(forms.ModelForm):
         return email
 
     def clean_phone(self):
-        phone = self.cleaned_data.get('phone')
-        if UserProfile.objects.filter(phone=phone).exists():
-            raise forms.ValidationError("A user with this phone number already exists.")
-        return phone
+        return (self.cleaned_data.get('phone') or '').strip()
 
     def clean_country(self):
         country = normalize_country_name(self.cleaned_data.get('country'))
         if not country:
             raise forms.ValidationError('Please choose a valid country from the list.')
         return country
+
+    def clean(self):
+        cleaned_data = super().clean()
+        country = cleaned_data.get('country')
+        phone = cleaned_data.get('phone')
+        if country and phone:
+            try:
+                normalized_phone = normalize_phone_number(phone, country)
+            except ValidationError as exc:
+                self.add_error('phone', exc)
+            else:
+                cleaned_data['phone'] = normalized_phone
+                self.cleaned_data['phone'] = normalized_phone
+                if UserProfile.objects.filter(phone=normalized_phone).exists():
+                    self.add_error('phone', 'A user with this phone number already exists.')
+        return cleaned_data
 
     def save(self, commit=True):
         user = User.objects.create_user(
@@ -235,10 +290,7 @@ class RegistrationForm(forms.ModelForm):
         return email
 
     def clean_phone(self):
-        phone = self.cleaned_data.get('phone')
-        if Participant.objects.filter(phone=phone, event=self.event).exists():
-            raise forms.ValidationError("A participant with this phone number already exists for this event.")
-        return phone
+        return (self.cleaned_data.get('phone') or '').strip()
 
     def clean_department_name(self):
         department_name = (self.cleaned_data.get('department_name') or '').strip()
@@ -251,6 +303,25 @@ class RegistrationForm(forms.ModelForm):
         if not country:
             raise forms.ValidationError('Please choose a valid country from the list.')
         return country
+
+    def clean(self):
+        cleaned_data = super().clean()
+        country = cleaned_data.get('country')
+        phone = cleaned_data.get('phone')
+        if country and phone:
+            try:
+                normalized_phone = normalize_phone_number(phone, country)
+            except ValidationError as exc:
+                self.add_error('phone', exc)
+            else:
+                cleaned_data['phone'] = normalized_phone
+                self.cleaned_data['phone'] = normalized_phone
+                duplicates = Participant.objects.filter(phone=normalized_phone, event=self.event)
+                if self.instance and self.instance.pk:
+                    duplicates = duplicates.exclude(pk=self.instance.pk)
+                if duplicates.exists():
+                    self.add_error('phone', 'A participant with this phone number already exists for this event.')
+        return cleaned_data
 
     def save(self, commit=True):
         participant = super().save(commit=False)
@@ -343,8 +414,17 @@ class DashboardParticipantCreateForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         event = cleaned_data.get('event')
+        country = cleaned_data.get('country')
         email = (cleaned_data.get('email') or '').strip()
         phone = (cleaned_data.get('phone') or '').strip()
+        if phone and country:
+            try:
+                phone = normalize_phone_number(phone, country)
+            except ValidationError as exc:
+                self.add_error('phone', exc)
+            else:
+                cleaned_data['phone'] = phone
+                self.cleaned_data['phone'] = phone
         if event and email and Participant.objects.filter(event=event, email__iexact=email).exists():
             self.add_error('email', 'This email is already registered for the selected event.')
         if event and phone and Participant.objects.filter(event=event, phone=phone).exists():

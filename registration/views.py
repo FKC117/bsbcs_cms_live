@@ -36,6 +36,7 @@ from .forms import (
     COUNTRY_NAME_REQUIRED_CHOICES,
     DEFAULT_COUNTRY,
     normalize_country_name,
+    normalize_phone_number,
 )
 from .models import *
 from django.contrib.auth import login, logout
@@ -446,6 +447,15 @@ def create_profile(request):
 
             if not name or not email or not phone or not country:
                 messages.error(request, "Please complete all profile fields.")
+            else:
+                try:
+                    phone = normalize_phone_number(phone, country)
+                except ValidationError as exc:
+                    messages.error(request, exc.messages[0])
+                    phone = ''
+
+            if not name or not email or not phone or not country:
+                pass
             elif UserProfile.objects.filter(email__iexact=email).exists():
                 messages.error(request, "A personal profile already exists with this email address.")
             elif UserProfile.objects.filter(phone=phone).exists():
@@ -840,14 +850,25 @@ def user_profile(request):
             messages.error(request, 'Please choose a valid country from the list.')
             message = ''
         else:
-            user_profile.name = request.POST.get('name')
-            user_profile.email = request.POST.get('email')
-            user_profile.phone = request.POST.get('phone')
-            user_profile.country = selected_country
-            if request.FILES.get('image'):
-                user_profile.image = request.FILES['image']
-            user_profile.save()
-            message = "Profile updated successfully"
+            submitted_phone = (request.POST.get('phone') or '').strip()
+            try:
+                normalized_phone = normalize_phone_number(submitted_phone, selected_country)
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0])
+                message = ''
+            else:
+                if UserProfile.objects.filter(phone=normalized_phone).exclude(pk=user_profile.pk).exists():
+                    messages.error(request, 'A user with this phone number already exists.')
+                    message = ''
+                else:
+                    user_profile.name = request.POST.get('name')
+                    user_profile.email = request.POST.get('email')
+                    user_profile.phone = normalized_phone
+                    user_profile.country = selected_country
+                    if request.FILES.get('image'):
+                        user_profile.image = request.FILES['image']
+                    user_profile.save()
+                    message = "Profile updated successfully"
     else:
         message = ""
 
@@ -1091,13 +1112,20 @@ def _parse_corporate_csv(uploaded_file):
             errors.append(f"Row {row_number}: missing {', '.join(missing_values)}.")
             continue
 
+        country_value = normalize_country_name(normalized.get('country')) or DEFAULT_COUNTRY
+        try:
+            phone_value = normalize_phone_number(normalized.get('phone', ''), country_value)
+        except ValidationError as exc:
+            errors.append(f"Row {row_number}: {exc.messages[0]}")
+            continue
+
         rows.append({
             'name': normalized.get('name', ''),
             'email': normalized.get('email', ''),
-            'phone': normalized.get('phone', ''),
+            'phone': phone_value,
             'degree': normalized.get('degree', ''),
             'organization': normalized.get('organization', ''),
-            'country': normalized.get('country', ''),
+            'country': country_value,
             'department': normalized.get('department', ''),
             'bmdc_registration_number': normalized.get('bmdc_registration_number', ''),
             'designation': normalized.get('designation', ''),
@@ -1272,9 +1300,16 @@ def corporate_event_registration(request, event_id):
             messages.error(request, 'Name, email, and phone are required for manual attendee submission.')
         elif not country:
             messages.error(request, 'Please choose a valid country from the list.')
-        elif reg_type == 'complementary' and remaining_quota < 1:
-            messages.error(request, 'You have no remaining complementary spots.')
         else:
+            try:
+                phone = normalize_phone_number(phone, country)
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0])
+                phone = ''
+
+        if name and email and phone and country and reg_type == 'complementary' and remaining_quota < 1:
+            messages.error(request, 'You have no remaining complementary spots.')
+        elif name and email and phone and country:
             registration = CorporateEventRegistration.objects.create(
                 corporate_account=corporate_account,
                 event=event,
@@ -6611,7 +6646,11 @@ def dashboard_corporate_center(request):
                 corporate_account.contact_name = (request.POST.get('contact_name') or corporate_account.contact_name).strip()
                 corporate_account.contact_designation = (request.POST.get('contact_designation') or '').strip() or None
                 corporate_account.email = (request.POST.get('email') or corporate_account.email).strip()
-                corporate_account.phone = (request.POST.get('phone') or corporate_account.phone).strip()
+                updated_phone = (request.POST.get('phone') or corporate_account.phone).strip()
+                try:
+                    corporate_account.phone = normalize_phone_number(updated_phone, '')
+                except ValidationError:
+                    corporate_account.phone = updated_phone
                 requested_status = request.POST.get('status')
                 if requested_status in dict(CorporateAccount.APPROVAL_STATUS_CHOICES):
                     corporate_account.status = requested_status

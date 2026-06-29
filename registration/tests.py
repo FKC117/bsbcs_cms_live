@@ -17,7 +17,7 @@ from registration.models import (
     BulkEmail, BulkEmailRecipient, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
     SpeakerOutreachTemplatePreset,
 )
-from registration.forms import ProgramSessionBuilderForm
+from registration.forms import ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
 from registration.tasks import send_speaker_outreach_email_task
@@ -2367,3 +2367,90 @@ class ProgramSessionBuilderTests(TestCase):
 
         self.assertContains(response, 'Choose an event before building schedule.')
         self.assertNotContains(response, f'Prepare {closed_event.name}')
+
+
+class PhoneValidationTests(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='phone-user', password='password', email='phone-user@example.com')
+        self.event = Event.objects.create(
+            name='Phone Validation Event',
+            slogan='Phone checks',
+            year=2026,
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 2),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        self.department = Department.objects.create(event=self.event, name='Medicine')
+
+    def test_normalize_phone_number_accepts_bangladesh_local_mobile(self):
+        self.assertEqual(normalize_phone_number('01911269258', 'Bangladesh'), '8801911269258')
+
+    def test_user_profile_form_rejects_text_phone_for_bangladesh(self):
+        form = UserProfileForm(data={
+            'name': 'Invalid Phone User',
+            'email': 'invalid-phone@example.com',
+            'password': 'secret123',
+            'phone': 'abc123',
+            'country': 'Bangladesh',
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('phone', form.errors)
+
+    def test_user_profile_form_normalizes_bangladesh_phone(self):
+        form = UserProfileForm(data={
+            'name': 'Valid Phone User',
+            'email': 'valid-phone@example.com',
+            'password': 'secret123',
+            'phone': '01911269258',
+            'country': 'Bangladesh',
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['phone'], '8801911269258')
+
+    def test_registration_form_blocks_duplicate_normalized_phone_per_event(self):
+        Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Existing Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Test Hospital',
+            email='existing@example.com',
+            phone='8801911269258',
+            country='Bangladesh',
+        )
+
+        form = RegistrationForm(data={
+            'name': 'New Participant',
+            'degree': 'MBBS',
+            'email': 'new@example.com',
+            'phone': '01911269258',
+            'year_of_graduation': 2021,
+            'department_name': 'Medicine',
+            'organization': 'Another Hospital',
+            'country': 'Bangladesh',
+            'BMDC_registration_number': '',
+        }, event=self.event)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('phone', form.errors)
+
+    def test_create_profile_view_does_not_save_invalid_phone(self):
+        login_user = User.objects.create_user(username='login-user', password='password', email='login-user@example.com')
+        self.client.force_login(login_user)
+
+        response = self.client.post(reverse('create_profile'), {
+            'name': 'Login User',
+            'email': 'login-user@example.com',
+            'phone': 'not-a-phone',
+            'country': 'Bangladesh',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(UserProfile.objects.filter(user=login_user).exists())
