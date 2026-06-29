@@ -18,6 +18,7 @@ from registration.models import (
     SpeakerOutreachTemplatePreset,
 )
 from registration.forms import ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
+from registration.phone_audit import apply_phone_fixes, build_phone_fix_report, run_phone_audit
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
 from registration.tasks import send_speaker_outreach_email_task
@@ -2454,3 +2455,153 @@ class PhoneValidationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(UserProfile.objects.filter(user=login_user).exists())
+
+
+class PhoneAuditTests(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='audit-user', password='password', email='audit-user@example.com')
+        self.event = Event.objects.create(
+            name='Audit Event',
+            slogan='Audit phones',
+            year=2026,
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 2),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        self.department = Department.objects.create(event=self.event, name='Oncology')
+
+    def test_phone_audit_flags_convertible_invalid_and_duplicate_records(self):
+        Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Canonical Participant',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Hospital A',
+            email='canonical@example.com',
+            phone='8801911269258',
+            country='Bangladesh',
+        )
+        Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Convertible Participant',
+            degree='MBBS',
+            year_of_graduation=2021,
+            department=self.department,
+            organization='Hospital B',
+            email='convertible@example.com',
+            phone='01911269258',
+            country='Bangladesh',
+        )
+        UserProfile.objects.create(
+            user=User.objects.create_user(username='bad-profile', password='password', email='bad-profile@example.com'),
+            name='Bad Profile',
+            email='bad-profile@example.com',
+            phone='abc123',
+            country='Bangladesh',
+        )
+
+        report = run_phone_audit(selected_models=['participant', 'user_profile'])
+
+        self.assertEqual(report['summary']['duplicate_group_count'], 1)
+        self.assertGreaterEqual(report['summary']['issue_counts'].get('duplicate_normalized_phone', 0), 2)
+        self.assertGreaterEqual(report['summary']['issue_counts'].get('invalid_phone', 0), 1)
+
+        participant_rows = [row for row in report['rows'] if row['model_key'] == 'participant']
+        self.assertEqual(len(participant_rows), 2)
+        self.assertTrue(all('duplicate_normalized_phone' in row['issues'] for row in participant_rows))
+
+    def test_phone_audit_can_include_valid_rows(self):
+        UserProfile.objects.create(
+            user=self.user,
+            name='Valid Profile',
+            email='audit-user@example.com',
+            phone='8801911269258',
+            country='Bangladesh',
+        )
+
+        report = run_phone_audit(selected_models=['user_profile'], include_valid=True)
+
+        self.assertEqual(report['summary']['total_records'], 1)
+        self.assertEqual(report['summary']['returned_records'], 1)
+        self.assertEqual(report['rows'][0]['status'], 'sms_ready_bd')
+        self.assertEqual(report['rows'][0]['issues'], [])
+
+
+class PhoneFixTests(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='fix-user', password='password', email='fix-user@example.com')
+        self.event = Event.objects.create(
+            name='Fix Event',
+            slogan='Fix phones',
+            year=2026,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 2),
+            location='Dhaka',
+            event_status='active',
+            registration='Open',
+        )
+        self.department = Department.objects.create(event=self.event, name='Surgery')
+
+    def test_build_phone_fix_report_returns_safe_candidates_only(self):
+        safe_profile = UserProfile.objects.create(
+            user=self.user,
+            name='Safe Fix',
+            email='fix-user@example.com',
+            phone='01911269258',
+            country='Bangladesh',
+        )
+        Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Dup A',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Hospital A',
+            email='dup-a@example.com',
+            phone='01911269259',
+            country='Bangladesh',
+        )
+        Participant.objects.create(
+            user=User.objects.create_user(username='dup-user', password='password', email='dup-user@example.com'),
+            event=self.event,
+            name='Dup B',
+            degree='MBBS',
+            year_of_graduation=2021,
+            department=self.department,
+            organization='Hospital B',
+            email='dup-b@example.com',
+            phone='8801911269259',
+            country='Bangladesh',
+        )
+
+        report = build_phone_fix_report(selected_models=['user_profile', 'participant'])
+
+        self.assertEqual(report['summary']['candidate_count'], 1)
+        self.assertEqual(report['summary']['skipped_due_to_duplicate'], 1)
+        self.assertEqual(report['candidates'][0]['model_key'], 'user_profile')
+        self.assertEqual(report['candidates'][0]['id'], safe_profile.id)
+        self.assertEqual(report['candidates'][0]['normalized_phone'], '8801911269258')
+
+    def test_apply_phone_fixes_updates_only_safe_candidates(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Apply Fix',
+            email='fix-user@example.com',
+            phone='+880 1911-269258',
+            country='Bangladesh',
+        )
+
+        result = apply_phone_fixes(selected_models=['user_profile'])
+        profile.refresh_from_db()
+
+        self.assertEqual(result['summary']['candidate_count'], 1)
+        self.assertEqual(result['summary']['updated_count'], 1)
+        self.assertEqual(profile.phone, '8801911269258')
