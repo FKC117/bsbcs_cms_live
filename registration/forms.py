@@ -1,25 +1,43 @@
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Submit
+from django.contrib.auth.models import User
+from django_countries import countries
 
-from django.contrib.auth.models import User
 from .models import *
-from django import forms
-from django.contrib.auth.models import User
 from .models import UserProfile
+
+DEFAULT_COUNTRY = 'Bangladesh'
+COUNTRY_NAME_CHOICES = [('', 'Select country')] + [(name, name) for _, name in countries]
+COUNTRY_NAME_REQUIRED_CHOICES = [(name, name) for _, name in countries]
+COUNTRY_NAME_LOOKUP = {name.casefold(): name for _, name in countries}
+
+
+def normalize_country_name(value):
+    return COUNTRY_NAME_LOOKUP.get((value or '').strip().casefold(), '')
+
+
+def setup_country_choice_field(field, css_class, *, include_blank=True):
+    field.choices = COUNTRY_NAME_CHOICES if include_blank else COUNTRY_NAME_REQUIRED_CHOICES
+    field.widget = forms.Select(attrs={'class': css_class})
+
 
 class UserProfileForm(forms.ModelForm):
     email = forms.EmailField()
     password = forms.CharField(widget=forms.PasswordInput)
     name = forms.CharField(max_length=150)
     phone = forms.CharField(max_length=20)
-    country = forms.CharField(max_length=100)
+    country = forms.ChoiceField(choices=COUNTRY_NAME_CHOICES)
 
     class Meta:
         model = UserProfile
         fields = ['phone', 'country', 'name', 'email']
 
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        setup_country_choice_field(self.fields['country'], 'auth-input')
+        if not self.initial.get('country') and not getattr(self.instance, 'country', ''):
+            self.initial['country'] = DEFAULT_COUNTRY
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
@@ -32,6 +50,12 @@ class UserProfileForm(forms.ModelForm):
         if UserProfile.objects.filter(phone=phone).exists():
             raise forms.ValidationError("A user with this phone number already exists.")
         return phone
+
+    def clean_country(self):
+        country = normalize_country_name(self.cleaned_data.get('country'))
+        if not country:
+            raise forms.ValidationError('Please choose a valid country from the list.')
+        return country
 
     def save(self, commit=True):
         user = User.objects.create_user(
@@ -190,6 +214,7 @@ class RegistrationForm(forms.ModelForm):
                   'department_name', 'organization', 'country', 'BMDC_registration_number')
         widgets = {
             'organization': forms.TextInput(attrs={'autocomplete': 'off'}),
+            'country': forms.Select(attrs={'class': 'form-input'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -199,6 +224,9 @@ class RegistrationForm(forms.ModelForm):
             self.fields['department_name'].initial = self.instance.department.name
         for field in self.fields.values():
             field.widget.attrs.setdefault('class', 'form-input')
+        setup_country_choice_field(self.fields['country'], 'form-input form-select', include_blank=False)
+        if not self.initial.get('country') and not getattr(self.instance, 'country', ''):
+            self.initial['country'] = DEFAULT_COUNTRY
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
@@ -217,6 +245,12 @@ class RegistrationForm(forms.ModelForm):
         if not department_name:
             raise forms.ValidationError("Department is required.")
         return department_name[:50]
+
+    def clean_country(self):
+        country = normalize_country_name(self.cleaned_data.get('country'))
+        if not country:
+            raise forms.ValidationError('Please choose a valid country from the list.')
+        return country
 
     def save(self, commit=True):
         participant = super().save(commit=False)
@@ -282,7 +316,7 @@ class DashboardParticipantCreateForm(forms.ModelForm):
             'degree': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Degree / qualification'}),
             'year_of_graduation': forms.NumberInput(attrs={'class': 'workflow-input', 'min': 0, 'placeholder': 'Year'}),
             'organization': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Institution / organization'}),
-            'country': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Country'}),
+            'country': forms.Select(attrs={'class': 'workflow-input'}),
             'BMDC_registration_number': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Optional BMDC number'}),
         }
 
@@ -290,12 +324,21 @@ class DashboardParticipantCreateForm(forms.ModelForm):
         selected_event = kwargs.pop('selected_event', None)
         super().__init__(*args, **kwargs)
         self.fields['event'].queryset = Event.objects.order_by('-year', 'name')
+        setup_country_choice_field(self.fields['country'], 'workflow-input')
+        if not self.initial.get('country') and not getattr(self.instance, 'country', ''):
+            self.initial['country'] = DEFAULT_COUNTRY
         optional_fields = ('degree', 'year_of_graduation', 'organization', 'BMDC_registration_number')
         for field_name in optional_fields:
             self.fields[field_name].required = False
             self.fields[field_name].help_text = 'Optional for staff-added registrations.'
         if selected_event:
             self.fields['event'].initial = selected_event
+
+    def clean_country(self):
+        country = normalize_country_name(self.cleaned_data.get('country'))
+        if not country:
+            raise forms.ValidationError('Please choose a valid country from the list.')
+        return country
 
     def clean(self):
         cleaned_data = super().clean()
@@ -757,8 +800,20 @@ class ProgramPersonQuickCreateForm(forms.ModelForm):
             'institution': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Institution'}),
             'email': forms.EmailInput(attrs={'class': 'workflow-input', 'placeholder': 'Email'}),
             'phone': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Phone'}),
-            'country': forms.TextInput(attrs={'class': 'workflow-input', 'placeholder': 'Country'}),
+            'country': forms.Select(attrs={'class': 'workflow-input'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        setup_country_choice_field(self.fields['country'], 'workflow-input')
+        if not self.initial.get('country') and not getattr(self.instance, 'country', ''):
+            self.initial['country'] = DEFAULT_COUNTRY
+
+    def clean_country(self):
+        country = normalize_country_name(self.cleaned_data.get('country'))
+        if not country:
+            raise forms.ValidationError('Please choose a valid country from the list.')
+        return country
 
 
 class ProgramSessionItemBuilderForm(forms.Form):

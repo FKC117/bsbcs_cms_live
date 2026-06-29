@@ -376,7 +376,11 @@
 
                     <div class="form-group">
                         <label for="country">Country</label>
-                        <input type="text" name="country" class="auth-input" id="country" value="{{ form.country.value|default_if_none:'' }}" autocomplete="country-name" required>
+                        <select name="country" class="auth-input" id="country" autocomplete="country-name" required>
+                            {% for value, label in form.country.field.choices %}
+                                <option value="{{ value }}" {% if form.country.value|default_if_none:'' == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                         {% if form.country.errors %}
                             <div class="field-error">{{ form.country.errors }}</div>
                         {% endif %}

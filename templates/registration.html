@@ -102,7 +102,15 @@
               {% for field in form %}
                 <div class="{% if field.name == 'organization' or field.name == 'department_name' %}registration-autocomplete{% endif %}">
                   <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                  {{ field }}
+                  {% if field.name == 'country' %}
+                    <select name="{{ field.html_name }}" id="{{ field.id_for_label }}" class="form-input form-select">
+                      {% for value, label in country_choices %}
+                        <option value="{{ value }}" {% if field.value == value or not field.value and value == 'Bangladesh' %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    {{ field }}
+                  {% endif %}
                   {% if field.name == 'organization' %}
                     <div class="registration-suggestions" data-suggestion-list-for="{{ field.id_for_label }}"></div>
                   {% elif field.name == 'department_name' %}

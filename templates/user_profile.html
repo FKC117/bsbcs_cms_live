@@ -581,7 +581,11 @@
                         </div>
                         <div>
                             <label for="country" class="mb-2 block text-sm font-bold text-gray-700">Country</label>
-                            <input type="text" id="country" name="country" value="{{ user_profile.country }}" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                            <select id="country" name="country" class="w-full rounded-lg border border-gray-300 px-4 py-3">
+                                {% for value, label in country_choices %}
+                                    <option value="{{ value }}" {% if user_profile.country == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         <div class="flex flex-col gap-3 md:col-span-2 sm:flex-row">
                             <button type="submit" class="rounded-lg bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700">Save Changes</button>

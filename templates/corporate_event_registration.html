@@ -563,7 +563,11 @@
                 </div>
                 <div class="field">
                     <label for="attendee-country">Country</label>
-                    <input type="text" id="attendee-country" name="country" value="Bangladesh">
+                    <select id="attendee-country" name="country">
+                        {% for value, label in country_choices %}
+                            <option value="{{ value }}" {% if value == 'Bangladesh' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="field">
                     <label for="attendee-department">Department</label>

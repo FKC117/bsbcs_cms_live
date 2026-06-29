@@ -32,6 +32,10 @@ from .forms import (
     DashboardEventForm,
     DashboardAbstractSubmissionForm,
     DashboardParticipantCreateForm,
+    COUNTRY_NAME_CHOICES,
+    COUNTRY_NAME_REQUIRED_CHOICES,
+    DEFAULT_COUNTRY,
+    normalize_country_name,
 )
 from .models import *
 from django.contrib.auth import login, logout
@@ -438,7 +442,7 @@ def create_profile(request):
             name = (request.POST.get('name') or '').strip()
             email = (request.POST.get('email') or request.user.email or request.user.username or '').strip()
             phone = (request.POST.get('phone') or '').strip()
-            country = (request.POST.get('country') or '').strip()
+            country = normalize_country_name(request.POST.get('country'))
 
             if not name or not email or not phone or not country:
                 messages.error(request, "Please complete all profile fields.")
@@ -472,6 +476,7 @@ def create_profile(request):
         form = UserProfileForm(initial={
             'name': request.user.get_full_name() or request.user.first_name,
             'email': request.user.email or request.user.username,
+            'country': DEFAULT_COUNTRY,
         })
         return render(request, 'create_profile.html', {
             'form': form,
@@ -830,14 +835,19 @@ def user_profile(request):
         if request.POST.get('profile_action') == 'upload_presentation':
             return _save_user_presentation_upload(request, user_profile)
 
-        user_profile.name = request.POST.get('name')
-        user_profile.email = request.POST.get('email')
-        user_profile.phone = request.POST.get('phone')
-        user_profile.country = request.POST.get('country')
-        if request.FILES.get('image'):
-            user_profile.image = request.FILES['image']
-        user_profile.save()
-        message = "Profile updated successfully"
+        selected_country = normalize_country_name(request.POST.get('country'))
+        if not selected_country:
+            messages.error(request, 'Please choose a valid country from the list.')
+            message = ''
+        else:
+            user_profile.name = request.POST.get('name')
+            user_profile.email = request.POST.get('email')
+            user_profile.phone = request.POST.get('phone')
+            user_profile.country = selected_country
+            if request.FILES.get('image'):
+                user_profile.image = request.FILES['image']
+            user_profile.save()
+            message = "Profile updated successfully"
     else:
         message = ""
 
@@ -862,6 +872,7 @@ def user_profile(request):
         'presentation_assignments': presentation_assignments,
         'speaker_certificates': speaker_certificates,
         'site_settings': site_settings,
+        'country_choices': COUNTRY_NAME_CHOICES,
     })
 
 # Custom Password Change View STARTS ---------------------------------------------------------------###
@@ -1255,9 +1266,12 @@ def corporate_event_registration(request, event_id):
         name = (request.POST.get('name') or '').strip()
         email = (request.POST.get('email') or '').strip()
         phone = (request.POST.get('phone') or '').strip()
+        country = normalize_country_name(request.POST.get('country'))
 
         if not name or not email or not phone:
             messages.error(request, 'Name, email, and phone are required for manual attendee submission.')
+        elif not country:
+            messages.error(request, 'Please choose a valid country from the list.')
         elif reg_type == 'complementary' and remaining_quota < 1:
             messages.error(request, 'You have no remaining complementary spots.')
         else:
@@ -1275,7 +1289,7 @@ def corporate_event_registration(request, event_id):
                 'phone': phone,
                 'degree': (request.POST.get('degree') or '').strip(),
                 'organization': (request.POST.get('organization') or '').strip(),
-                'country': (request.POST.get('country') or '').strip(),
+                'country': country,
                 'department': (request.POST.get('department') or '').strip(),
                 'bmdc_registration_number': (request.POST.get('bmdc_registration_number') or '').strip(),
                 'designation': (request.POST.get('designation') or '').strip(),
@@ -1292,6 +1306,7 @@ def corporate_event_registration(request, event_id):
         'regular_fee': regular_fee,
         'member_fee': member_fee,
         'recent_submissions': recent_submissions,
+        'country_choices': COUNTRY_NAME_CHOICES,
     })
 
 
@@ -1513,6 +1528,7 @@ def registration(request, event_id):
         'name': user_profile.name,
         'email': request.user.email,
         'phone': user_profile.phone,
+        'country': user_profile.country or DEFAULT_COUNTRY,
     }
 
     if request.method == 'POST':
@@ -1586,6 +1602,7 @@ def registration(request, event_id):
         'member_registration_fee': member_registration_fee,
         'organization_suggestions': organization_suggestions,
         'department_suggestions': department_suggestions,
+        'country_choices': COUNTRY_NAME_REQUIRED_CHOICES,
     })
 
 
