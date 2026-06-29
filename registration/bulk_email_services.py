@@ -174,19 +174,20 @@ def prepare_bulk_email_recipients(bulk_email):
                     participant=participant,
                 ))
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_MEMBERSHIP_UNPAID:
-        from website.models import MembershipPayment
+        from website.models import Member
 
-        payments = MembershipPayment.objects.filter(
-            user_profile__member__approval_status='approved',
-        ).exclude(
-            status='completed',
+        members = Member.objects.filter(
+            approval_status='approved',
+            is_active_member=False,
         ).select_related(
             'user_profile',
             'user_profile__user',
             'membership_type',
-        ).order_by('-updated_at')
-        for payment in payments:
-            profile = payment.user_profile
+        ).order_by('-approved_at', '-updated_at')
+        for member in members:
+            profile = member.user_profile
+            if not profile:
+                continue
             added += int(upsert_bulk_email_recipient(
                 bulk_email,
                 profile.email,
