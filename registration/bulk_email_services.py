@@ -128,35 +128,45 @@ def upsert_bulk_email_recipient(bulk_email, email, name='', source_type=BulkEmai
 
 def prepare_bulk_email_recipients(bulk_email):
     added = 0
+    target_recipients = []
+
+    def queue_target(email, name='', source_type=BulkEmailRecipient.SOURCE_MANUAL, **links):
+        normalized = valid_bulk_email_or_none(email)
+        if not normalized:
+            return
+        target_recipients.append({
+            'email': normalized,
+            'name': name,
+            'source_type': source_type,
+            'links': links,
+        })
+
     if bulk_email.audience_type == BulkEmail.AUDIENCE_ACTIVE_USERS:
         users = User.objects.filter(is_active=True).exclude(email='')
         for user in users:
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 user.email,
                 name=user.get_full_name() or user.username,
                 source_type=BulkEmailRecipient.SOURCE_USER,
                 user=user,
-            ))
+            )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP:
         if not bulk_email.email_group:
             return 0
         for email in bulk_email.email_group.parsed_emails():
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 email,
                 source_type=BulkEmailRecipient.SOURCE_EMAIL_GROUP,
-            ))
+            )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_PARTICIPANTS and bulk_email.event:
         participants = Participant.objects.filter(event=bulk_email.event).exclude(email='')
         for participant in participants:
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 participant.email,
                 name=participant.name,
                 source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
                 participant=participant,
-            ))
+            )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_UNPAID and bulk_email.event:
         payments = PaymentStatus.objects.filter(
             event=bulk_email.event,
@@ -166,13 +176,12 @@ def prepare_bulk_email_recipients(bulk_email):
         for payment in payments:
             participant = payment.participant
             if participant:
-                added += int(upsert_bulk_email_recipient(
-                    bulk_email,
+                queue_target(
                     participant.email,
                     name=participant.name,
                     source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
                     participant=participant,
-                ))
+                )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_MEMBERSHIP_UNPAID:
         from website.models import Member
 
@@ -188,46 +197,64 @@ def prepare_bulk_email_recipients(bulk_email):
             profile = member.user_profile
             if not profile:
                 continue
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 profile.email,
                 name=profile.name,
                 source_type=BulkEmailRecipient.SOURCE_MEMBERSHIP,
                 user=profile.user,
                 user_profile=profile,
-            ))
+            )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS and bulk_email.event:
         abstracts = AbstractSubmission.objects.filter(event=bulk_email.event).select_related('user')
         for abstract in abstracts:
             email = abstract.user.email if abstract.user_id else ''
             name = abstract.user.get_full_name() or abstract.user.username if abstract.user_id else ''
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 email,
                 name=name,
                 source_type=BulkEmailRecipient.SOURCE_ABSTRACT,
                 abstract_submission=abstract,
                 user=abstract.user if abstract.user_id else None,
-            ))
+            )
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_CORPORATE_CONTACTS:
         accounts = CorporateAccount.objects.filter(status='approved').exclude(email='')
         for account in accounts:
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 account.email,
                 name=account.contact_name,
                 source_type=BulkEmailRecipient.SOURCE_CORPORATE,
                 corporate_account=account,
-            ))
+            )
         requests = CorporateAccountRequest.objects.filter(status='approved').exclude(email='')
         for account_request in requests:
-            added += int(upsert_bulk_email_recipient(
-                bulk_email,
+            queue_target(
                 account_request.email,
                 name=account_request.contact_name,
                 source_type=BulkEmailRecipient.SOURCE_CORPORATE,
                 corporate_request=account_request,
-            ))
+            )
+
+    target_emails = {item['email'] for item in target_recipients}
+    stale_pending_ids = list(
+        bulk_email.recipients.filter(
+            status=BulkEmailRecipient.STATUS_PENDING,
+        ).exclude(
+            source_type=BulkEmailRecipient.SOURCE_MANUAL,
+        ).exclude(
+            email__in=target_emails,
+        ).values_list('id', flat=True)
+    )
+    if stale_pending_ids:
+        BulkEmailRecipient.objects.filter(id__in=stale_pending_ids).delete()
+
+    for item in target_recipients:
+        added += int(upsert_bulk_email_recipient(
+            bulk_email,
+            item['email'],
+            name=item['name'],
+            source_type=item['source_type'],
+            **item['links'],
+        ))
 
     if bulk_email.recipient_count:
         bulk_email.status = BulkEmail.STATUS_RECIPIENTS_READY
