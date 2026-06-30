@@ -10,10 +10,11 @@ from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from django.core.mail import EmailMessage, send_mail
 from .resources import ParticipantResource, AbstractSubmissionResource, TimeSlotResource, PaymentStatusResource, RegistrationKitResource
-from .tasks import send_email_task
+from .tasks import send_email_task, send_sms_task
 from .models import EmailAuditLog
 # SchedulingResource
 from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
+from .sms import build_abstract_approval_sms, build_registration_confirmation_sms
 import os
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.crypto import get_random_string
@@ -597,6 +598,16 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
             'source': 'admin_free_confirmation',
         },
     )
+    send_sms_task.delay(
+        participant.phone,
+        build_registration_confirmation_sms(participant),
+        country=participant.country,
+        context={
+            'source': 'admin_free_confirmation',
+            'participant_id': participant.id,
+            'event_id': event.id,
+        },
+    )
 
 
 def send_corporate_attendee_approval_email(participant, event, corporate_account, payable_amount, password=None, include_password=False):
@@ -1178,6 +1189,18 @@ def send_approval_email(abstract, approval_type):
             'approval_type': approval_type,
         },
     )
+    profile = getattr(abstract.user, 'userprofile', None)
+    if profile:
+        send_sms_task.delay(
+            profile.phone,
+            build_abstract_approval_sms(abstract, approval_type),
+            country=profile.country,
+            context={
+                'source': 'abstract_approval',
+                'abstract_submission_id': abstract.id,
+                'approval_type': approval_type,
+            },
+        )
 # Abstracts approval email END-----------------------------------------------------------------------------#
 # Program Schedule admin view START------------------------------------------------------------------------------#
 from .pdf_utils import generate_schedule_pdf

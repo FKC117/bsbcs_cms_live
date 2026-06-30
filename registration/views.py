@@ -71,6 +71,7 @@ from .tasks import (
     speaker_certificate_email_log_table_ready,
     thank_you_email_log_table_ready,
     send_email_task,
+    send_sms_task,
     send_manual_participant_account_email,
     send_participant_approval_email,
     send_thank_you_email_task,
@@ -79,6 +80,7 @@ from .tasks import (
     send_pending_bulk_email_campaign,
 )
 from .pdf_utils import generate_abstract_pdf, generate_event_report_pdf, generate_invoice
+from .sms import build_abstract_submission_sms, build_registration_submission_sms
 
 
 # Payment logger (writes to payment.log via settings)
@@ -1745,6 +1747,16 @@ def send_registration_form_submission_email(participant):
             'source': 'registration_submission',
         },
     )
+    send_sms_task.delay(
+        participant.phone,
+        build_registration_submission_sms(participant),
+        country=participant.country,
+        context={
+            'source': 'registration_submission',
+            'participant_id': participant.id,
+            'event_id': participant.event_id,
+        },
+    )
 
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -1949,6 +1961,16 @@ def send_abstract_submission_email(participant):
         from_email=from_email,
         recipient_list=recipient_list,
         html_message=html_content,
+    )
+    send_sms_task.delay(
+        participant.phone,
+        build_abstract_submission_sms(participant),
+        country=participant.country,
+        context={
+            'source': 'abstract_submission',
+            'participant_id': participant.id,
+            'event_id': participant.event_id,
+        },
     )
 
 # ### Abstract Submission process, abstract submission mail Ends ----------------------------------###

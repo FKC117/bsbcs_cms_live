@@ -4,6 +4,7 @@ import os
 import tempfile
 import zipfile
 from urllib.parse import urlencode
+from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
@@ -2605,3 +2606,60 @@ class PhoneFixTests(TestCase):
         self.assertEqual(result['summary']['candidate_count'], 1)
         self.assertEqual(result['summary']['updated_count'], 1)
         self.assertEqual(profile.phone, '8801911269258')
+
+
+class SmsServiceTests(TestCase):
+    @override_settings(
+        SMS_ENABLED=True,
+        SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext',
+        SMS_GATEWAY_API_KEY='api-key',
+        SMS_GATEWAY_SECRET_KEY='secret-key',
+        SMS_GATEWAY_CALLER_ID='caller-id',
+        SMS_GATEWAY_HASH='',
+        SMS_REQUEST_TIMEOUT=15,
+    )
+    @patch('registration.sms.requests.post')
+    def test_send_sms_posts_expected_payload_for_valid_bangladesh_number(self, mock_post):
+        from registration.sms import send_sms
+
+        mock_post.return_value.ok = True
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {'Status': '0', 'Text': 'ACCEPTD', 'Message_ID': '1'}
+
+        result = send_sms('01712345678', 'Test SMS', country='Bangladesh', context={'source': 'test'})
+
+        self.assertEqual(result['status'], 'sent')
+        mock_post.assert_called_once_with(
+            'http://149.20.188.26:8124/sendtext',
+            json={
+                'apikey': 'api-key',
+                'secretkey': 'secret-key',
+                'callerID': 'caller-id',
+                'toUser': '8801712345678',
+                'messageContent': 'Test SMS',
+            },
+            headers={'Content-Type': 'application/json'},
+            timeout=15,
+        )
+
+    @override_settings(SMS_ENABLED=True, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id')
+    @patch('registration.sms.requests.post')
+    def test_send_sms_skips_invalid_or_non_bangladesh_numbers(self, mock_post):
+        from registration.sms import send_sms
+
+        result = send_sms('not-a-phone', 'Test SMS', country='Bangladesh', context={'source': 'test'})
+
+        self.assertEqual(result['status'], 'skipped')
+        self.assertEqual(result['reason'], 'ineligible_phone')
+        mock_post.assert_not_called()
+
+    @override_settings(SMS_ENABLED=False, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id')
+    @patch('registration.sms.requests.post')
+    def test_send_sms_skips_when_disabled(self, mock_post):
+        from registration.sms import send_sms
+
+        result = send_sms('01712345678', 'Test SMS', country='Bangladesh', context={'source': 'test'})
+
+        self.assertEqual(result['status'], 'skipped')
+        self.assertEqual(result['reason'], 'disabled')
+        mock_post.assert_not_called()

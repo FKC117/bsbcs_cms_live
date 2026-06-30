@@ -10,8 +10,9 @@ from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils.html import strip_tags
 from .models import Member
-from registration.tasks import send_email_task
+from registration.tasks import send_email_task, send_sms_task
 from registration.models import EmailAuditLog
+from registration.sms import build_membership_approval_sms, build_membership_rejection_sms, build_membership_submission_sms
 import logging
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,20 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
             'site_name': getattr(settings, 'SITE_NAME', 'BSBCS'),
             'support_email': getattr(settings, 'CONTACT_EMAIL', 'support@example.com'),
         }
+    elif instance.approval_status == 'pending':
+        logger.info(f"[MEMBER SIGNAL] Processing pending submission for {user_email}")
+        send_sms_task.delay(
+            instance.user_profile.phone,
+            build_membership_submission_sms(instance),
+            country=instance.user_profile.country,
+            context={
+                'source': 'membership_submission',
+                'member_id': instance.id,
+                'approval_status': instance.approval_status,
+                'user_profile_id': instance.user_profile_id,
+            },
+        )
+        return
     else:
         logger.info(f"[MEMBER SIGNAL] Member {instance} status is '{instance.approval_status}', no email to send")
         return
@@ -153,6 +168,22 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
             html_message=html_message,
             audit_category=EmailAuditLog.CATEGORY_MEMBERSHIP,
             audit_metadata={
+                'member_id': instance.id,
+                'approval_status': instance.approval_status,
+                'user_profile_id': instance.user_profile_id,
+            },
+        )
+        sms_message = (
+            build_membership_approval_sms(instance)
+            if instance.approval_status == 'approved'
+            else build_membership_rejection_sms(instance)
+        )
+        send_sms_task.delay(
+            instance.user_profile.phone,
+            sms_message,
+            country=instance.user_profile.country,
+            context={
+                'source': 'membership_status_change',
                 'member_id': instance.id,
                 'approval_status': instance.approval_status,
                 'user_profile_id': instance.user_profile_id,

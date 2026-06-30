@@ -240,6 +240,14 @@ SITE_NAME = 'BSBCS'
 SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000' if DEBUG else 'https://bsbcs.info')
 CONTACT_EMAIL = config('CONTACT_EMAIL', default='info.bsbcs@gmail.com')
 
+SMS_ENABLED = config('SMS_ENABLED', default=False, cast=bool)
+SMS_GATEWAY_URL = config('SMS_GATEWAY_URL', default='')
+SMS_GATEWAY_API_KEY = config('SMS_GATEWAY_API_KEY', default='')
+SMS_GATEWAY_SECRET_KEY = config('SMS_GATEWAY_SECRET_KEY', default='')
+SMS_GATEWAY_CALLER_ID = config('SMS_GATEWAY_CALLER_ID', default='')
+SMS_GATEWAY_HASH = config('SMS_GATEWAY_HASH', default='')
+SMS_REQUEST_TIMEOUT = config('SMS_REQUEST_TIMEOUT', default=15, cast=int)
+
 # HTTPS Settings
 #SESSION_COOKIE_SECURE = True
 #CSRF_COOKIE_SECURE = True
@@ -289,6 +297,12 @@ LOGGING = {
             'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'speaker_certificate_celery.log'),
+            'formatter': 'verbose',
+        },
+        'sms_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'sms.log'),
             'formatter': 'verbose',
         },
         'console': {
@@ -350,6 +364,11 @@ LOGGING = {
         },
         'speaker_certificate_celery': {
             'handlers': ['speaker_certificate_celery_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'sms': {
+            'handlers': ['sms_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },

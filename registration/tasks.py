@@ -15,6 +15,11 @@ from .bulk_email_services import send_pending_bulk_email_recipients
 from .email_audit import consume_email_quota_reservations, record_email_audit, release_email_quota_reservations, reserve_email_quota
 from .email_rendering import render_rich_email_html
 from .models import EmailAuditLog, Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
+from .sms import (
+    build_registration_approval_sms,
+    build_registration_confirmation_sms,
+    send_sms,
+)
 
 
 speaker_certificate_celery_logger = logging.getLogger('speaker_certificate_celery')
@@ -107,6 +112,11 @@ def _send_email(
         release_email_quota_reservations(reservation_result['reservation_key'])
 
     return result
+
+
+@shared_task(bind=True)
+def send_sms_task(self, phone, message, country='Bangladesh', context=None):
+    return send_sms(phone, message, country=country, context=context)
 
 
 @shared_task(bind=True)
@@ -419,6 +429,22 @@ def send_participant_approval_email(
                 'email_type': email_type,
             },
             audit_sent_by_user_id=sent_by_user_id,
+        )
+        sms_message = (
+            build_registration_approval_sms(participant)
+            if email_type == ParticipantEmailLog.TYPE_APPROVAL_PAYMENT
+            else build_registration_confirmation_sms(participant)
+        )
+        send_sms(
+            participant.phone,
+            sms_message,
+            country=participant.country,
+            context={
+                'source': 'participant_approval_email',
+                'participant_id': participant.id,
+                'event_id': event.id,
+                'email_type': email_type,
+            },
         )
         if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and payment_status:
             payment_status.email_sent = True
