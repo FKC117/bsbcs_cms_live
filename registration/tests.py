@@ -12,10 +12,11 @@ from django.core.exceptions import ValidationError
 from django.core import mail
 from registration.models import (
     Event, Department, Participant, PaymentStatus, ProgramDay, HallRoom, TimeSlot, ProgramPerson, ProgramPersonEmailLog, UserProfile,
+    ParticipantEmailLog,
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission, RegistrationKit,
     CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
-    BulkEmail, BulkEmailRecipient, BulkSMS, PhoneGroup, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
+    BulkEmail, BulkEmailRecipient, BulkEmailSendLog, BulkSMS, BulkSMSSendLog, PhoneGroup, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
     SpeakerOutreachTemplatePreset,
 )
 from registration.forms import DashboardParticipantCreateForm, ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
@@ -1077,6 +1078,132 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, 'Payment center')
         self.assertContains(response, 'Payment Candidate')
         self.assertContains(response, 'Member Payment Candidate')
+
+    def test_journey_lookup_renders_cross_system_timeline(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Journey Person',
+            email='journey.person@example.com',
+            phone='01700000999',
+            country='Bangladesh',
+        )
+        membership_type = MembershipType.objects.create(
+            name='Journey Annual',
+            slug='journey-annual',
+            amount='1200.00',
+            duration_years=1,
+            is_active=True,
+        )
+        Member.objects.create(
+            user_profile=profile,
+            institution='Journey Hospital',
+            position='Consultant',
+            approval_status='approved',
+            is_active_member=True,
+            membership_type=membership_type,
+        )
+        MembershipPayment.objects.create(
+            user_profile=profile,
+            membership_type=membership_type,
+            merchant_invoice_number='MEM-JOURNEY-1',
+            amount='1200.00',
+            status='completed',
+        )
+        participant = Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Journey Person',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Journey Hospital',
+            email='journey.person@example.com',
+            phone='01700000999',
+            country='Bangladesh',
+            approved=True,
+        )
+        PaymentStatus.objects.create(
+            participant=participant,
+            event=self.event,
+            merchant_invoice_number='REG-JOURNEY-1',
+            amount='500.00',
+            status='completed',
+        )
+        ParticipantEmailLog.objects.create(
+            participant=participant,
+            event=self.event,
+            email=participant.email,
+            email_type=ParticipantEmailLog.TYPE_APPROVAL_PAYMENT,
+            status=ParticipantEmailLog.STATUS_SENT,
+        )
+        bulk_email = BulkEmail.objects.create(
+            subject='Journey email blast',
+            body='Hello Journey Person',
+            audience_type=BulkEmail.AUDIENCE_MANUAL,
+            created_by=self.staff_user,
+        )
+        BulkEmailSendLog.objects.create(
+            bulk_email=bulk_email,
+            email='journey.person@example.com',
+            status=BulkEmailRecipient.STATUS_SENT,
+            message='Delivered',
+            sent_by=self.staff_user,
+        )
+        SpeakerOutreachTemplate.objects.create(
+            event=self.event,
+            subject='Invitation',
+            intro_body='Hello speaker',
+        )
+        SpeakerOutreachEmailLog.objects.create(
+            event=self.event,
+            person=self.person1,
+            email='journey.person@example.com',
+            subject='Invitation',
+            body='Hello speaker',
+            status=SpeakerOutreachEmailLog.STATUS_SENT,
+            sent_by=self.staff_user,
+        )
+        bulk_sms = BulkSMS.objects.create(
+            subject='Journey SMS alert',
+            body='Hello Journey Person',
+            audience_type=BulkSMS.AUDIENCE_MANUAL,
+            created_by=self.staff_user,
+        )
+        BulkSMSSendLog.objects.create(
+            bulk_sms=bulk_sms,
+            phone='01700000999',
+            status='sent',
+            message='Accepted by gateway',
+            provider_status='ACCEPTD',
+            sent_by=self.staff_user,
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_journey_lookup'), {'q': 'journey.person@example.com'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Journey lookup')
+        self.assertContains(response, 'Journey Person')
+        self.assertContains(response, 'Event registration application submitted')
+        self.assertContains(response, 'Event registration approved')
+        self.assertContains(response, 'Membership payment updated')
+        self.assertContains(response, 'Event payment updated')
+        self.assertContains(response, 'Bulk email send recorded')
+        self.assertContains(response, 'Speaker outreach email recorded')
+        self.assertContains(response, 'Bulk SMS send recorded')
+        self.assertContains(response, self.event.name)
+
+    def test_global_dashboard_shows_journey_lookup_shortcut(self):
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('global_dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse('dashboard_journey_lookup'))
+        self.assertContains(response, 'Journey lookup')
 
     def test_payment_center_updates_event_payment_without_emailing_invoice(self):
         participant = Participant.objects.create(

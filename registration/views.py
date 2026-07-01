@@ -7,7 +7,7 @@ from .dashboard_permissions import (
 )
 from django.contrib.auth.models import User
 from django.utils.crypto import get_random_string
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.mail import EmailMultiAlternatives
@@ -4829,7 +4829,10 @@ def dashboard_workflow_url(view_name, query_params=None):
 
 def admin_change_url(obj):
     opts = obj._meta
-    return reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[obj.pk])
+    try:
+        return reverse(f'admin:{opts.app_label}_{opts.model_name}_change', args=[obj.pk])
+    except NoReverseMatch:
+        return ''
 
 
 def dashboard_log_action(request, obj, action_flag=CHANGE, message='Updated from dashboard workflow.'):
@@ -4848,6 +4851,504 @@ def dashboard_log_action(request, obj, action_flag=CHANGE, message='Updated from
     except Exception as exc:
         logger.exception("Could not write dashboard audit log for %s: %s", obj, exc)
 
+
+
+def _build_exact_match_q(field_name, values):
+    query = Q()
+    for value in values:
+        if value not in (None, ''):
+            query |= Q(**{f'{field_name}__iexact': value})
+    return query
+
+
+def _journey_candidate_key(profile=None, user=None, email='', phone='', name=''):
+    if profile:
+        return f'profile:{profile.id}'
+    if user:
+        return f'user:{user.id}'
+    if email:
+        return f'email:{email.strip().lower()}'
+    if phone:
+        return f'phone:{phone.strip()}'
+    return f'name:{name.strip().lower()}'
+
+
+def _append_journey_item(items, when, label, title, detail='', tone='neutral', workflow_url='', admin_url=''):
+    if not when:
+        return
+    items.append({
+        'at': when,
+        'label': label,
+        'title': title,
+        'detail': detail,
+        'tone': tone,
+        'workflow_url': workflow_url,
+        'admin_url': admin_url,
+    })
+
+
+def _journey_candidates(search_query):
+    query_text = (search_query or '').strip()
+    if not query_text:
+        return []
+
+    buckets = {}
+
+    def add_candidate(profile=None, user=None, name='', email='', phone='', source=''):
+        key = _journey_candidate_key(profile=profile, user=user, email=email, phone=phone, name=name)
+        row = buckets.setdefault(key, {
+            'profile': None,
+            'user': None,
+            'name': '',
+            'emails': set(),
+            'phones': set(),
+            'sources': set(),
+        })
+        if profile and not row['profile']:
+            row['profile'] = profile
+        if user and not row['user']:
+            row['user'] = user
+        if name and not row['name']:
+            row['name'] = name
+        if email:
+            row['emails'].add(email.strip().lower())
+        if phone:
+            row['phones'].add(phone.strip())
+        if source:
+            row['sources'].add(source)
+
+    for profile in UserProfile.objects.select_related('user', 'member').filter(
+        Q(name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text)
+    )[:12]:
+        add_candidate(profile=profile, user=profile.user, name=profile.name, email=profile.email, phone=profile.phone, source='Website profile')
+
+    for participant in Participant.objects.select_related('user', 'user__userprofile').filter(
+        Q(name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text) | Q(organization__icontains=query_text)
+    ).order_by('-created_at')[:18]:
+        add_candidate(profile=getattr(participant.user, 'userprofile', None), user=participant.user, name=participant.name, email=participant.email, phone=participant.phone, source='Event participant')
+
+    for attendee in CorporateEventAttendee.objects.select_related('matched_user', 'matched_user__userprofile').filter(
+        Q(name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text) | Q(organization__icontains=query_text)
+    ).order_by('-created_at')[:18]:
+        matched_user = attendee.matched_user
+        add_candidate(profile=getattr(matched_user, 'userprofile', None) if matched_user else None, user=matched_user, name=attendee.name, email=attendee.email, phone=attendee.phone, source='Corporate attendee')
+
+    for account in CorporateAccount.objects.select_related('user', 'user__userprofile').filter(
+        Q(company_name__icontains=query_text) | Q(contact_name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text)
+    )[:12]:
+        add_candidate(profile=getattr(account.user, 'userprofile', None), user=account.user, name=account.contact_name or account.company_name, email=account.email, phone=account.phone, source='Corporate account')
+
+    for access_request in CorporateAccountRequest.objects.filter(
+        Q(company_name__icontains=query_text) | Q(contact_name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text)
+    ).order_by('-created_at')[:12]:
+        add_candidate(name=access_request.contact_name or access_request.company_name, email=access_request.email, phone=access_request.phone, source='Corporate access request')
+
+    results = []
+    for row in buckets.values():
+        profile = row['profile']
+        user = row['user'] or getattr(profile, 'user', None)
+        emails = sorted(row['emails'])
+        results.append({
+            'profile': profile,
+            'user': user,
+            'name': row['name'] or getattr(profile, 'name', '') or (emails[0] if emails else 'Unknown person'),
+            'emails': emails,
+            'phones': sorted(row['phones']),
+            'sources': sorted(row['sources']),
+        })
+
+    results.sort(key=lambda item: (item['name'].lower(), item['emails'][0] if item['emails'] else ''))
+    return results[:10]
+
+
+def _build_journey_record(candidate):
+    from website.models import Member, MembershipPayment, PendingEventIntent
+
+    profile = candidate.get('profile')
+    user = candidate.get('user') or getattr(profile, 'user', None)
+    emails = candidate.get('emails', [])
+    phones = candidate.get('phones', [])
+    user_ids = [user.id] if user else []
+    profile_ids = [profile.id] if profile else []
+
+    participant_match = Q()
+    if user_ids:
+        participant_match |= Q(user_id__in=user_ids)
+    if emails:
+        participant_match |= _build_exact_match_q('email', emails)
+    if phones:
+        participant_match |= Q(phone__in=phones)
+
+    profile_match = Q()
+    if profile_ids:
+        profile_match |= Q(user_profile_id__in=profile_ids)
+    if emails:
+        profile_match |= _build_exact_match_q('user_profile__email', emails)
+    if phones:
+        profile_match |= Q(user_profile__phone__in=phones)
+
+    corporate_match = Q()
+    if user_ids:
+        corporate_match |= Q(matched_user_id__in=user_ids)
+    if emails:
+        corporate_match |= _build_exact_match_q('email', emails)
+    if phones:
+        corporate_match |= Q(phone__in=phones)
+
+    participants = Participant.objects.none()
+    if participant_match:
+        participants = Participant.objects.filter(participant_match).select_related(
+            'event',
+            'user',
+            'corporate_attendee__registration__corporate_account',
+        ).order_by('-created_at').distinct()
+
+    members = Member.objects.none()
+    membership_payments = MembershipPayment.objects.none()
+    intents = PendingEventIntent.objects.none()
+    if profile_match:
+        members = Member.objects.filter(profile_match).select_related('user_profile', 'membership_type').order_by('-updated_at').distinct()
+        membership_payments = MembershipPayment.objects.filter(profile_match).select_related('user_profile', 'membership_type').order_by('-updated_at').distinct()
+        intents = PendingEventIntent.objects.filter(profile_match).select_related('user_profile', 'event').order_by('-updated_at').distinct()
+
+    participant_payments = PaymentStatus.objects.filter(participant__in=participants).select_related('participant', 'event').order_by('-updated_at') if participants.exists() else PaymentStatus.objects.none()
+    kits = RegistrationKit.objects.filter(payment_status__participant__in=participants).select_related('event', 'payment_status__participant').order_by('-issued_at') if participants.exists() else RegistrationKit.objects.none()
+    participant_emails = ParticipantEmailLog.objects.filter(participant__in=participants).select_related('event').order_by('-created_at') if participants.exists() else ParticipantEmailLog.objects.none()
+    thank_you_logs = ThankYouEmailLog.objects.filter(participant__in=participants).select_related('event').order_by('-created_at') if participants.exists() else ThankYouEmailLog.objects.none()
+
+    corporate_requests = CorporateAccountRequest.objects.none()
+    corporate_accounts = CorporateAccount.objects.none()
+    if emails or phones:
+        corporate_lookup = Q()
+        for email in emails:
+            corporate_lookup |= Q(email__iexact=email)
+        if phones:
+            corporate_lookup |= Q(phone__in=phones)
+        corporate_requests = CorporateAccountRequest.objects.filter(corporate_lookup).order_by('-updated_at').distinct()
+        corporate_accounts = CorporateAccount.objects.filter(corporate_lookup).select_related('user').order_by('-updated_at').distinct()
+
+    corporate_attendees = CorporateEventAttendee.objects.filter(corporate_match).select_related('registration__event', 'registration__corporate_account').order_by('-updated_at').distinct() if corporate_match else CorporateEventAttendee.objects.none()
+    corporate_payments = CorporatePayment.objects.filter(attendees__in=corporate_attendees).select_related('corporate_account', 'event').order_by('-updated_at').distinct() if corporate_attendees.exists() else CorporatePayment.objects.none()
+
+    bulk_email_logs = BulkEmailSendLog.objects.none()
+    speaker_outreach_logs = SpeakerOutreachEmailLog.objects.none()
+    speaker_certificate_logs = SpeakerCertificateEmailLog.objects.none()
+    if emails:
+        email_match = _build_exact_match_q('email', emails)
+        bulk_email_logs = BulkEmailSendLog.objects.filter(email_match).select_related('bulk_email', 'sent_by').order_by('-created_at')
+        speaker_outreach_logs = SpeakerOutreachEmailLog.objects.filter(email_match).select_related('event', 'person', 'sent_by').order_by('-created_at')
+        speaker_certificate_logs = SpeakerCertificateEmailLog.objects.filter(email_match).select_related('event', 'person', 'sent_by').order_by('-created_at')
+
+    bulk_sms_logs = BulkSMSSendLog.objects.none()
+    if phones:
+        bulk_sms_logs = BulkSMSSendLog.objects.filter(phone__in=phones).select_related('bulk_sms', 'sent_by').order_by('-created_at')
+
+    timeline = []
+    if user:
+        _append_journey_item(timeline, user.date_joined, 'Account', 'Website login account available', f'Username: {user.username}', 'info')
+
+    for member in members[:6]:
+        _append_journey_item(
+            timeline,
+            member.created_at,
+            'Membership',
+            'Membership application created',
+            f'{member.user_profile.name} - {member.get_approval_status_display()}',
+            'info',
+            dashboard_workflow_url('dashboard_membership_center', {'q': member.user_profile.email}),
+            admin_change_url(member),
+        )
+        if member.approved_at:
+            _append_journey_item(
+                timeline,
+                member.approved_at,
+                'Membership',
+                'Membership approved',
+                'Active member' if member.is_active_member else 'Approved but inactive',
+                'success',
+                dashboard_workflow_url('dashboard_membership_center', {'q': member.user_profile.email}),
+                admin_change_url(member),
+            )
+        if member.rejected_at:
+            _append_journey_item(
+                timeline,
+                member.rejected_at,
+                'Membership',
+                'Membership rejected',
+                member.rejection_reason or 'Reason not recorded.',
+                'danger',
+                dashboard_workflow_url('dashboard_membership_center', {'q': member.user_profile.email}),
+                admin_change_url(member),
+            )
+
+    for payment in membership_payments[:8]:
+        detail = f'BDT {payment.amount} - {payment.get_status_display()}'
+        if payment.membership_type:
+            detail = f'{payment.membership_type.name} - {detail}'
+        _append_journey_item(
+            timeline,
+            payment.updated_at or payment.created_at,
+            'Membership payment',
+            'Membership payment updated',
+            detail,
+            'success' if payment.status == 'completed' else 'warning',
+            dashboard_workflow_url('dashboard_payment_center', {'source': 'membership', 'q': payment.user_profile.email}),
+            admin_change_url(payment),
+        )
+
+    for intent in intents[:6]:
+        detail = f'{intent.event.name} {intent.event.year} - {intent.get_status_display()}'
+        if intent.note:
+            detail = f'{detail} - {intent.note}'
+        _append_journey_item(
+            timeline,
+            intent.completed_at or intent.updated_at or intent.created_at,
+            'Member event request',
+            'Membership event request updated',
+            detail,
+            'success' if intent.status == 'completed' else 'warning',
+            dashboard_workflow_url('dashboard_membership_center', {'panel': 'intents', 'q': intent.user_profile.email}),
+            admin_change_url(intent),
+        )
+
+    for participant in participants[:12]:
+        participant_workflow_url = dashboard_workflow_url('dashboard_participant_center', {'event': participant.event_id, 'q': participant.email})
+        participant_admin_url = admin_change_url(participant)
+        _append_journey_item(
+            timeline,
+            participant.created_at,
+            'Participant',
+            'Event registration application submitted',
+            f'{participant.event.name} {participant.event.year}',
+            'info',
+            participant_workflow_url,
+            participant_admin_url,
+        )
+
+        approval_log = participant.email_logs.filter(
+            email_type__in=[ParticipantEmailLog.TYPE_APPROVAL_PAYMENT, ParticipantEmailLog.TYPE_FREE_CONFIRMATION]
+        ).order_by('sent_at', 'created_at').first()
+        approval_at = None
+        if approval_log:
+            approval_at = approval_log.sent_at or approval_log.created_at
+        elif participant.approved and getattr(participant, 'payment_statuses', None):
+            approval_at = participant.payment_statuses.updated_at
+
+        if participant.approved:
+            _append_journey_item(
+                timeline,
+                approval_at or participant.created_at,
+                'Participant',
+                'Event registration approved',
+                f'{participant.event.name} {participant.event.year}',
+                'success',
+                participant_workflow_url,
+                participant_admin_url,
+            )
+        elif participant.denied:
+            _append_journey_item(
+                timeline,
+                approval_at or participant.created_at,
+                'Participant',
+                'Event registration denied',
+                f'{participant.event.name} {participant.event.year}',
+                'danger',
+                participant_workflow_url,
+                participant_admin_url,
+            )
+
+    for payment in participant_payments[:12]:
+        detail = f'{payment.event.name} {payment.event.year} - BDT {payment.amount or 0} - {payment.get_status_display()}'
+        _append_journey_item(
+            timeline,
+            payment.updated_at,
+            'Event payment',
+            'Event payment updated',
+            detail,
+            'success' if payment.status in PAID_PAYMENT_STATUSES else 'warning',
+            dashboard_workflow_url('dashboard_payment_center', {'source': 'event', 'event': payment.event_id, 'q': payment.participant.email}),
+            admin_change_url(payment),
+        )
+
+    for kit in kits[:6]:
+        _append_journey_item(
+            timeline,
+            kit.issued_at,
+            'Kit',
+            'Registration kit issued',
+            f'{kit.event.name} {kit.event.year}',
+            'success',
+            dashboard_workflow_url('dashboard_registration_kit_center', {'event': kit.event_id, 'q': kit.payment_status.participant.email}),
+            admin_change_url(kit),
+        )
+
+    for email_log in participant_emails[:8]:
+        detail = f'{email_log.event.name} {email_log.event.year} - {email_log.get_email_type_display()} - {email_log.get_status_display()}'
+        _append_journey_item(
+            timeline,
+            email_log.sent_at or email_log.created_at,
+            'Email',
+            'Participant email activity',
+            detail,
+            'success' if email_log.status == ParticipantEmailLog.STATUS_SENT else 'warning',
+            dashboard_workflow_url('dashboard_participant_center', {'event': email_log.event_id, 'q': email_log.email}),
+            admin_change_url(email_log),
+        )
+
+    for thank_you in thank_you_logs[:8]:
+        detail = f'{thank_you.event.name} {thank_you.event.year} - {thank_you.get_status_display()}'
+        _append_journey_item(
+            timeline,
+            thank_you.sent_at or thank_you.created_at,
+            'Thank-you email',
+            'Thank-you email activity',
+            detail,
+            'success' if thank_you.status == ThankYouEmailLog.STATUS_SENT else 'warning',
+            dashboard_workflow_url('dashboard_certificate_center', {'event': thank_you.event_id}),
+            admin_change_url(thank_you),
+        )
+
+    for email_log in bulk_email_logs[:8]:
+        detail = f'{email_log.bulk_email.subject} - {email_log.get_status_display()}'
+        if email_log.message:
+            detail = f'{detail} - {email_log.message}'
+        _append_journey_item(
+            timeline,
+            email_log.created_at,
+            'Bulk email',
+            'Bulk email send recorded',
+            detail,
+            'success' if email_log.status == BulkEmailRecipient.STATUS_SENT else 'warning' if email_log.status == BulkEmailRecipient.STATUS_SKIPPED else 'danger',
+            dashboard_workflow_url('dashboard_bulk_email_center'),
+            admin_change_url(email_log),
+        )
+
+    for outreach_log in speaker_outreach_logs[:6]:
+        detail = f'{outreach_log.event.name} {outreach_log.event.year} - {outreach_log.get_status_display()} - {outreach_log.subject}'
+        if outreach_log.message:
+            detail = f'{detail} - {outreach_log.message}'
+        _append_journey_item(
+            timeline,
+            outreach_log.sent_at or outreach_log.created_at,
+            'Speaker email',
+            'Speaker outreach email recorded',
+            detail,
+            'success' if outreach_log.status == SpeakerOutreachEmailLog.STATUS_SENT else 'warning' if outreach_log.status == SpeakerOutreachEmailLog.STATUS_SKIPPED else 'danger',
+            dashboard_workflow_url('dashboard_speaker_outreach_center', {'event': outreach_log.event_id}),
+            admin_change_url(outreach_log),
+        )
+
+    for certificate_log in speaker_certificate_logs[:6]:
+        detail = f'{certificate_log.event.name} {certificate_log.event.year} - {certificate_log.get_status_display()}'
+        if certificate_log.message:
+            detail = f'{detail} - {certificate_log.message}'
+        _append_journey_item(
+            timeline,
+            certificate_log.sent_at or certificate_log.created_at,
+            'Certificate email',
+            'Speaker certificate email recorded',
+            detail,
+            'success' if certificate_log.status == SpeakerCertificateEmailLog.STATUS_SENT else 'warning' if certificate_log.status == SpeakerCertificateEmailLog.STATUS_SKIPPED else 'danger',
+            dashboard_workflow_url('dashboard_certificate_center', {'event': certificate_log.event_id}),
+            admin_change_url(certificate_log),
+        )
+
+    for sms_log in bulk_sms_logs[:8]:
+        detail = f'{sms_log.bulk_sms.subject} - {sms_log.get_status_display()}'
+        if sms_log.provider_status:
+            detail = f'{detail} - Provider: {sms_log.provider_status}'
+        if sms_log.message:
+            detail = f'{detail} - {sms_log.message}'
+        _append_journey_item(
+            timeline,
+            sms_log.created_at,
+            'SMS',
+            'Bulk SMS send recorded',
+            detail,
+            'success' if sms_log.status == BulkSMSRecipient.STATUS_SENT else 'warning' if sms_log.status == BulkSMSRecipient.STATUS_SKIPPED else 'danger',
+            dashboard_workflow_url('dashboard_bulk_sms_center'),
+            admin_change_url(sms_log),
+        )
+
+    for access_request in corporate_requests[:6]:
+        _append_journey_item(
+            timeline,
+            access_request.updated_at or access_request.created_at,
+            'Corporate access',
+            'Corporate access request updated',
+            f'{access_request.company_name} - {access_request.get_status_display()}',
+            'success' if access_request.status == 'approved' else 'warning' if access_request.status == 'pending' else 'danger',
+            dashboard_workflow_url('dashboard_corporate_center', {'request_status': access_request.status, 'q': access_request.email}),
+            admin_change_url(access_request),
+        )
+
+    for account in corporate_accounts[:6]:
+        _append_journey_item(
+            timeline,
+            account.approved_at or account.updated_at or account.created_at,
+            'Corporate account',
+            'Corporate account updated',
+            f'{account.company_name} - {account.get_status_display()}',
+            'success' if account.status == 'approved' else 'warning',
+            dashboard_workflow_url('dashboard_corporate_center', {'q': account.email}),
+            admin_change_url(account),
+        )
+
+    for attendee in corporate_attendees[:8]:
+        detail = f'{attendee.registration.event.name} {attendee.registration.event.year} - {attendee.registration.corporate_account.company_name} - {attendee.get_review_status_display()}'
+        tone = 'success' if attendee.review_status == 'approved' else 'warning' if attendee.review_status == 'pending' else 'danger'
+        _append_journey_item(
+            timeline,
+            attendee.updated_at or attendee.created_at,
+            'Corporate attendee',
+            'Corporate attendee updated',
+            detail,
+            tone,
+            dashboard_workflow_url('dashboard_corporate_center', {'event': attendee.registration.event_id, 'q': attendee.email}),
+            admin_change_url(attendee),
+        )
+
+    for payment in corporate_payments[:8]:
+        detail = f'{payment.event.name} {payment.event.year} - {payment.corporate_account.company_name} - BDT {payment.amount} - {payment.get_status_display()}'
+        _append_journey_item(
+            timeline,
+            payment.updated_at or payment.created_at,
+            'Corporate payment',
+            'Corporate payment updated',
+            detail,
+            'success' if payment.status in ['completed', 'paid'] else 'warning',
+            dashboard_workflow_url('dashboard_payment_center', {'source': 'corporate', 'event': payment.event_id, 'q': payment.corporate_account.email}),
+            admin_change_url(payment),
+        )
+
+    timeline.sort(key=lambda item: item['at'], reverse=True)
+    member = members.first()
+    latest_participant = participants.first()
+    message_total = (
+        participant_emails.count()
+        + thank_you_logs.count()
+        + bulk_email_logs.count()
+        + speaker_outreach_logs.count()
+        + speaker_certificate_logs.count()
+        + bulk_sms_logs.count()
+    )
+    return {
+        'name': candidate['name'],
+        'emails': emails,
+        'phones': phones,
+        'sources': candidate.get('sources', []),
+        'timeline': timeline[:48],
+        'summary': {
+            'participants': participants.count(),
+            'event_payments': participant_payments.count(),
+            'membership_payments': membership_payments.count(),
+            'corporate_rows': corporate_requests.count() + corporate_accounts.count() + corporate_attendees.count(),
+            'messages': message_total,
+        },
+        'membership_status': member.get_approval_status_display() if member else 'No membership record',
+        'latest_event': f'{latest_participant.event.name} {latest_participant.event.year}' if latest_participant else 'No event registration yet',
+        'account_joined_at': user.date_joined if user else None,
+    }
 
 def build_event_metrics_chart_data(event_metrics):
     return {
@@ -10368,6 +10869,22 @@ def dashboard_participant_preview(request):
         'page_obj': page_obj,
         'participant_query_string': urlencode(query_params),
     })
+
+
+@dashboard_permission_required('dashboard')
+def dashboard_journey_lookup(request):
+    from website.models import SiteSettings
+
+    search_query = (request.GET.get('q') or '').strip()
+    records = [_build_journey_record(candidate) for candidate in _journey_candidates(search_query)] if search_query else []
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'search_query': search_query,
+        'journey_records': records,
+        'result_count': len(records),
+        'current_filters': {'q': search_query, 'event': ''},
+    }
+    return render(request, 'dashboard_journey_lookup.html', context)
 
 
 @dashboard_permission_required('staff_activity')

@@ -1,0 +1,350 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Journey Lookup</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #eef4f8; }
+        .workflow-input {
+            width: 100%;
+            border: 1px solid #d7e2ec;
+            border-radius: 0.85rem;
+            background: #fff;
+            padding: 0.82rem 0.95rem;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .workflow-input:focus {
+            border-color: #1769c2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.12);
+        }
+        .lookup-panel {
+            background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
+        }
+        .record-shell {
+            border: 1px solid #dbe5ee;
+            border-radius: 1.5rem;
+            background: #ffffff;
+            overflow: hidden;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+        }
+        .summary-grid {
+            display: grid;
+            gap: 0.75rem;
+        }
+        .summary-grid-primary {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .summary-grid-stats {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+        .summary-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.95rem;
+            background: #ffffff;
+            padding: 0.72rem 0.85rem;
+            min-height: 0;
+        }
+        .summary-label {
+            font-size: 0.65rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .summary-value {
+            margin-top: 0.28rem;
+            font-size: 0.96rem;
+            font-weight: 900;
+            line-height: 1.3;
+            color: #0f172a;
+        }
+        .summary-value-stat {
+            margin-top: 0.3rem;
+            font-size: 1.55rem;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .journey-strip {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 0.75rem;
+            scrollbar-width: thin;
+            scrollbar-color: #94a3b8 #e2e8f0;
+        }
+        .journey-strip::-webkit-scrollbar {
+            height: 10px;
+        }
+        .journey-strip::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 999px;
+        }
+        .journey-strip::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 999px;
+        }
+        .journey-row {
+            position: relative;
+            display: flex;
+            gap: 1rem;
+            width: max-content;
+            min-width: 100%;
+            padding: 0.5rem 0.25rem 0.25rem;
+        }
+        .journey-row::before {
+            content: '';
+            position: absolute;
+            left: 0.25rem;
+            right: 0.25rem;
+            top: 2.35rem;
+            height: 2px;
+            background: linear-gradient(90deg, #cbd5e1 0%, #dbeafe 30%, #cbd5e1 100%);
+        }
+        .journey-item {
+            position: relative;
+            flex: 0 0 310px;
+            padding-top: 3.2rem;
+        }
+        .journey-node {
+            position: absolute;
+            left: 1rem;
+            top: 1.4rem;
+            z-index: 1;
+            width: 1.8rem;
+            height: 1.8rem;
+            border-radius: 999px;
+            border: 4px solid #fff;
+            background: #94a3b8;
+            box-shadow: 0 0 0 2px #cbd5e1;
+        }
+        .journey-item.tone-success .journey-node { background: #16a34a; box-shadow: 0 0 0 2px #bbf7d0; }
+        .journey-item.tone-warning .journey-node { background: #d97706; box-shadow: 0 0 0 2px #fde68a; }
+        .journey-item.tone-danger .journey-node { background: #dc2626; box-shadow: 0 0 0 2px #fecaca; }
+        .journey-item.tone-info .journey-node { background: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+        .journey-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 1rem;
+            background: #ffffff;
+            padding: 1rem;
+            min-height: 220px;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+        }
+        .journey-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+        .journey-meta {
+            flex-shrink: 0;
+            text-align: right;
+            color: #64748b;
+            font-size: 0.74rem;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+        .journey-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.85rem;
+        }
+        .journey-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.28rem 0.6rem;
+            font-size: 0.7rem;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+        }
+        .channel-email { background: #ecfeff; color: #0f766e; }
+        .channel-sms { background: #eff6ff; color: #1d4ed8; }
+        .channel-payment { background: #eff6ff; color: #1e40af; }
+        .channel-membership { background: #f0fdf4; color: #166534; }
+        .channel-corporate { background: #faf5ff; color: #7c3aed; }
+        .channel-participant { background: #fff7ed; color: #c2410c; }
+        .channel-kit { background: #fefce8; color: #a16207; }
+        .channel-account { background: #f8fafc; color: #334155; }
+        .channel-other { background: #f8fafc; color: #334155; }
+        @media (max-width: 1023px) {
+            .summary-grid-primary {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .summary-grid-stats {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 767px) {
+            .summary-grid-primary,
+            .summary-grid-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .journey-item {
+                flex-basis: 270px;
+            }
+            .journey-card {
+                min-height: 210px;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#f8fbfe_0%,#eef4f8_52%,#f8fafc_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124c85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Support workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_640px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Journey lookup</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Search one person and read their full system story.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Use name, email, or phone to pull registration, membership, payment, corporate, email, and SMS history into one clean support view.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <label class="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-slate-500" for="q">Search</label>
+                <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                    <input id="q" class="workflow-input" type="search" name="q" value="{{ search_query }}" placeholder="Name, email, or phone number">
+                    <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Search</button>
+                    <a href="{% url 'dashboard_journey_lookup' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        <section class="lookup-panel rounded-[24px] border border-line p-4 shadow-quiet sm:p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Support search</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">One place for user journeys</h2>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">A clean horizontal activity strip with the person summary on top and every system event lined up underneath.</p>
+                </div>
+                {% if search_query %}
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ result_count }} journey{{ result_count|pluralize }} found</div>
+                {% else %}
+                    <div class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 ring-1 ring-slate-200">Ready to search</div>
+                {% endif %}
+            </div>
+        </section>
+
+        {% if not search_query %}
+            <section class="mt-3 rounded-2xl border border-dashed border-line bg-white/90 p-10 text-center shadow-quiet">
+                <div class="text-lg font-black text-ink">Start with a name, email, or phone number.</div>
+                <p class="mt-2 text-sm font-semibold text-slate-500">Example: <span class="font-black text-slate-700">01700000150</span> or <span class="font-black text-slate-700">member@example.com</span></p>
+            </section>
+        {% elif not journey_records %}
+            <section class="mt-3 rounded-2xl border border-dashed border-line bg-white/90 p-10 text-center shadow-quiet">
+                <div class="text-lg font-black text-ink">No matching journey found.</div>
+                <p class="mt-2 text-sm font-semibold text-slate-500">Try a different spelling, phone format, or a more exact email address.</p>
+            </section>
+        {% else %}
+            <section class="mt-3 space-y-4">
+                {% for record in journey_records %}
+                    <article class="record-shell">
+                        <div class="border-b border-line bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-4 sm:p-5">
+                            <div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] xl:items-start">
+                                <div>
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for source in record.sources %}
+                                            <span class="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-slate-200">{{ source }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    <h2 class="mt-3 text-2xl font-black text-ink">{{ record.name }}</h2>
+                                    <div class="mt-2 flex flex-wrap gap-3 text-sm font-semibold text-slate-600">
+                                        {% for email in record.emails %}<span>{{ email }}</span>{% endfor %}
+                                        {% for phone in record.phones %}<span>{{ phone }}</span>{% endfor %}
+                                    </div>
+                                    <div class="summary-grid summary-grid-primary mt-3">
+                                        <div class="summary-card">
+                                            <div class="summary-label">Membership</div>
+                                            <div class="summary-value">{{ record.membership_status }}</div>
+                                        </div>
+                                        <div class="summary-card">
+                                            <div class="summary-label">Latest event</div>
+                                            <div class="summary-value">{{ record.latest_event }}</div>
+                                        </div>
+                                        <div class="summary-card">
+                                            <div class="summary-label">Account joined</div>
+                                            <div class="summary-value">{% if record.account_joined_at %}{{ record.account_joined_at|date:"M d, Y H:i" }}{% else %}Not linked{% endif %}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="summary-grid summary-grid-stats">
+                                    <div class="summary-card"><div class="summary-label">Participants</div><div class="summary-value-stat text-ink">{{ record.summary.participants }}</div></div>
+                                    <div class="summary-card"><div class="summary-label">Event payments</div><div class="summary-value-stat text-bsbcs-blue">{{ record.summary.event_payments }}</div></div>
+                                    <div class="summary-card"><div class="summary-label">Membership payments</div><div class="summary-value-stat text-bsbcs-teal">{{ record.summary.membership_payments }}</div></div>
+                                    <div class="summary-card"><div class="summary-label">Corporate rows</div><div class="summary-value-stat text-violet-700">{{ record.summary.corporate_rows }}</div></div>
+                                    <div class="summary-card"><div class="summary-label">Comms</div><div class="summary-value-stat text-bsbcs-amber">{{ record.summary.messages }}</div></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-4 sm:p-5">
+                            <div class="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Timeline</div>
+                                    <h3 class="mt-1 text-lg font-black text-ink">System activity</h3>
+                                </div>
+                                <div class="text-xs font-semibold text-slate-500">Newest first | Horizontal scroll</div>
+                            </div>
+
+                            <div class="journey-strip">
+                                <div class="journey-row">
+                                    {% for item in record.timeline %}
+                                        {% with label=item.label|lower %}
+                                            <article class="journey-item tone-{{ item.tone|default:'neutral' }}">
+                                                <span class="journey-node"></span>
+                                                <div class="journey-card">
+                                                    <div class="journey-head">
+                                                        <div>
+                                                            <span class="journey-pill {% if 'sms' in label %}channel-sms{% elif 'email' in label %}channel-email{% elif 'payment' in label %}channel-payment{% elif 'membership' in label %}channel-membership{% elif 'corporate' in label %}channel-corporate{% elif 'participant' in label %}channel-participant{% elif 'kit' in label %}channel-kit{% elif 'account' in label %}channel-account{% else %}channel-other{% endif %}">{{ item.label }}</span>
+                                                            <h4 class="mt-2 text-lg font-black leading-6 text-ink">{{ item.title }}</h4>
+                                                        </div>
+                                                        <div class="journey-meta">
+                                                            <div>{{ item.at|date:"M d, Y" }}</div>
+                                                            <div>{{ item.at|date:"H:i" }}</div>
+                                                        </div>
+                                                    </div>
+                                                    <p class="mt-2 text-sm font-semibold leading-6 text-slate-600">{{ item.detail }}</p>
+                                                    {% if item.workflow_url or item.admin_url %}
+                                                        <div class="journey-actions">
+                                                            {% if item.workflow_url %}<a href="{{ item.workflow_url }}" class="rounded-lg border border-line bg-slate-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open workflow</a>{% endif %}
+                                                            {% if item.admin_url %}<a href="{{ item.admin_url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700 hover:border-slate-400 hover:bg-slate-100">Admin record</a>{% endif %}
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            </article>
+                                        {% endwith %}
+                                    {% empty %}
+                                        <div class="rounded-2xl border border-dashed border-line bg-white p-5 text-sm font-semibold text-slate-500">No timestamped records were found for this match yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </section>
+        {% endif %}
+    </main>
+</div>
+</body>
+</html>
