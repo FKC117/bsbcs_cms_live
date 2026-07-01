@@ -1,5 +1,6 @@
 import json
 import logging
+from math import ceil
 from typing import Iterable
 
 import requests
@@ -11,6 +12,8 @@ from .forms import DEFAULT_COUNTRY, is_sms_eligible_phone, normalize_phone_numbe
 
 logger = logging.getLogger('sms')
 SUCCESS_STATUSES = {'0', 0}
+SMS_TYPE_MASKING = 'masking'
+SMS_TYPE_NON_MASKING = 'non_masking'
 
 
 def _mask_phone(phone):
@@ -30,12 +33,56 @@ def _response_preview(value, *, limit=300):
     return text if len(text) <= limit else f"{text[:limit]}..."
 
 
-def _gateway_ready():
+def normalize_sms_type(sms_type=None):
+    return SMS_TYPE_MASKING if sms_type == SMS_TYPE_MASKING else SMS_TYPE_NON_MASKING
+
+
+def resolve_sms_caller_id(sms_type=None):
+    sms_type = normalize_sms_type(sms_type)
+    if sms_type == SMS_TYPE_MASKING:
+        return (getattr(settings, 'SMS_GATEWAY_MASKING_CALLER_ID', '') or getattr(settings, 'SMS_GATEWAY_CALLER_ID', '')).strip()
+    return (getattr(settings, 'SMS_GATEWAY_NON_MASKING_CALLER_ID', '') or getattr(settings, 'SMS_GATEWAY_CALLER_ID', '')).strip()
+
+
+def get_sms_segment_char_limit(sms_type=None):
+    sms_type = normalize_sms_type(sms_type)
+    if sms_type == SMS_TYPE_MASKING:
+        return max(int(getattr(settings, 'SMS_MASKING_CHAR_LIMIT', 100) or 100), 1)
+    return max(int(getattr(settings, 'SMS_NON_MASKING_CHAR_LIMIT', 100) or 100), 1)
+
+
+def calculate_sms_segments(message, sms_type=None):
+    normalized_message = '' if message is None else str(message)
+    character_count = len(normalized_message)
+    segment_char_limit = get_sms_segment_char_limit(sms_type)
+    segment_count = int(ceil(character_count / segment_char_limit)) if character_count else 0
+    return {
+        'sms_type': normalize_sms_type(sms_type),
+        'characters': character_count,
+        'segment_char_limit': segment_char_limit,
+        'segments': segment_count,
+    }
+
+
+def estimate_sms_units(message, recipient_count=0, sms_type=None):
+    summary = calculate_sms_segments(message, sms_type=sms_type)
+    summary['recipient_count'] = max(int(recipient_count or 0), 0)
+    summary['estimated_total_units'] = summary['segments'] * summary['recipient_count']
+    return summary
+
+
+def resolve_sms_url(*, is_bulk=False):
+    if is_bulk:
+        return (getattr(settings, 'SMS_GATEWAY_BULK_URL', '') or getattr(settings, 'SMS_GATEWAY_URL', '')).strip()
+    return (getattr(settings, 'SMS_GATEWAY_SINGLE_URL', '') or getattr(settings, 'SMS_GATEWAY_URL', '')).strip()
+
+
+def _gateway_ready(sms_type=None, *, is_bulk=False):
     return all([
-        getattr(settings, 'SMS_GATEWAY_URL', '').strip(),
+        resolve_sms_url(is_bulk=is_bulk),
         getattr(settings, 'SMS_GATEWAY_API_KEY', '').strip(),
         getattr(settings, 'SMS_GATEWAY_SECRET_KEY', '').strip(),
-        getattr(settings, 'SMS_GATEWAY_CALLER_ID', '').strip(),
+        resolve_sms_caller_id(sms_type),
     ])
 
 
@@ -50,11 +97,11 @@ def _normalize_destination(phone, country):
     return normalized, ''
 
 
-def _build_payload(to_user, message):
+def _build_payload(to_user, message, *, sms_type=None):
     payload = {
         'apikey': settings.SMS_GATEWAY_API_KEY,
         'secretkey': settings.SMS_GATEWAY_SECRET_KEY,
-        'callerID': settings.SMS_GATEWAY_CALLER_ID,
+        'callerID': resolve_sms_caller_id(sms_type),
         'toUser': to_user,
         'messageContent': message,
     }
@@ -64,7 +111,7 @@ def _build_payload(to_user, message):
     return payload
 
 
-def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None):
+def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING):
     context = context or {}
     message = (message or '').strip()
     if not message:
@@ -80,14 +127,14 @@ def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None):
         logger.info('SMS skipped because SMS is disabled. to=%s context=%s', _mask_phone(normalized_phone), context)
         return {'status': 'skipped', 'reason': 'disabled', 'phone': normalized_phone}
 
-    if not _gateway_ready():
+    if not _gateway_ready(sms_type, is_bulk=False):
         logger.warning('SMS skipped because gateway configuration is incomplete. to=%s context=%s', _mask_phone(normalized_phone), context)
         return {'status': 'skipped', 'reason': 'gateway_not_configured', 'phone': normalized_phone}
 
-    payload = _build_payload(normalized_phone, message)
+    payload = _build_payload(normalized_phone, message, sms_type=sms_type)
     try:
         response = requests.post(
-            settings.SMS_GATEWAY_URL,
+            resolve_sms_url(is_bulk=False),
             json=payload,
             headers={'Content-Type': 'application/json'},
             timeout=getattr(settings, 'SMS_REQUEST_TIMEOUT', 15),
@@ -120,7 +167,7 @@ def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None):
     }
 
 
-def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUNTRY, context=None):
+def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING):
     context = context or {}
     normalized_numbers = []
     skipped_numbers = []
@@ -144,15 +191,15 @@ def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUN
         logger.info('Bulk SMS skipped because SMS is disabled. count=%s context=%s', len(normalized_numbers), context)
         return {'status': 'skipped', 'reason': 'disabled', 'numbers': normalized_numbers, 'skipped': skipped_numbers}
 
-    if not _gateway_ready():
+    if not _gateway_ready(sms_type, is_bulk=True):
         logger.warning('Bulk SMS skipped because gateway configuration is incomplete. count=%s context=%s', len(normalized_numbers), context)
         return {'status': 'skipped', 'reason': 'gateway_not_configured', 'numbers': normalized_numbers, 'skipped': skipped_numbers}
 
     message = (message or '').strip()
-    payload = _build_payload(','.join(normalized_numbers), message)
+    payload = _build_payload(','.join(normalized_numbers), message, sms_type=sms_type)
     try:
         response = requests.post(
-            settings.SMS_GATEWAY_URL,
+            resolve_sms_url(is_bulk=True),
             json=payload,
             headers={'Content-Type': 'application/json'},
             timeout=getattr(settings, 'SMS_REQUEST_TIMEOUT', 15),

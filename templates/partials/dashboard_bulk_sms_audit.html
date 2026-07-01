@@ -1,0 +1,95 @@
+<section class="audit-mesh relative mt-3 overflow-hidden rounded-[20px] border border-[#cfe0f5] p-2.5 shadow-[0_14px_34px_rgba(15,23,42,0.08)] sm:p-3" data-bulk-sms-audit data-refresh-url="{% url 'dashboard_bulk_sms_center' %}?{% if selected_campaign %}campaign={{ selected_campaign.id }}&{% endif %}audit_start={{ audit_start }}&audit_end={{ audit_end }}&bulk_sms_partial=audit_summary">
+    <div class="audit-orb right-5 top-4 h-14 w-14 bg-cyan-200/40"></div>
+    <div class="audit-orb bottom-4 left-[45%] h-10 w-10 bg-blue-200/40"></div>
+    <div class="relative">
+        <div class="audit-card-soft rounded-[18px] border border-white/80 px-3 py-2.5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-black uppercase tracking-[0.18em] text-bsbcs-teal">SMS audit</div>
+                    <div class="mt-1 flex flex-wrap items-start gap-3">
+                        <div class="min-w-0 flex-1">
+                            <h2 class="text-[1rem] font-black tracking-tight text-slate-950 sm:text-[1.05rem]">24-hour delivery audit</h2>
+                            <p class="mt-1 text-[11px] font-semibold leading-4 text-slate-600">A tighter view of sent SMS recipients by audience for the selected date window.</p>
+                        </div>
+                        <div class="grid min-w-[128px] gap-1 rounded-2xl border border-line bg-white px-3 py-2 text-slate-900 shadow-sm">
+                            <div class="text-[9px] font-black uppercase tracking-[0.16em] text-bsbcs-blue">SMS sent</div>
+                            <div class="audit-stat-value text-2xl font-black leading-none">{{ audit_total_sent }}</div>
+                            <div class="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{{ audit_total_events }} delivery event{{ audit_total_events|pluralize }}</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black uppercase tracking-[0.14em]">
+                        <span class="rounded-full border border-blue-100 bg-white/85 px-2.5 py-1 text-bsbcs-blue">{{ audit_start }} to {{ audit_end }}</span>
+                        <span class="rounded-full border border-emerald-100 bg-white/85 px-2.5 py-1 text-emerald-700">Accepted sends only</span>
+                        <span class="rounded-full border border-slate-200 bg-white/85 px-2.5 py-1 text-slate-600">Table compare mode</span>
+                    </div>
+                </div>
+                <button type="button" data-audit-toggle aria-expanded="false" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-white/90 text-bsbcs-blue shadow-sm transition hover:border-bsbcs-blue hover:bg-blue-50">
+                    <svg data-audit-toggle-icon xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                    </svg>
+                </button>
+            </div>
+
+            <div data-audit-body class="mt-2 hidden space-y-2">
+                <form method="get" class="rounded-[16px] border border-white/80 bg-white/75 px-3 py-2.5">
+                    {% if selected_campaign %}<input type="hidden" name="campaign" value="{{ selected_campaign.id }}">{% endif %}
+                    <div class="flex flex-wrap items-end gap-2">
+                        <div class="min-w-[150px] flex-1">
+                            <label class="compact-label mb-1">From</label>
+                            <input class="workflow-input h-10 rounded-xl px-3 py-2 text-sm" type="date" name="audit_start" value="{{ audit_start }}">
+                        </div>
+                        <div class="min-w-[150px] flex-1">
+                            <label class="compact-label mb-1">To</label>
+                            <input class="workflow-input h-10 rounded-xl px-3 py-2 text-sm" type="date" name="audit_end" value="{{ audit_end }}">
+                        </div>
+                        <button class="h-10 rounded-xl bg-gradient-to-r from-bsbcs-blue to-[#124C85] px-4 text-[11px] font-black text-white shadow-lg shadow-blue-200/60 transition hover:translate-y-[-1px] hover:from-[#1559a8] hover:to-bsbcs-navy" type="submit">Apply</button>
+                    </div>
+                </form>
+
+                <div class="grid gap-2 xl:grid-cols-2">
+                    <div class="audit-card-soft overflow-hidden rounded-[18px] border border-white/80">
+                        <table class="min-w-full border-collapse text-left">
+                            <thead class="bg-slate-950/[0.04]">
+                                <tr>
+                                    <th class="px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Category</th>
+                                    <th class="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Recipients</th>
+                                    <th class="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for card in audit_category_cards|slice:":5" %}
+                                    <tr class="border-t border-slate-100 bg-white/85">
+                                        <td class="px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700">{{ card.label }}</td>
+                                        <td class="audit-stat-value px-3 py-2 text-right text-base font-black text-slate-950">{{ card.count }}</td>
+                                        <td class="px-3 py-2 text-right text-[11px] font-bold text-slate-500">{% if audit_total_sent %}{% widthratio card.count audit_total_sent 100 %}%{% else %}0%{% endif %}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="audit-card-soft overflow-hidden rounded-[18px] border border-white/80">
+                        <table class="min-w-full border-collapse text-left">
+                            <thead class="bg-slate-950/[0.04]">
+                                <tr>
+                                    <th class="px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Category</th>
+                                    <th class="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Recipients</th>
+                                    <th class="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for card in audit_category_cards|slice:"5:" %}
+                                    <tr class="border-t border-slate-100 bg-white/85">
+                                        <td class="px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-700">{{ card.label }}</td>
+                                        <td class="audit-stat-value px-3 py-2 text-right text-base font-black text-slate-950">{{ card.count }}</td>
+                                        <td class="px-3 py-2 text-right text-[11px] font-bold text-slate-500">{% if audit_total_sent %}{% widthratio card.count audit_total_sent 100 %}%{% else %}0%{% endif %}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

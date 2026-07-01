@@ -2207,6 +2207,177 @@ class EmailGroup(models.Model):
         return emails
 # Group Email Model Ends Here-----------------------------------------------------------------------------#
 
+
+# Bulk SMS Model Starts here----------------------------------------------------------------------------#
+
+class BulkSMS(models.Model):
+    STATUS_DRAFT = 'draft'
+    STATUS_RECIPIENTS_READY = 'recipients_ready'
+    STATUS_SENDING = 'sending'
+    STATUS_SENT = 'sent'
+    STATUS_PARTIAL = 'partial'
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_RECIPIENTS_READY, 'Recipients ready'),
+        (STATUS_SENDING, 'Sending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_PARTIAL, 'Partially sent'),
+    ]
+
+    AUDIENCE_MANUAL = 'manual'
+    AUDIENCE_ACTIVE_USERS = 'active_users'
+    AUDIENCE_PHONE_GROUP = 'phone_group'
+    AUDIENCE_EVENT_PARTICIPANTS = 'event_participants'
+    AUDIENCE_EVENT_UNPAID = 'event_unpaid'
+    AUDIENCE_MEMBERSHIP_UNPAID = 'membership_unpaid'
+    AUDIENCE_ABSTRACT_SUBMITTERS = 'abstract_submitters'
+    AUDIENCE_CORPORATE_CONTACTS = 'corporate_contacts'
+
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_MANUAL, 'Manual recipients'),
+        (AUDIENCE_ACTIVE_USERS, 'Active website users'),
+        (AUDIENCE_PHONE_GROUP, 'Phone group'),
+        (AUDIENCE_EVENT_PARTICIPANTS, 'Event participants'),
+        (AUDIENCE_EVENT_UNPAID, 'Approved event participants with pending payment'),
+        (AUDIENCE_MEMBERSHIP_UNPAID, 'Approved members with pending membership payment'),
+        (AUDIENCE_ABSTRACT_SUBMITTERS, 'Abstract submitters'),
+        (AUDIENCE_CORPORATE_CONTACTS, 'Corporate contacts'),
+    ]
+
+    SMS_TYPE_MASKING = 'masking'
+    SMS_TYPE_NON_MASKING = 'non_masking'
+
+    SMS_TYPE_CHOICES = [
+        (SMS_TYPE_MASKING, 'Masking'),
+        (SMS_TYPE_NON_MASKING, 'Non-masking'),
+    ]
+
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    sms_type = models.CharField(max_length=20, choices=SMS_TYPE_CHOICES, default=SMS_TYPE_NON_MASKING)
+    audience_type = models.CharField(max_length=40, choices=AUDIENCE_CHOICES, default=AUDIENCE_MANUAL)
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_campaigns')
+    phone_group = models.ForeignKey('PhoneGroup', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_campaigns')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='created_bulk_sms_campaigns')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.subject
+
+    @property
+    def recipient_count(self):
+        return self.recipients.count()
+
+    @property
+    def sent_count(self):
+        return self.recipients.filter(status=BulkSMSRecipient.STATUS_SENT).count()
+
+    @property
+    def failed_count(self):
+        return self.recipients.filter(status=BulkSMSRecipient.STATUS_FAILED).count()
+
+    @property
+    def pending_count(self):
+        return self.recipients.filter(status=BulkSMSRecipient.STATUS_PENDING).count()
+
+
+class BulkSMSRecipient(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    SOURCE_MANUAL = 'manual'
+    SOURCE_USER = 'user'
+    SOURCE_PHONE_GROUP = 'phone_group'
+    SOURCE_PARTICIPANT = 'participant'
+    SOURCE_MEMBERSHIP = 'membership'
+    SOURCE_ABSTRACT = 'abstract'
+    SOURCE_CORPORATE = 'corporate'
+
+    SOURCE_CHOICES = [
+        (SOURCE_MANUAL, 'Manual'),
+        (SOURCE_USER, 'Website user'),
+        (SOURCE_PHONE_GROUP, 'Phone group'),
+        (SOURCE_PARTICIPANT, 'Participant'),
+        (SOURCE_MEMBERSHIP, 'Membership'),
+        (SOURCE_ABSTRACT, 'Abstract submitter'),
+        (SOURCE_CORPORATE, 'Corporate'),
+    ]
+
+    bulk_sms = models.ForeignKey(BulkSMS, on_delete=models.CASCADE, related_name='recipients')
+    phone = models.CharField(max_length=20)
+    raw_phone = models.CharField(max_length=50, blank=True, null=True)
+    country = models.CharField(max_length=120, blank=True, null=True)
+    name = models.CharField(max_length=180, blank=True, null=True)
+    source_type = models.CharField(max_length=30, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    user_profile = models.ForeignKey('UserProfile', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    participant = models.ForeignKey('Participant', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    abstract_submission = models.ForeignKey('AbstractSubmission', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    corporate_account = models.ForeignKey('CorporateAccount', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    corporate_request = models.ForeignKey('CorporateAccountRequest', on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_recipients')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    error_message = models.TextField(blank=True, null=True)
+    provider_message_id = models.CharField(max_length=120, blank=True, null=True)
+    sent_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.phone} - {self.bulk_sms.subject}"
+
+    class Meta:
+        ordering = ['phone']
+        unique_together = ('bulk_sms', 'phone')
+
+
+class BulkSMSSendLog(models.Model):
+    bulk_sms = models.ForeignKey(BulkSMS, on_delete=models.CASCADE, related_name='send_logs')
+    recipient = models.ForeignKey(BulkSMSRecipient, on_delete=models.SET_NULL, blank=True, null=True, related_name='send_logs')
+    phone = models.CharField(max_length=20)
+    status = models.CharField(max_length=20, choices=BulkSMSRecipient.STATUS_CHOICES)
+    message = models.TextField(blank=True, null=True)
+    provider_status = models.CharField(max_length=50, blank=True, null=True)
+    provider_message_id = models.CharField(max_length=120, blank=True, null=True)
+    sent_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='bulk_sms_send_logs')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.bulk_sms.subject} - {self.phone} - {self.status}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class PhoneGroup(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    phone_numbers = models.TextField(help_text="One phone number per line or comma-separated list")
+
+    def __str__(self):
+        return self.name
+
+    def parsed_phone_numbers(self):
+        seen = set()
+        phones = []
+        for raw_phone in self.phone_numbers.replace('\n', ',').split(','):
+            phone = raw_phone.strip()
+            if phone and phone not in seen:
+                phones.append(phone)
+                seen.add(phone)
+        return phones
+
+# Bulk SMS Model Ends here------------------------------------------------------------------------------#
+
 # Pending Payment Reminder models starts here-------------------------------------------------------------#
 
 class PendingPaymentReminder(models.Model):

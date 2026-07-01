@@ -134,6 +134,18 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.change_emailgroup",
         ),
     },
+    "bulk_sms": {
+        "read": (
+            "registration.view_bulksms",
+            "registration.view_phonegroup",
+        ),
+        "write": (
+            "registration.add_bulksms",
+            "registration.change_bulksms",
+            "registration.add_phonegroup",
+            "registration.change_phonegroup",
+        ),
+    },
     "staff_activity": {
         "read": ("admin.view_logentry",),
         "write": (),

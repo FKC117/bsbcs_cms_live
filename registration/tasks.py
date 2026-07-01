@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .bulk_email_services import send_pending_bulk_email_recipients
+from .bulk_sms_services import send_pending_bulk_sms_recipients
 from .email_audit import consume_email_quota_reservations, record_email_audit, release_email_quota_reservations, reserve_email_quota
 from .email_rendering import render_rich_email_html
 from .models import EmailAuditLog, Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
@@ -115,8 +116,13 @@ def _send_email(
 
 
 @shared_task(bind=True)
-def send_sms_task(self, phone, message, country='Bangladesh', context=None):
-    return send_sms(phone, message, country=country, context=context)
+def send_sms_task(self, phone, message, country='Bangladesh', context=None, sms_type='non_masking'):
+    return send_sms(phone, message, country=country, context=context, sms_type=sms_type)
+
+
+@shared_task(bind=True)
+def send_pending_bulk_sms_campaign(self, bulk_sms_id, sent_by_user_id=None, recipient_statuses=None):
+    return send_pending_bulk_sms_recipients(bulk_sms_id, sent_by_user_id=sent_by_user_id, recipient_statuses=recipient_statuses)
 
 
 @shared_task(bind=True)

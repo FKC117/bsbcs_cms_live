@@ -1,0 +1,707 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bulk SMS Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        body.modal-open { overflow: hidden; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .workflow-textarea { min-height: 8rem; }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .workflow-modal[hidden] { display: none; }
+        .audit-orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(0);
+            opacity: 0.6;
+        }
+        .audit-mesh {
+            background:
+                radial-gradient(circle at top left, rgba(23, 105, 194, 0.18), transparent 30%),
+                radial-gradient(circle at bottom right, rgba(17, 148, 136, 0.18), transparent 32%),
+                linear-gradient(135deg, #f8fbff 0%, #eef6ff 48%, #f7fcfb 100%);
+        }
+        .audit-card-soft {
+            background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.92) 100%);
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+        }
+        .audit-stat-value {
+            font-variant-numeric: tabular-nums;
+        }
+        .audit-compact-input {
+            height: 2.75rem;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.92);
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">SMS campaign workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_440px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Bulk SMS Center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Create, prepare, send, and audit bulk SMS campaigns here.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">This workflow stays inside the dashboard. Django admin remains available for deep maintenance, but staff should not need it for ordinary bulk SMS work.</p>
+            </div>
+            <div class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid grid-cols-2 gap-2">
+                    <a href="#create-campaign" class="rounded-xl bg-bsbcs-blue px-4 py-3 text-center text-sm font-black text-white hover:bg-bsbcs-navy">New campaign</a>
+                    <button type="button" data-scroll-target="active-campaign" class="rounded-xl border border-line px-4 py-3 text-center text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Work selected</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Campaigns</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.campaigns }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Drafts</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.drafts }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Ready</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.ready }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Recipients</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.recipients }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Pending</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.pending }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Sent</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.sent }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Failed</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-pink">{{ totals.failed }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Groups</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.groups }}</div>
+            </div>
+        </section>
+
+        {% include "partials/dashboard_bulk_sms_audit.html" %}
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-4">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Workflow</div>
+                <h2 class="mt-1 text-xl font-black text-ink">Run a bulk SMS campaign in four steps</h2>
+            </div>
+            <div class="grid gap-3 lg:grid-cols-4">
+                {% for step in workflow_steps %}
+                    <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+                        <div class="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-sm font-black text-bsbcs-blue ring-1 ring-blue-100">{{ forloop.counter }}</div>
+                        <h3 class="mt-3 text-base font-black text-ink">{{ step.label }}</h3>
+                        <p class="mt-2 text-sm font-semibold leading-5 text-slate-600">{{ step.detail }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px]" style="align-items: start;">
+            <form id="create-campaign" method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet" data-compose-campaign-panel>
+                {% csrf_token %}
+                <input type="hidden" name="bulk_sms_action" value="create_campaign">
+                <input type="hidden" name="scroll_to" value="active-campaign">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Step 1</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Compose campaign</h2>
+                        <p class="mt-1 max-w-2xl text-sm font-semibold leading-5 text-slate-600">Write the SMS once, then choose who receives it. Recipient rows are generated after the campaign is saved.</p>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase text-bsbcs-blue ring-1 ring-blue-100">New campaign</span>
+                </div>
+                <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div class="rounded-2xl border border-line bg-slate-50/70 p-4">
+                        <label class="compact-label">Campaign title</label>
+                        <input class="workflow-input" type="text" name="subject" placeholder="Campaign title" required>
+
+                        <label class="compact-label mt-4">Message body</label>
+                        <textarea class="workflow-textarea min-h-[220px]" name="body" placeholder="Write the message that will be sent to every prepared recipient." required data-sms-body></textarea>
+
+                        <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                            <div class="rounded-xl border border-line bg-white px-3 py-3">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Characters</div>
+                                <div class="mt-1 text-lg font-black text-ink" data-sms-character-count>0</div>
+                            </div>
+                            <div class="rounded-xl border border-line bg-white px-3 py-3">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Limit per SMS</div>
+                                <div class="mt-1 text-lg font-black text-bsbcs-blue" data-sms-character-limit>{{ sms_type_limits.non_masking }}</div>
+                            </div>
+                            <div class="rounded-xl border border-line bg-white px-3 py-3">
+                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Estimated units</div>
+                                <div class="mt-1 text-lg font-black text-bsbcs-teal" data-sms-segment-count>0</div>
+                            </div>
+                        </div>
+
+                        <p class="mt-3 text-xs font-semibold text-slate-500">This SMS body is sent to every valid Bangladesh number prepared for the campaign.</p>
+                        <div class="mt-3 rounded-xl border border-line bg-white px-3 py-3 text-xs font-semibold text-slate-600">
+                            SMS rules: only Bangladesh mobile numbers in normalized form are eligible. Invalid or non-Bangladesh numbers are skipped automatically.
+                        </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div class="text-sm font-black text-ink">Audience and delivery</div>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Choose one source. Event and group fields appear only when that source needs them.</p>
+
+                        <label class="compact-label mt-4">SMS type</label>
+                        <select class="workflow-select" name="sms_type" data-sms-type required>
+                            {% for value, label in sms_type_choices %}
+                                <option value="{{ value }}" {% if value == default_sms_type %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-600">Masking and non-masking can have different sender IDs and per-SMS character limits.</p>
+
+                        <label class="compact-label mt-4">Audience source</label>
+                        <select class="workflow-select" name="audience_type" data-audience-source required>
+                            {% for value, label in audience_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <div class="mt-3" data-event-field>
+                            <label class="compact-label">Related event</label>
+                            <select class="workflow-select" name="event">
+                                <option value="">No event</option>
+                                {% for event in events %}
+                                    <option value="{{ event.id }}">{{ event.name }} {{ event.year }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">Used for event participants, event unpaid participants, and abstract submitters.</p>
+                        </div>
+
+                        <div class="mt-3" data-group-field>
+                            <label class="compact-label">Reusable phone group</label>
+                            <select class="workflow-select" name="phone_group">
+                                <option value="">No group</option>
+                                {% for group in groups %}
+                                    <option value="{{ group.id }}">{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">Used when the audience source is Phone group.</p>
+                        </div>
+
+                        <button class="mt-4 w-full rounded-xl bg-bsbcs-blue px-4 py-3 text-sm font-black text-white hover:bg-bsbcs-navy" type="submit">Create Campaign</button>
+                    </div>
+                </div>
+            </form>
+
+            <section id="create-group" class="rounded-2xl border border-line bg-white p-4 shadow-quiet overflow-hidden flex flex-col" data-create-group-panel>
+                <div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Reusable recipient list</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Phone groups</h2>
+                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Saved lists for campaigns that use the Phone group audience.</p>
+                        </div>
+                        <button type="button" data-open-group-modal data-clear-group class="rounded-lg bg-bsbcs-blue px-3 py-2 text-xs font-black text-white hover:bg-bsbcs-navy">New Group</button>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-black text-ink">Saved groups</h3>
+                    <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black uppercase text-bsbcs-blue">{{ groups|length }} groups</span>
+                </div>
+                <div class="mt-2 flex-1 min-h-0 space-y-2 overflow-auto pr-1" data-create-group-scroll>
+                    {% for group in groups %}
+                        <button type="button" class="group w-full rounded-xl border border-line bg-slate-50 px-3 py-2.5 text-left hover:border-bsbcs-blue hover:bg-white" data-edit-group data-group-id="{{ group.id }}">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="truncate font-black text-ink">{{ group.name }}</div>
+                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ group.parsed_phone_numbers|length }} stored numbers</div>
+                                </div>
+                                <span class="rounded-lg border border-line bg-white px-2.5 py-1 text-[11px] font-black text-bsbcs-blue group-hover:border-bsbcs-blue">Edit</span>
+                            </div>
+                        </button>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue">No reusable phone group created yet.</div>
+                    {% endfor %}
+                </div>
+
+            </section>
+        </section>
+
+        <section id="active-campaign" class="mt-3 grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]" style="align-items: start;">
+            <div data-campaign-list-panel class="rounded-2xl border border-line bg-white p-4 shadow-quiet overflow-hidden flex flex-col">
+                <div class="mb-3">
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Campaign list</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Select campaign</h2>
+                </div>
+                <div data-campaign-list-scroll class="flex-1 min-h-0 space-y-2 overflow-auto pr-1">
+                    {% for campaign in campaigns %}
+                        <a href="?{% if bulk_sms_filter_query %}{{ bulk_sms_filter_query }}&{% endif %}campaign={{ campaign.id }}&scroll_to=active-campaign" class="block rounded-xl border p-3 {% if selected_campaign and selected_campaign.id == campaign.id %}border-bsbcs-blue bg-blue-50{% else %}border-line bg-slate-50/70 hover:border-bsbcs-blue hover:bg-white{% endif %}">
+                            <div class="font-black text-ink">{{ campaign.subject }}</div>
+                            <div class="mt-1 text-xs font-semibold text-slate-500">{{ campaign.get_audience_type_display }}</div>
+                            <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-black uppercase">
+                                <span class="rounded-full bg-white px-2 py-1 text-bsbcs-blue ring-1 ring-line">{{ campaign.get_status_display }}</span>
+                                <span class="rounded-full bg-white px-2 py-1 text-slate-600 ring-1 ring-line">{{ campaign.recipient_count }} recipients</span>
+                            </div>
+                        </a>
+                    {% empty %}
+                        <div class="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-bsbcs-blue">No campaign created yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% include "partials/dashboard_bulk_sms_active_campaign.html" %}
+        </section>
+    </main>
+</div>
+
+<div class="workflow-modal fixed inset-0 z-50 grid place-items-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm" data-group-modal hidden>
+    <form method="post" class="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/40 bg-white shadow-lift">
+        {% csrf_token %}
+        <input type="hidden" name="bulk_sms_action" value="create_group">
+        <input type="hidden" name="group_id" data-group-id value="">
+        <div class="flex items-start justify-between gap-4 bg-gradient-to-r from-bsbcs-navy to-bsbcs-teal px-6 py-5 text-white">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Reusable recipient list</div>
+                <h2 class="mt-1 text-2xl font-black !text-white" data-group-title>Phone group editor</h2>
+                <p class="mt-1 text-sm font-semibold leading-5 !text-white/75">Create or update a reusable phone list for bulk SMS campaigns.</p>
+            </div>
+            <button type="button" data-close-group-modal class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/25 bg-white/10 text-2xl font-semibold text-white hover:bg-white/20" aria-label="Close group editor">&times;</button>
+        </div>
+        <div class="p-6">
+            <div class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <div class="text-sm font-black text-ink">Group editor</div>
+                <span class="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase text-bsbcs-blue ring-1 ring-blue-100" data-group-mode>New</span>
+            </div>
+            <label class="compact-label">Group name</label>
+            <input class="workflow-input" type="text" name="name" data-group-name required>
+            <label class="compact-label mt-4">Phone numbers</label>
+            <textarea class="workflow-textarea min-h-[180px]" name="phone_numbers" data-group-phones placeholder="One phone number per line or comma-separated" required></textarea>
+            <div class="mt-4 rounded-2xl border border-line bg-slate-50 p-3">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="text-sm font-black text-ink">Saved phone list</h3>
+                    <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-black uppercase text-slate-600 ring-1 ring-line" data-group-phone-count>0 numbers</span>
+                </div>
+                <div class="mt-2 max-h-40 space-y-1 overflow-auto text-sm font-semibold text-slate-600" data-group-phone-preview>
+                    Add phone numbers to preview the list here.
+                </div>
+            </div>
+            <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <button type="button" data-close-group-modal class="rounded-xl border border-line px-5 py-3 text-sm font-black text-slate-700 hover:border-slate-400 hover:bg-slate-50">Cancel</button>
+                <button class="rounded-xl bg-bsbcs-blue px-6 py-3 text-sm font-black text-white hover:bg-bsbcs-navy" type="submit" data-group-submit>Save Group</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script id="phone-group-data" type="application/json">{{ group_data_json|safe }}</script>
+{{ sms_type_limits|json_script:"sms-type-limits-data" }}
+<script>
+    (function () {
+        const activeCampaignHash = '#active-campaign';
+        const navEntry = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+        const isReloadNavigation = navEntry ? navEntry.type === 'reload' : performance.navigation && performance.navigation.type === 1;
+
+        if ('scrollRestoration' in history && isReloadNavigation) {
+            history.scrollRestoration = 'manual';
+        }
+
+        if (isReloadNavigation && window.location.hash === activeCampaignHash) {
+            history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            window.scrollTo(0, 0);
+        }
+
+        const currentUrl = new URL(window.location.href);
+        const scrollTargetId = currentUrl.searchParams.get('scroll_to');
+        if (scrollTargetId) {
+            window.requestAnimationFrame(() => {
+                const scrollTarget = document.getElementById(scrollTargetId);
+                if (scrollTarget) {
+                    scrollTarget.scrollIntoView({ behavior: 'auto', block: 'start' });
+                }
+                currentUrl.searchParams.delete('scroll_to');
+                history.replaceState(null, document.title, currentUrl.pathname + (currentUrl.search ? currentUrl.search : ''));
+            });
+        }
+
+        let activeCampaignRefreshTimer = null;
+
+        async function refreshAuditSummary() {
+            const auditSection = document.querySelector('[data-bulk-sms-audit]');
+            if (!auditSection) return;
+            const refreshUrl = auditSection.getAttribute('data-refresh-url');
+            if (!refreshUrl) return;
+            const auditExpanded = auditSection.querySelector('[data-audit-toggle]')?.getAttribute('aria-expanded') === 'true';
+            try {
+                const response = await fetch(refreshUrl, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) return;
+                const html = await response.text();
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = html.trim();
+                const nextAuditSection = wrapper.querySelector('[data-bulk-sms-audit]');
+                if (!nextAuditSection) return;
+                auditSection.replaceWith(nextAuditSection);
+                initAuditToggle(auditExpanded);
+            } catch (error) {
+                console.warn('Bulk SMS audit refresh failed.', error);
+            }
+        }
+
+        async function refreshActiveCampaignPanel() {
+            const panel = document.querySelector('[data-bulk-sms-active-campaign]');
+            if (!panel) return;
+            const refreshUrl = panel.getAttribute('data-refresh-url');
+            const isSending = panel.getAttribute('data-is-sending') === 'true';
+            if (!refreshUrl || !isSending) {
+                if (activeCampaignRefreshTimer) {
+                    clearInterval(activeCampaignRefreshTimer);
+                    activeCampaignRefreshTimer = null;
+                }
+                return;
+            }
+            try {
+                const response = await fetch(refreshUrl, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) return;
+                const html = await response.text();
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = html.trim();
+                const nextPanel = wrapper.querySelector('[data-bulk-sms-active-campaign]');
+                if (!nextPanel) return;
+                panel.replaceWith(nextPanel);
+                syncCampaignListHeight();
+                await refreshAuditSummary();
+            } catch (error) {
+                console.warn('Bulk SMS panel refresh failed.', error);
+            }
+        }
+
+        function syncCreateGroupHeight() {
+            const composePanel = document.querySelector('[data-compose-campaign-panel]');
+            const groupPanel = document.querySelector('[data-create-group-panel]');
+            const groupScroll = document.querySelector('[data-create-group-scroll]');
+            if (!composePanel || !groupPanel || !groupScroll) return;
+            if (window.innerWidth < 1280) {
+                groupPanel.style.height = '';
+                groupScroll.style.maxHeight = '';
+                return;
+            }
+            const composeHeight = composePanel.getBoundingClientRect().height;
+            if (!composeHeight) return;
+            groupPanel.style.height = `${Math.ceil(composeHeight)}px`;
+            groupScroll.style.maxHeight = `${Math.max(0, Math.floor(composeHeight - (groupScroll.offsetTop - groupPanel.offsetTop) - 16))}px`;
+        }
+        function syncCampaignListHeight() {
+            const listPanel = document.querySelector('[data-campaign-list-panel]');
+            const activePanel = document.querySelector('[data-bulk-sms-active-campaign]');
+            const listScroll = document.querySelector('[data-campaign-list-scroll]');
+            if (!listPanel || !activePanel || !listScroll) return;
+            if (window.innerWidth < 1280) {
+                listPanel.style.height = '';
+                listScroll.style.maxHeight = '';
+                return;
+            }
+            const activeHeight = activePanel.getBoundingClientRect().height;
+            if (!activeHeight) return;
+            listPanel.style.height = `${Math.ceil(activeHeight)}px`;
+            listScroll.style.maxHeight = `${Math.max(0, Math.floor(activeHeight - (listScroll.offsetTop - listPanel.offsetTop) - 16))}px`;
+        }
+        function startActiveCampaignRefresh() {
+            if (activeCampaignRefreshTimer) {
+                clearInterval(activeCampaignRefreshTimer);
+                activeCampaignRefreshTimer = null;
+            }
+            const panel = document.querySelector('[data-bulk-sms-active-campaign]');
+            if (!panel || panel.getAttribute('data-is-sending') !== 'true') return;
+            activeCampaignRefreshTimer = setInterval(refreshActiveCampaignPanel, 8000);
+        }
+
+        startActiveCampaignRefresh();
+        syncCreateGroupHeight();
+        syncCampaignListHeight();
+        window.addEventListener('resize', syncCreateGroupHeight);
+        window.addEventListener('resize', syncCampaignListHeight);
+
+        document.querySelectorAll('[data-scroll-target]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const targetId = button.getAttribute('data-scroll-target');
+                const target = targetId ? document.getElementById(targetId) : null;
+                if (!target) return;
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+
+        function initAuditToggle(expanded = false) {
+            const auditToggle = document.querySelector('[data-audit-toggle]');
+            const auditBody = document.querySelector('[data-audit-body]');
+            const auditToggleIcon = document.querySelector('[data-audit-toggle-icon]');
+            if (!auditToggle || !auditBody) return;
+
+            function setAuditExpanded(nextExpanded) {
+                auditToggle.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+                auditBody.classList.toggle('hidden', !nextExpanded);
+                if (auditToggleIcon) auditToggleIcon.classList.toggle('rotate-180', nextExpanded);
+            }
+
+            setAuditExpanded(expanded);
+            auditToggle.onclick = () => {
+                const nextExpanded = auditToggle.getAttribute('aria-expanded') !== 'true';
+                setAuditExpanded(nextExpanded);
+            };
+        }
+
+        initAuditToggle(false);
+
+        const smsTypeSelect = document.querySelector('[data-sms-type]');
+        const smsBodyField = document.querySelector('[data-sms-body]');
+        const smsCharacterCount = document.querySelector('[data-sms-character-count]');
+        const smsCharacterLimit = document.querySelector('[data-sms-character-limit]');
+        const smsSegmentCount = document.querySelector('[data-sms-segment-count]');
+        let smsTypeLimits = {};
+
+        try {
+            const smsTypeLimitsElement = document.getElementById('sms-type-limits-data');
+            smsTypeLimits = smsTypeLimitsElement ? JSON.parse(smsTypeLimitsElement.textContent || '{}') : {};
+        } catch (error) {
+            smsTypeLimits = {};
+        }
+
+        function updateSmsMetrics() {
+            const smsType = smsTypeSelect?.value || 'non_masking';
+            const body = smsBodyField?.value || '';
+            const characterCount = body.length;
+            const characterLimit = Number(smsTypeLimits[smsType] || 100);
+            const segmentCount = characterCount ? Math.ceil(characterCount / characterLimit) : 0;
+            if (smsCharacterCount) smsCharacterCount.textContent = String(characterCount);
+            if (smsCharacterLimit) smsCharacterLimit.textContent = String(characterLimit);
+            if (smsSegmentCount) smsSegmentCount.textContent = String(segmentCount);
+        }
+
+        smsTypeSelect?.addEventListener('change', updateSmsMetrics);
+        smsBodyField?.addEventListener('input', updateSmsMetrics);
+        updateSmsMetrics();
+
+        const audienceSelect = document.querySelector('[data-audience-source]');
+        const eventField = document.querySelector('[data-event-field]');
+        const groupField = document.querySelector('[data-group-field]');
+        const eventSelect = eventField ? eventField.querySelector('select') : null;
+        const groupSelect = groupField ? groupField.querySelector('select') : null;
+        const eventAudiences = new Set(['event_participants', 'event_unpaid', 'abstract_submitters']);
+
+        function updateAudienceFields() {
+            if (!audienceSelect) return;
+            const value = audienceSelect.value;
+            const needsEvent = eventAudiences.has(value);
+            const needsGroup = value === 'phone_group';
+            if (eventField) eventField.hidden = !needsEvent;
+            if (groupField) groupField.hidden = !needsGroup;
+            if (eventSelect) {
+                eventSelect.disabled = !needsEvent;
+                if (!needsEvent) eventSelect.value = '';
+            }
+            if (groupSelect) {
+                groupSelect.disabled = !needsGroup;
+                if (!needsGroup) groupSelect.value = '';
+            }
+            syncCreateGroupHeight();
+        }
+
+        if (audienceSelect) {
+            audienceSelect.addEventListener('change', updateAudienceFields);
+            updateAudienceFields();
+        }
+
+        const groupId = document.querySelector('[data-group-id]');
+        const groupName = document.querySelector('[data-group-name]');
+        const groupPhones = document.querySelector('[data-group-phones]');
+        const groupSubmit = document.querySelector('[data-group-submit]');
+        const groupMode = document.querySelector('[data-group-mode]');
+        const groupTitle = document.querySelector('[data-group-title]');
+        const groupModal = document.querySelector('[data-group-modal]');
+        const clearGroupButton = document.querySelector('[data-clear-group]');
+        const closeGroupButtons = document.querySelectorAll('[data-close-group-modal]');
+        const groupPhonePreview = document.querySelector('[data-group-phone-preview]');
+        const groupPhoneCount = document.querySelector('[data-group-phone-count]');
+        let groupData = [];
+
+        try {
+            const groupDataElement = document.getElementById('phone-group-data');
+            groupData = groupDataElement ? JSON.parse(groupDataElement.textContent || '[]') : [];
+        } catch (error) {
+            groupData = [];
+        }
+
+        function parseGroupPhones(rawValue) {
+            const seen = new Set();
+            return (rawValue || '')
+                .replace(/\n/g, ',')
+                .split(',')
+                .map((phone) => phone.trim())
+                .filter((phone) => {
+                    const key = phone.toLowerCase();
+                    if (!phone || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+        }
+
+        function updateGroupPhonePreview() {
+            if (!groupPhonePreview || !groupPhoneCount) return;
+            const phones = parseGroupPhones(groupPhones?.value || '');
+            groupPhoneCount.textContent = `${phones.length} number${phones.length === 1 ? '' : 's'}`;
+            if (!phones.length) {
+                groupPhonePreview.textContent = 'Add phone numbers to preview the list here.';
+                return;
+            }
+            groupPhonePreview.textContent = '';
+            phones.forEach((phone) => {
+                const row = document.createElement('div');
+                row.className = 'rounded-lg bg-white px-3 py-2 ring-1 ring-line';
+                row.textContent = phone;
+                groupPhonePreview.appendChild(row);
+            });
+        }
+
+        function setGroupForm(id, name, phones) {
+            if (groupId) groupId.value = id || '';
+            if (groupName) groupName.value = name || '';
+            if (groupPhones) groupPhones.value = phones || '';
+            if (groupSubmit) groupSubmit.textContent = id ? 'Update Group' : 'Save Group';
+            if (groupMode) groupMode.textContent = id ? 'Editing' : 'New';
+            if (groupTitle) groupTitle.textContent = id ? 'Edit phone group' : 'Create phone group';
+            updateGroupPhonePreview();
+        }
+
+        function openGroupModal() {
+            if (!groupModal) return;
+            groupModal.hidden = false;
+            document.body.classList.add('modal-open');
+            setTimeout(() => groupName?.focus(), 0);
+        }
+
+        function closeGroupModal() {
+            if (!groupModal) return;
+            groupModal.hidden = true;
+            document.body.classList.remove('modal-open');
+        }
+
+        document.querySelectorAll('[data-edit-group]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const id = Number(button.getAttribute('data-group-id'));
+                const group = groupData.find((item) => Number(item.id) === id);
+                setGroupForm(id, group?.name || '', group?.phone_numbers || '');
+                openGroupModal();
+            });
+        });
+
+        clearGroupButton?.addEventListener('click', () => {
+            setGroupForm('', '', '');
+            openGroupModal();
+        });
+
+        groupPhones?.addEventListener('input', updateGroupPhonePreview);
+
+        closeGroupButtons.forEach((button) => {
+            button.addEventListener('click', closeGroupModal);
+        });
+
+        groupModal?.addEventListener('click', (event) => {
+            if (event.target === groupModal) closeGroupModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && groupModal && !groupModal.hidden) {
+                closeGroupModal();
+            }
+        });
+    })();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

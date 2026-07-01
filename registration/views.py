@@ -65,6 +65,11 @@ from .bulk_email_services import (
     sync_bulk_email_status,
     upsert_bulk_email_recipient,
 )
+from .bulk_sms_services import (
+    prepare_bulk_sms_recipients,
+    sync_bulk_sms_status,
+    upsert_bulk_sms_recipient,
+)
 from .email_audit import get_email_quota_snapshot, plan_bulk_email_send
 from .tasks import (
     participant_email_log_table_ready,
@@ -78,9 +83,17 @@ from .tasks import (
     send_speaker_certificate_email,
     send_speaker_outreach_email_task,
     send_pending_bulk_email_campaign,
+    send_pending_bulk_sms_campaign,
 )
 from .pdf_utils import generate_abstract_pdf, generate_event_report_pdf, generate_invoice
-from .sms import build_abstract_submission_sms, build_registration_submission_sms
+from .sms import (
+    build_abstract_submission_sms,
+    build_registration_submission_sms,
+    estimate_sms_units,
+    get_sms_segment_char_limit,
+    resolve_sms_caller_id,
+    resolve_sms_url,
+)
 
 
 # Payment logger (writes to payment.log via settings)
@@ -4664,7 +4677,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import render
 from django.db import transaction
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 from django.urls import reverse
 from registration.models import (
     Participant,
@@ -9789,6 +9802,334 @@ def dashboard_bulk_email_center(request):
     if request.GET.get('bulk_email_partial') == 'audit_summary':
         return render(request, 'partials/dashboard_bulk_email_audit.html', context)
     return render(request, 'dashboard_bulk_email_center.html', context)
+
+
+@dashboard_permission_required('bulk_sms')
+def dashboard_bulk_sms_center(request):
+    from website.models import SiteSettings
+
+    today = timezone.localdate()
+    audit_start_raw = (request.GET.get('audit_start') or '').strip()
+    audit_end_raw = (request.GET.get('audit_end') or '').strip()
+
+    def _parse_audit_date(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return fallback
+
+    audit_start_date = _parse_audit_date(audit_start_raw, today)
+    audit_end_date = _parse_audit_date(audit_end_raw, audit_start_date)
+    if audit_end_date < audit_start_date:
+        audit_end_date = audit_start_date
+
+    audit_start_at = timezone.make_aware(datetime.combine(audit_start_date, datetime.min.time()))
+    audit_end_at = timezone.make_aware(datetime.combine(audit_end_date + timedelta(days=1), datetime.min.time()))
+    audit_queryset = BulkSMSSendLog.objects.filter(
+        status=BulkSMSRecipient.STATUS_SENT,
+        created_at__gte=audit_start_at,
+        created_at__lt=audit_end_at,
+    ).select_related('bulk_sms')
+    audit_totals_by_category = {
+        row['bulk_sms__audience_type']: row['total'] or 0
+        for row in audit_queryset.values('bulk_sms__audience_type').annotate(total=Count('id'))
+    }
+    audit_total_sent = audit_queryset.count()
+    audit_total_events = audit_queryset.values('bulk_sms_id').distinct().count()
+    audit_category_cards = [
+        {
+            'key': value,
+            'label': label,
+            'count': audit_totals_by_category.get(value, 0),
+        }
+        for value, label in BulkSMS.AUDIENCE_CHOICES
+    ]
+
+    if request.method == 'POST':
+        action = request.POST.get('bulk_sms_action')
+        selected_campaign_id = request.POST.get('campaign_id')
+        redirect_campaign_id = selected_campaign_id
+
+        if action == 'create_campaign':
+            subject = (request.POST.get('subject') or '').strip()
+            body = (request.POST.get('body') or '').strip()
+            audience_type = request.POST.get('audience_type') or BulkSMS.AUDIENCE_MANUAL
+            sms_type = request.POST.get('sms_type') or BulkSMS.SMS_TYPE_NON_MASKING
+            event = Event.objects.filter(pk=request.POST.get('event') or None).first()
+            phone_group = PhoneGroup.objects.filter(pk=request.POST.get('phone_group') or None).first()
+
+            if not subject or not body:
+                messages.error(request, 'Campaign title and message body are required.')
+            elif sms_type not in dict(BulkSMS.SMS_TYPE_CHOICES):
+                messages.error(request, 'Choose a valid SMS type.')
+            elif audience_type not in dict(BulkSMS.AUDIENCE_CHOICES):
+                messages.error(request, 'Choose a valid audience.')
+            elif audience_type in [
+                BulkSMS.AUDIENCE_EVENT_PARTICIPANTS,
+                BulkSMS.AUDIENCE_EVENT_UNPAID,
+                BulkSMS.AUDIENCE_ABSTRACT_SUBMITTERS,
+            ] and not event:
+                messages.error(request, 'Choose an event for this audience.')
+            elif audience_type == BulkSMS.AUDIENCE_PHONE_GROUP and not phone_group:
+                messages.error(request, 'Choose a phone group for this audience.')
+            else:
+                campaign = BulkSMS.objects.create(
+                    subject=subject,
+                    body=body,
+                    sms_type=sms_type,
+                    audience_type=audience_type,
+                    event=event if audience_type in [
+                        BulkSMS.AUDIENCE_EVENT_PARTICIPANTS,
+                        BulkSMS.AUDIENCE_EVENT_UNPAID,
+                        BulkSMS.AUDIENCE_ABSTRACT_SUBMITTERS,
+                    ] else None,
+                    phone_group=phone_group if audience_type == BulkSMS.AUDIENCE_PHONE_GROUP else None,
+                    created_by=request.user,
+                )
+                redirect_campaign_id = campaign.id
+                dashboard_log_action(request, campaign, ADDITION, 'Created bulk SMS campaign from Bulk SMS Center dashboard.')
+                messages.success(request, f'Campaign "{campaign.subject}" created. Prepare recipients when ready.')
+
+        elif action == 'create_group':
+            group_id = request.POST.get('group_id')
+            name = (request.POST.get('name') or '').strip()
+            phone_numbers = (request.POST.get('phone_numbers') or '').strip()
+            if not name or not phone_numbers:
+                messages.error(request, 'Group name and phone numbers are required.')
+            else:
+                group = PhoneGroup.objects.filter(pk=group_id).first() if group_id else None
+                if group:
+                    group.name = name
+                    group.phone_numbers = phone_numbers
+                    group.save(update_fields=['name', 'phone_numbers'])
+                    dashboard_log_action(request, group, CHANGE, 'Updated phone group from Bulk SMS Center dashboard.')
+                    messages.success(request, f'Phone group "{group.name}" updated.')
+                else:
+                    group, created = PhoneGroup.objects.get_or_create(
+                        name=name,
+                        defaults={'phone_numbers': phone_numbers},
+                    )
+                    if created:
+                        dashboard_log_action(request, group, ADDITION, 'Created phone group from Bulk SMS Center dashboard.')
+                        messages.success(request, f'Phone group "{group.name}" created.')
+                    else:
+                        group.phone_numbers = phone_numbers
+                        group.save(update_fields=['phone_numbers'])
+                        dashboard_log_action(request, group, CHANGE, 'Updated phone group from Bulk SMS Center dashboard.')
+                        messages.success(request, f'Phone group "{group.name}" updated.')
+
+        elif action == 'prepare_recipients':
+            campaign = BulkSMS.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                added = prepare_bulk_sms_recipients(campaign)
+                dashboard_log_action(request, campaign, CHANGE, f'Prepared bulk SMS recipients from dashboard. New recipients added: {added}.')
+                messages.success(request, f'Recipient preparation complete. New recipients added: {added}.')
+
+        elif action == 'add_manual_recipient':
+            campaign = BulkSMS.objects.filter(pk=selected_campaign_id).first()
+            phone = (request.POST.get('recipient_phone') or '').strip()
+            name = (request.POST.get('recipient_name') or '').strip()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            elif upsert_bulk_sms_recipient(
+                campaign,
+                phone,
+                country=DEFAULT_COUNTRY,
+                raw_phone=phone,
+                name=name,
+                source_type=BulkSMSRecipient.SOURCE_MANUAL,
+            ):
+                campaign.status = BulkSMS.STATUS_RECIPIENTS_READY
+                campaign.save(update_fields=['status', 'updated_at'])
+                dashboard_log_action(request, campaign, CHANGE, f'Added manual SMS recipient {phone} from Bulk SMS Center dashboard.')
+                messages.success(request, f'{phone} added to this campaign.')
+            else:
+                messages.warning(request, 'That phone number is invalid, not Bangladesh-eligible, or already exists in this campaign.')
+
+        elif action == 'send_pending':
+            campaign = BulkSMS.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                if not campaign.recipients.filter(status=BulkSMSRecipient.STATUS_PENDING).exists():
+                    prepare_bulk_sms_recipients(campaign)
+                pending_recipients = campaign.recipients.filter(status=BulkSMSRecipient.STATUS_PENDING).order_by('id')
+                if not pending_recipients.exists():
+                    messages.warning(request, 'No pending recipients are available for this campaign.')
+                else:
+                    campaign.status = BulkSMS.STATUS_SENDING
+                    campaign.save(update_fields=['status', 'updated_at'])
+                    task = send_pending_bulk_sms_campaign.delay(campaign.id, request.user.id)
+                    chunk_size = max(int(getattr(settings, 'BULK_SMS_CHUNK_SIZE', 100) or 100), 1)
+                    dashboard_log_action(request, campaign, CHANGE, f'Queued bulk SMS send from dashboard for pending recipients in chunked processing.')
+                    messages.success(request, f'Bulk SMS send queued. The worker will process recipients in chunks of {chunk_size}. Task ID: {task.id}.')
+
+        elif action == 'send_failed':
+            campaign = BulkSMS.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            else:
+                failed_recipients = campaign.recipients.filter(status=BulkSMSRecipient.STATUS_FAILED).order_by('id')
+                if not failed_recipients.exists():
+                    messages.warning(request, 'No failed recipients are available for retry in this campaign.')
+                else:
+                    campaign.status = BulkSMS.STATUS_SENDING
+                    campaign.save(update_fields=['status', 'updated_at'])
+                    task = send_pending_bulk_sms_campaign.delay(
+                        campaign.id,
+                        request.user.id,
+                        [BulkSMSRecipient.STATUS_FAILED],
+                    )
+                    chunk_size = max(int(getattr(settings, 'BULK_SMS_CHUNK_SIZE', 100) or 100), 1)
+                    dashboard_log_action(request, campaign, CHANGE, 'Queued bulk SMS retry from dashboard for failed recipients in chunked processing.')
+                    messages.success(request, f'Bulk SMS retry queued. The worker will process recipients in chunks of {chunk_size}. Task ID: {task.id}.')
+
+        elif action == 'stop_campaign':
+            campaign = BulkSMS.objects.filter(pk=selected_campaign_id).first()
+            if not campaign:
+                messages.error(request, 'Choose a valid campaign first.')
+            elif campaign.status != BulkSMS.STATUS_SENDING:
+                messages.warning(request, 'This campaign is not currently sending.')
+            else:
+                new_status = BulkSMS.STATUS_PARTIAL if campaign.recipients.filter(
+                    status__in=[BulkSMSRecipient.STATUS_SENT, BulkSMSRecipient.STATUS_FAILED]
+                ).exists() else BulkSMS.STATUS_RECIPIENTS_READY
+                campaign.status = new_status
+                campaign.save(update_fields=['status', 'updated_at'])
+                dashboard_log_action(request, campaign, CHANGE, 'Stopped bulk SMS campaign from dashboard. Pending recipients were kept for later retry.')
+                messages.success(request, 'Campaign stop requested. The worker will halt after the current SMS batch and keep pending recipients for later resend.')
+
+        url = reverse('dashboard_bulk_sms_center')
+        query = {}
+        if redirect_campaign_id:
+            query['campaign'] = redirect_campaign_id
+        scroll_to = (request.POST.get('scroll_to') or '').strip()
+        if scroll_to:
+            query['scroll_to'] = scroll_to
+        if query:
+            url = f'{url}?{urlencode(query)}'
+        return redirect(url)
+
+    campaigns = BulkSMS.objects.select_related('event', 'phone_group', 'created_by').order_by('-created_at')
+    selected_campaign = campaigns.filter(pk=request.GET.get('campaign')).first()
+    if not selected_campaign:
+        selected_campaign = campaigns.first()
+    recent_logs = BulkSMSSendLog.objects.select_related('bulk_sms', 'recipient', 'sent_by').order_by('-created_at')[:12]
+    groups = PhoneGroup.objects.order_by('name')
+    events = Event.objects.order_by('-year', 'name')
+    selected_recipients_qs = selected_campaign.recipients.order_by('status', 'phone') if selected_campaign else BulkSMSRecipient.objects.none()
+    selected_logs_qs = selected_campaign.send_logs.select_related('recipient', 'sent_by').order_by('-created_at') if selected_campaign else BulkSMSSendLog.objects.none()
+    selected_recipients_page = Paginator(selected_recipients_qs, 15).get_page(request.GET.get('recipient_page'))
+    selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
+    selected_campaign_progress = None
+    if selected_campaign:
+        progress_snapshot = sync_bulk_sms_status(selected_campaign)
+        recipient_total = progress_snapshot['total']
+        sent_total = progress_snapshot['sent']
+        failed_total = progress_snapshot['failed']
+        pending_total = progress_snapshot['pending']
+        completed_total = sent_total + failed_total
+        sms_unit_summary = estimate_sms_units(selected_campaign.body, recipient_total, sms_type=selected_campaign.sms_type)
+        selected_campaign_progress = {
+            'total': recipient_total,
+            'sent': sent_total,
+            'failed': failed_total,
+            'pending': pending_total,
+            'completed': completed_total,
+            'percent': int((completed_total / recipient_total) * 100) if recipient_total else 0,
+            'is_sending': progress_snapshot['status'] == BulkSMS.STATUS_SENDING,
+            'characters': sms_unit_summary['characters'],
+            'segment_char_limit': sms_unit_summary['segment_char_limit'],
+            'segments_per_recipient': sms_unit_summary['segments'],
+            'estimated_total_units': sms_unit_summary['estimated_total_units'],
+            'sms_caller_id': resolve_sms_caller_id(selected_campaign.sms_type),
+            'gateway_mode_label': 'Bulk endpoint',
+            'gateway_url': resolve_sms_url(is_bulk=True),
+        }
+    base_query = {}
+    filter_query = {
+        'audit_start': audit_start_date.isoformat(),
+        'audit_end': audit_end_date.isoformat(),
+    }
+    if selected_campaign:
+        base_query['campaign'] = selected_campaign.id
+    base_query.update(filter_query)
+    group_data_json = json.dumps([
+        {
+            'id': group.id,
+            'name': group.name,
+            'phone_numbers': group.phone_numbers,
+            'phones': group.parsed_phone_numbers(),
+        }
+        for group in groups
+    ]).replace('</', '<\/')
+    totals = {
+        'campaigns': BulkSMS.objects.count(),
+        'drafts': BulkSMS.objects.filter(status=BulkSMS.STATUS_DRAFT).count(),
+        'ready': BulkSMS.objects.filter(status=BulkSMS.STATUS_RECIPIENTS_READY).count(),
+        'recipients': BulkSMSRecipient.objects.count(),
+        'pending': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_PENDING).count(),
+        'sent': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_SENT).count(),
+        'failed': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_FAILED).count(),
+        'groups': PhoneGroup.objects.count(),
+    }
+    workflow_steps = [
+        {
+            'label': 'Create campaign',
+            'detail': 'Write the SMS campaign title, message body, and choose an audience source.',
+        },
+        {
+            'label': 'Prepare recipients',
+            'detail': 'Select a campaign and generate Bangladesh-eligible phone rows from the chosen audience.',
+        },
+        {
+            'label': 'Review recipient rows',
+            'detail': 'Check who will receive this campaign. Invalid or failed rows stay visible for correction.',
+        },
+        {
+            'label': 'Send and audit',
+            'detail': 'Send pending recipients in bulk batches and inspect per-recipient delivery logs here.',
+        },
+    ]
+    context = {
+        'site_settings': SiteSettings.objects.first(),
+        'campaigns': campaigns,
+        'selected_campaign': selected_campaign,
+        'selected_campaign_progress': selected_campaign_progress,
+        'selected_recipients': selected_recipients_page,
+        'selected_logs': selected_logs_page,
+        'recipient_page_obj': selected_recipients_page,
+        'log_page_obj': selected_logs_page,
+        'bulk_sms_base_query': urlencode(base_query),
+        'recent_logs': recent_logs,
+        'groups': groups,
+        'group_data_json': group_data_json,
+        'events': events,
+        'audience_choices': BulkSMS.AUDIENCE_CHOICES,
+        'sms_type_choices': BulkSMS.SMS_TYPE_CHOICES,
+        'totals': totals,
+        'workflow_steps': workflow_steps,
+        'audit_start': audit_start_date.isoformat(),
+        'audit_end': audit_end_date.isoformat(),
+        'audit_total_sent': audit_total_sent,
+        'audit_total_events': audit_total_events,
+        'audit_category_cards': audit_category_cards,
+        'bulk_sms_filter_query': urlencode(filter_query),
+        'default_sms_type': BulkSMS.SMS_TYPE_NON_MASKING,
+        'sms_type_limits': {
+            BulkSMS.SMS_TYPE_MASKING: get_sms_segment_char_limit(BulkSMS.SMS_TYPE_MASKING),
+            BulkSMS.SMS_TYPE_NON_MASKING: get_sms_segment_char_limit(BulkSMS.SMS_TYPE_NON_MASKING),
+        },
+    }
+    if request.GET.get('bulk_sms_partial') == 'active_campaign':
+        return render(request, 'partials/dashboard_bulk_sms_active_campaign.html', context)
+    if request.GET.get('bulk_sms_partial') == 'audit_summary':
+        return render(request, 'partials/dashboard_bulk_sms_audit.html', context)
+    return render(request, 'dashboard_bulk_sms_center.html', context)
 
 
 @dashboard_permission_required('payments')

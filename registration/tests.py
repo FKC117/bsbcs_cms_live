@@ -15,13 +15,14 @@ from registration.models import (
     ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot,
     ProgramItemFaculty, AbstractSubmission, RegistrationKit,
     CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
-    BulkEmail, BulkEmailRecipient, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
+    BulkEmail, BulkEmailRecipient, BulkSMS, PhoneGroup, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
     SpeakerOutreachTemplatePreset,
 )
 from registration.forms import DashboardParticipantCreateForm, ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
 from registration.phone_audit import apply_phone_fixes, build_phone_fix_report, run_phone_audit
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
+from registration.sms import calculate_sms_segments
 from registration.tasks import send_speaker_outreach_email_task
 from registration.pdf_utils import generate_invoice
 from registration.qr_utils import registration_qr_payload
@@ -319,6 +320,25 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, "Bulk email center")
         self.assertContains(response, "Create campaign")
         self.assertContains(response, "Prepare recipients")
+        self.assertContains(response, "Review recipient rows")
+
+    def test_bulk_sms_center_renders_dashboard_workflow(self):
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        PhoneGroup.objects.create(name='Team A', phone_numbers='8801911269258')
+        BulkSMS.objects.create(
+            subject='SMS launch',
+            body='Test SMS body',
+            audience_type=BulkSMS.AUDIENCE_MANUAL,
+            created_by=self.staff_user,
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse('dashboard_bulk_sms_center'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bulk SMS Center")
+        self.assertContains(response, "Create Campaign")
+        self.assertContains(response, "Phone groups")
         self.assertContains(response, "Review recipient rows")
 
     def test_render_rich_email_html_supports_button_and_link_markup(self):
@@ -2629,9 +2649,11 @@ class SmsServiceTests(TestCase):
     @override_settings(
         SMS_ENABLED=True,
         SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext',
+        SMS_GATEWAY_SINGLE_URL='http://149.20.188.26:8124/sendtext',
         SMS_GATEWAY_API_KEY='api-key',
         SMS_GATEWAY_SECRET_KEY='secret-key',
         SMS_GATEWAY_CALLER_ID='caller-id',
+        SMS_GATEWAY_NON_MASKING_CALLER_ID='caller-id',
         SMS_GATEWAY_HASH='',
         SMS_REQUEST_TIMEOUT=15,
     )
@@ -2659,7 +2681,7 @@ class SmsServiceTests(TestCase):
             timeout=15,
         )
 
-    @override_settings(SMS_ENABLED=True, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id')
+    @override_settings(SMS_ENABLED=True, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_SINGLE_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id', SMS_GATEWAY_NON_MASKING_CALLER_ID='caller-id')
     @patch('registration.sms.requests.post')
     def test_send_sms_skips_invalid_or_non_bangladesh_numbers(self, mock_post):
         from registration.sms import send_sms
@@ -2670,7 +2692,7 @@ class SmsServiceTests(TestCase):
         self.assertEqual(result['reason'], 'ineligible_phone')
         mock_post.assert_not_called()
 
-    @override_settings(SMS_ENABLED=False, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id')
+    @override_settings(SMS_ENABLED=False, SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_SINGLE_URL='http://149.20.188.26:8124/sendtext', SMS_GATEWAY_API_KEY='api-key', SMS_GATEWAY_SECRET_KEY='secret-key', SMS_GATEWAY_CALLER_ID='caller-id', SMS_GATEWAY_NON_MASKING_CALLER_ID='caller-id')
     @patch('registration.sms.requests.post')
     def test_send_sms_skips_when_disabled(self, mock_post):
         from registration.sms import send_sms
@@ -2680,3 +2702,59 @@ class SmsServiceTests(TestCase):
         self.assertEqual(result['status'], 'skipped')
         self.assertEqual(result['reason'], 'disabled')
         mock_post.assert_not_called()
+
+    @override_settings(
+        SMS_ENABLED=True,
+        SMS_GATEWAY_URL='http://149.20.188.26:8124/sendtext',
+        SMS_GATEWAY_SINGLE_URL='http://149.20.188.26:8124/sendtext',
+        SMS_GATEWAY_API_KEY='api-key',
+        SMS_GATEWAY_SECRET_KEY='secret-key',
+        SMS_GATEWAY_CALLER_ID='default-caller',
+        SMS_GATEWAY_MASKING_CALLER_ID='masking-caller',
+        SMS_GATEWAY_NON_MASKING_CALLER_ID='non-masking-caller',
+    )
+    @patch('registration.sms.requests.post')
+    def test_send_sms_uses_masking_caller_id_when_selected(self, mock_post):
+        from registration.sms import send_sms
+
+        mock_post.return_value.ok = True
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {'Status': '0', 'Text': 'ACCEPTD', 'Message_ID': '1'}
+
+        result = send_sms('01712345678', 'Masked SMS', country='Bangladesh', sms_type='masking')
+
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(mock_post.call_args.kwargs['json']['callerID'], 'masking-caller')
+
+    @override_settings(SMS_MASKING_CHAR_LIMIT=100, SMS_NON_MASKING_CHAR_LIMIT=100)
+    def test_calculate_sms_segments_counts_additional_sms_after_limit(self):
+        summary = calculate_sms_segments('A' * 100, sms_type='non_masking')
+        self.assertEqual(summary['segments'], 1)
+        self.assertEqual(summary['segment_char_limit'], 100)
+
+        summary = calculate_sms_segments('A' * 101, sms_type='non_masking')
+        self.assertEqual(summary['segments'], 2)
+        self.assertEqual(summary['characters'], 101)
+
+    @override_settings(
+        SMS_ENABLED=True,
+        SMS_GATEWAY_URL='http://smpp.revesms.com:7788/sendtext',
+        SMS_GATEWAY_SINGLE_URL='http://smpp.revesms.com:7788/sendtext',
+        SMS_GATEWAY_BULK_URL='http://smpp.revesms.com:7788/send',
+        SMS_GATEWAY_API_KEY='api-key',
+        SMS_GATEWAY_SECRET_KEY='secret-key',
+        SMS_GATEWAY_CALLER_ID='caller-id',
+        SMS_GATEWAY_NON_MASKING_CALLER_ID='caller-id',
+    )
+    @patch('registration.sms.requests.post')
+    def test_send_bulk_sms_uses_bulk_gateway_url(self, mock_post):
+        from registration.sms import send_bulk_sms
+
+        mock_post.return_value.ok = True
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {'Status': '0', 'Text': 'ACCEPTD', 'Message_ID': '1,2'}
+
+        result = send_bulk_sms(['01712345678', '01712345679'], 'Bulk SMS', country='Bangladesh')
+
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(mock_post.call_args.args[0], 'http://smpp.revesms.com:7788/send')
