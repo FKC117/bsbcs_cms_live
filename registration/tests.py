@@ -1205,6 +1205,39 @@ class ProgramSessionBuilderTests(TestCase):
         self.assertContains(response, reverse('dashboard_journey_lookup'))
         self.assertContains(response, 'Journey lookup')
 
+    def test_journey_lookup_search_returns_candidate_picker_results(self):
+        profile = UserProfile.objects.create(
+            user=self.user,
+            name='Journey Person',
+            email='journey.person@example.com',
+            phone='01700000999',
+            country='Bangladesh',
+        )
+        Participant.objects.create(
+            user=self.user,
+            event=self.event,
+            name='Journey Person',
+            degree='MBBS',
+            year_of_graduation=2020,
+            department=self.department,
+            organization='Journey Hospital',
+            email='journey.person@example.com',
+            phone='01700000999',
+            country='Bangladesh',
+            approved=True,
+        )
+
+        self.staff_user.is_superuser = True
+        self.staff_user.save(update_fields=['is_superuser'])
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(reverse('dashboard_journey_lookup_search'), {'q': 'journey'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Journey Person')
+        self.assertContains(response, 'Event participant')
+        self.assertContains(response, 'dashboard/journey-lookup/?q=journey&candidate=')
+
     def test_payment_center_updates_event_payment_without_emailing_invoice(self):
         participant = Participant.objects.create(
             user=self.user,

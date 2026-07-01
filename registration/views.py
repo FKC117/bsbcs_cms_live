@@ -4927,11 +4927,23 @@ def _journey_candidates(search_query):
     ).order_by('-created_at')[:18]:
         add_candidate(profile=getattr(participant.user, 'userprofile', None), user=participant.user, name=participant.name, email=participant.email, phone=participant.phone, source='Event participant')
 
-    for attendee in CorporateEventAttendee.objects.select_related('matched_user', 'matched_user__userprofile').filter(
+    for attendee in CorporateEventAttendee.objects.select_related(
+        'matched_user',
+        'matched_user__userprofile',
+        'participant__user',
+        'participant__user__userprofile',
+    ).filter(
         Q(name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text) | Q(organization__icontains=query_text)
     ).order_by('-created_at')[:18]:
-        matched_user = attendee.matched_user
-        add_candidate(profile=getattr(matched_user, 'userprofile', None) if matched_user else None, user=matched_user, name=attendee.name, email=attendee.email, phone=attendee.phone, source='Corporate attendee')
+        matched_user = attendee.matched_user or getattr(attendee.participant, 'user', None)
+        add_candidate(
+            profile=getattr(matched_user, 'userprofile', None) if matched_user else None,
+            user=matched_user,
+            name=attendee.name,
+            email=attendee.email,
+            phone=attendee.phone,
+            source='Corporate attendee',
+        )
 
     for account in CorporateAccount.objects.select_related('user', 'user__userprofile').filter(
         Q(company_name__icontains=query_text) | Q(contact_name__icontains=query_text) | Q(email__icontains=query_text) | Q(phone__icontains=query_text)
@@ -4944,11 +4956,12 @@ def _journey_candidates(search_query):
         add_candidate(name=access_request.contact_name or access_request.company_name, email=access_request.email, phone=access_request.phone, source='Corporate access request')
 
     results = []
-    for row in buckets.values():
+    for key, row in buckets.items():
         profile = row['profile']
         user = row['user'] or getattr(profile, 'user', None)
         emails = sorted(row['emails'])
         results.append({
+            'key': key,
             'profile': profile,
             'user': user,
             'name': row['name'] or getattr(profile, 'name', '') or (emails[0] if emails else 'Unknown person'),
@@ -4959,6 +4972,17 @@ def _journey_candidates(search_query):
 
     results.sort(key=lambda item: (item['name'].lower(), item['emails'][0] if item['emails'] else ''))
     return results[:10]
+
+
+
+def _select_journey_candidates(candidates, selected_key=''):
+    if not candidates:
+        return []
+    if selected_key:
+        return [candidate for candidate in candidates if candidate.get('key') == selected_key]
+    if len(candidates) == 1:
+        return candidates
+    return []
 
 
 def _build_journey_record(candidate):
@@ -10876,15 +10900,31 @@ def dashboard_journey_lookup(request):
     from website.models import SiteSettings
 
     search_query = (request.GET.get('q') or '').strip()
-    records = [_build_journey_record(candidate) for candidate in _journey_candidates(search_query)] if search_query else []
+    selected_candidate_key = (request.GET.get('candidate') or '').strip()
+    candidates = _journey_candidates(search_query) if search_query else []
+    selected_candidates = _select_journey_candidates(candidates, selected_candidate_key)
+    records = [_build_journey_record(candidate) for candidate in selected_candidates]
     context = {
         'site_settings': SiteSettings.objects.first(),
         'search_query': search_query,
+        'selected_candidate_key': selected_candidate_key,
         'journey_records': records,
         'result_count': len(records),
+        'candidate_count': len(candidates),
+        'needs_candidate_selection': bool(search_query and not selected_candidates and len(candidates) > 1),
         'current_filters': {'q': search_query, 'event': ''},
     }
     return render(request, 'dashboard_journey_lookup.html', context)
+
+
+@dashboard_permission_required('dashboard')
+def dashboard_journey_lookup_search(request):
+    search_query = (request.GET.get('q') or '').strip()
+    candidates = _journey_candidates(search_query) if len(search_query) >= 2 else []
+    return render(request, 'partials/dashboard_journey_lookup_search_results.html', {
+        'search_query': search_query,
+        'candidate_results': candidates[:8],
+    })
 
 
 @dashboard_permission_required('staff_activity')
