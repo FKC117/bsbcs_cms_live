@@ -176,3 +176,51 @@ SMS_NON_MASKING_CHAR_LIMIT=160
 - DLR endpoint is saved for future delivery tracking.
 - We prefer HTTPS where the provider clearly supports it.
 - We do not force HTTPS for bulk until the provider gives an HTTPS bulk URL.
+
+
+## Endpoint Usage Matrix
+
+| Endpoint | Purpose | Used Now | Where In Code |
+|---|---|---:|---|
+| `https://smpp.revesms.com:7790/sendtext` | Single/system SMS send | Yes | `registration.sms.send_sms()` |
+| `http://smpp.revesms.com:7788/send` | Bulk/campaign SMS send | Yes | `registration.sms.send_bulk_sms()` |
+| `https://smpp.revesms.com:7790/getstatus` | Single message delivery/status lookup | Yes | `registration.sms.query_sms_status()` |
+| `http://smpp.revesms.com:7788/getmultistatus` | Multi-message campaign status lookup | Yes | `registration.sms.query_sms_multi_status()` |
+| `https://smpp.revesms.com/sms/smsConfiguration/smsClientBalance.jsp` | Provider balance lookup | Yes | `registration.sms.query_sms_balance()` |
+| `http://smpp.revesms.com:7788/sendtext` | HTTP fallback for single SMS | No | Not used |
+| `http://smpp.revesms.com:7788/getstatus` | HTTP fallback for single status lookup | No | Not used |
+| `http://bulksms.smsvaults.work:7788/sendtext` | Whitelabel single SMS send | No | Not used |
+| `http://bulksms.smsvaults.work:7788/getstatus` | Whitelabel single status lookup | No | Not used |
+| `http://103.177.125.106:7788/sendtext` | Raw IP single SMS send | No | Not used |
+| `http://103.177.125.106:7788/getstatus` | Raw IP single status lookup | No | Not used |
+| `http://apismpp.revesms.com/sendtext` | Alternate/cPanel single SMS send | No | Not used |
+| `http://apismpp.revesms.com/getstatus` | Alternate/cPanel single status lookup | No | Not used |
+| `http://cpanel.smsvaults.work/sendtext` | Whitelabel cPanel SMS send | No | Not used |
+| `http://cpanel.smsvaults.work/getstatus` | Whitelabel cPanel status lookup | No | Not used |
+| `http://103.177.125.108/sendtext` | Alternate raw IP single SMS send | No | Not used |
+| `http://103.177.125.108/getstatus` | Alternate raw IP single status lookup | No | Not used |
+| `https://smpp.revesms.com` | Billing/account portal | No | Portal only |
+| `http://smpp.revesms.com` | Billing/account portal | No | Portal only |
+| `http://103.177.125.109/login` | White-label login portal | No | Portal only |
+| `smpp.revesms.com:9988` | SMPP integration port | No | Not used, we integrated via HTTP API |
+
+## Old / Alternate Server Docs Not Used
+
+These appeared in older provider materials and Postman collections, but our implementation does not use them:
+
+| Endpoint | Purpose | Used Now |
+|---|---|---:|
+| `http://149.20.188.26:8124/sendtext` | Old single SMS server | No |
+| `https://149.20.188.26:8125/sendtext` | Old HTTPS single SMS server | No |
+| `http://149.20.188.26:8124/getstatus` | Old status server | No |
+| `http://149.20.188.8:4479/sendtext` | Alternate old SMS server | No |
+| `http://149.20.188.8:4479/getstatus` | Alternate old status server | No |
+| `http://199.188.150.40:8124/api/v2/balance` | Old balance API | No |
+
+## Practical Summary
+
+- System-triggered SMS uses the single `sendtext` endpoint.
+- Dashboard campaigns use the provider bulk/campaign `send` endpoint.
+- Delivery confirmation is checked through `getstatus` and `getmultistatus`.
+- Provider balance is checked through the balance JSP endpoint.
+- We are not using SMPP, raw IP endpoints, whitelabel endpoints, or older alternate hosts.

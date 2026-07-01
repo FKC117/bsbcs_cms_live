@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -2223,6 +2223,78 @@ class BulkEmailAdmin(admin.ModelAdmin):
             return render(request, 'admin/select_email_group.html', context)
 
     mail_to_email_group.short_description = "Mail to Email Group"
+
+
+
+@admin.register(PhoneGroup)
+class PhoneGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'stored_number_count')
+    search_fields = ('name', 'phone_numbers')
+
+    def stored_number_count(self, obj):
+        return len(obj.parsed_phone_numbers())
+    stored_number_count.short_description = 'Stored numbers'  # type: ignore
+
+
+class BulkSMSRecipientInline(admin.TabularInline):
+    model = BulkSMSRecipient
+    extra = 0
+    fields = ('phone', 'name', 'source_type', 'status', 'provider_message_id', 'sent_at', 'error_message')
+    readonly_fields = ('phone', 'name', 'source_type', 'status', 'provider_message_id', 'sent_at', 'error_message')
+    show_change_link = True
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class BulkSMSSendLogInline(admin.TabularInline):
+    model = BulkSMSSendLog
+    extra = 0
+    fields = ('phone', 'status', 'provider_status', 'provider_message_id', 'sent_by', 'created_at')
+    readonly_fields = ('phone', 'status', 'provider_status', 'provider_message_id', 'sent_by', 'created_at')
+    show_change_link = True
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(BulkSMS)
+class BulkSMSAdmin(admin.ModelAdmin):
+    list_display = ('subject', 'sms_type', 'audience_type', 'status', 'recipient_count', 'sent_count', 'failed_count', 'created_by', 'created_at')
+    list_filter = ('sms_type', 'audience_type', 'status', 'created_at')
+    search_fields = ('subject', 'body', 'created_by__username', 'created_by__email')
+    readonly_fields = ('created_at', 'updated_at', 'recipient_count', 'sent_count', 'failed_count', 'pending_count')
+    inlines = [BulkSMSRecipientInline, BulkSMSSendLogInline]
+    fieldsets = (
+        ('Campaign', {
+            'fields': ('subject', 'body', 'sms_type', 'audience_type', 'event', 'phone_group', 'status', 'created_by')
+        }),
+        ('Progress', {
+            'fields': ('recipient_count', 'pending_count', 'sent_count', 'failed_count')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(BulkSMSRecipient)
+class BulkSMSRecipientAdmin(admin.ModelAdmin):
+    list_display = ('bulk_sms', 'phone', 'name', 'source_type', 'status', 'provider_message_id', 'sent_at', 'created_at')
+    list_filter = ('status', 'source_type', 'bulk_sms__sms_type', 'bulk_sms__audience_type', 'created_at')
+    search_fields = ('bulk_sms__subject', 'phone', 'raw_phone', 'name', 'error_message', 'provider_message_id')
+    readonly_fields = ('created_at', 'sent_at')
+
+
+@admin.register(BulkSMSSendLog)
+class BulkSMSSendLogAdmin(admin.ModelAdmin):
+    list_display = ('bulk_sms', 'phone', 'status', 'provider_status', 'provider_message_id', 'sent_by', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('bulk_sms__subject', 'phone', 'message', 'provider_status', 'provider_message_id')
+    readonly_fields = ('bulk_sms', 'recipient', 'phone', 'status', 'message', 'provider_status', 'provider_message_id', 'sent_by', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(BulkEmailRecipient)

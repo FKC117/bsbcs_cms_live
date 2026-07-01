@@ -536,7 +536,7 @@
             const smsType = smsTypeSelect?.value || 'non_masking';
             const body = smsBodyField?.value || '';
             const characterCount = body.length;
-            const characterLimit = Number(smsTypeLimits[smsType] || 100);
+            const characterLimit = Number(smsTypeLimits[smsType] || 160);
             const segmentCount = characterCount ? Math.ceil(characterCount / characterLimit) : 0;
             if (smsCharacterCount) smsCharacterCount.textContent = String(characterCount);
             if (smsCharacterLimit) smsCharacterLimit.textContent = String(characterLimit);

@@ -91,6 +91,9 @@ from .sms import (
     build_registration_submission_sms,
     estimate_sms_units,
     get_sms_segment_char_limit,
+    query_sms_balance,
+    query_sms_multi_status,
+    query_sms_status,
     resolve_sms_caller_id,
     resolve_sms_url,
 )
@@ -99,6 +102,106 @@ from .sms import (
 # Payment logger (writes to payment.log via settings)
 logger = logging.getLogger('payment')
 speaker_certificate_logger = logging.getLogger('speaker_certificate')
+
+
+def _humanize_provider_key(key):
+    return str(key).replace('_', ' ').replace('-', ' ').strip().title()
+
+
+def _provider_row_dicts(response):
+    if isinstance(response, list):
+        return [row for row in response if isinstance(row, dict)]
+    if isinstance(response, dict):
+        for key in ('Data', 'data', 'Rows', 'rows', 'Result', 'result'):
+            value = response.get(key)
+            if isinstance(value, list):
+                return [row for row in value if isinstance(row, dict)]
+    return []
+
+
+def _status_note_from_text(text):
+    normalized = (text or '').strip().upper()
+    if normalized == 'ACCEPTD':
+        return 'Gateway accepted the SMS for processing. This is not final delivery confirmation yet.'
+    if normalized:
+        return f'Provider returned status text: {text}.'
+    return ''
+
+
+def _build_provider_result_summary(result, *, kind):
+    if not result:
+        return None
+
+    response = result.get('response') if isinstance(result, dict) else None
+    provider_status = result.get('provider_status') if isinstance(result, dict) else None
+    http_status = result.get('http_status') if isinstance(result, dict) else None
+    summary = {
+        'kind': kind,
+        'ok': result.get('status') in {'ok', 'sent'} if isinstance(result, dict) else False,
+        'headline': 'No provider response available.',
+        'subheadline': '',
+        'details': [],
+        'note': '',
+        'rows': [],
+        'raw_pretty': json.dumps(result, indent=2, ensure_ascii=True, default=str),
+    }
+
+    if kind == 'balance' and isinstance(response, dict):
+        balance = response.get('Balance')
+        credit_limit = response.get('CreditLimit')
+        summary['headline'] = f"Balance: {balance if balance is not None else '-'}"
+        summary['subheadline'] = f"Credit limit: {credit_limit if credit_limit is not None else '-'}"
+        summary['details'] = [
+            f"HTTP status: {http_status}",
+            f"Balance API status: {'success' if summary['ok'] else 'failed'}",
+        ]
+        return summary
+
+    if kind == 'status' and isinstance(response, dict):
+        status_text = response.get('Text') or ''
+        summary['headline'] = status_text or f"Provider status: {provider_status or '-'}"
+        summary['subheadline'] = f"Message ID: {response.get('Message_ID') or response.get('messageid') or '-'}"
+        summary['details'] = [
+            f"HTTP status: {http_status}",
+            f"Provider status: {provider_status if provider_status is not None else '-'}",
+        ]
+        summary['note'] = _status_note_from_text(status_text)
+        return summary
+
+    if kind == 'multi_status':
+        raw_rows = _provider_row_dicts(response)
+        rows = []
+        for row in raw_rows:
+            rows.append({
+                'message_id': row.get('Message_ID') or row.get('messageid') or row.get('MessageId') or '-',
+                'status_text': row.get('Text') or row.get('text') or row.get('Status') or row.get('status') or '-',
+                'detail_text': row.get('Description') or row.get('description') or row.get('OperatorStatus') or row.get('operatorStatus') or row.get('Delivery Time') or row.get('deliveryTime') or '-',
+            })
+        summary['rows'] = rows
+        summary['headline'] = 'Campaign status lookup completed.' if summary['ok'] else 'Campaign status lookup failed.'
+        if rows:
+            summary['subheadline'] = f"Provider returned {len(rows)} status row(s)."
+        elif isinstance(response, dict):
+            summary['subheadline'] = response.get('Text') or response.get('Status') or ''
+        elif isinstance(response, list):
+            summary['subheadline'] = f"Provider returned {len(response)} raw row(s)."
+        summary['details'] = [
+            f"HTTP status: {http_status}",
+            f"Provider status: {provider_status if provider_status is not None else '-'}",
+        ]
+        for row in raw_rows:
+            text_value = row.get('Text') or row.get('text') or row.get('StatusText') or row.get('statusText') or row.get('Status') or row.get('status') or ''
+            if text_value:
+                summary['note'] = _status_note_from_text(text_value)
+                if summary['note']:
+                    break
+        return summary
+
+    summary['details'] = [
+        f"HTTP status: {http_status}",
+        f"Provider status: {provider_status if provider_status is not None else '-'}",
+    ]
+    return summary
 
 
 @staff_member_required
@@ -9847,6 +9950,31 @@ def dashboard_bulk_sms_center(request):
         for value, label in BulkSMS.AUDIENCE_CHOICES
     ]
 
+    provider_tools = {
+        'requested_action': (request.GET.get('provider_action') or '').strip(),
+        'status_message_id': (request.GET.get('status_message_id') or '').strip(),
+        'multi_status_message_ids': (request.GET.get('multi_status_message_ids') or '').strip(),
+        'balance_requested': request.GET.get('provider_balance') == '1',
+        'status_result': None,
+        'multi_status_result': None,
+        'balance_result': None,
+        'status_summary': None,
+        'multi_status_summary': None,
+        'balance_summary': None,
+        'latest_message_id': '',
+        'campaign_message_ids': [],
+        'campaign_message_ids_text': '',
+        'message_id_count': 0,
+        'dlr_url': getattr(settings, 'SMS_GATEWAY_DLR_URL', ''),
+        'multi_status_url': getattr(settings, 'SMS_GATEWAY_MULTI_STATUS_URL', ''),
+        'balance_url': getattr(settings, 'SMS_GATEWAY_BALANCE_URL', ''),
+        'client_id': getattr(settings, 'SMS_GATEWAY_CLIENT_ID', ''),
+        'multi_status_query': (request.GET.get('multi_status_query') or '').strip(),
+        'multi_status_page': request.GET.get('multi_status_page') or '1',
+        'multi_status_page_obj': None,
+        'multi_status_query_string': '',
+    }
+
     if request.method == 'POST':
         action = request.POST.get('bulk_sms_action')
         selected_campaign_id = request.POST.get('campaign_id')
@@ -10025,6 +10153,72 @@ def dashboard_bulk_sms_center(request):
     selected_logs_qs = selected_campaign.send_logs.select_related('recipient', 'sent_by').order_by('-created_at') if selected_campaign else BulkSMSSendLog.objects.none()
     selected_recipients_page = Paginator(selected_recipients_qs, 15).get_page(request.GET.get('recipient_page'))
     selected_logs_page = Paginator(selected_logs_qs, 10).get_page(request.GET.get('log_page'))
+
+    if selected_campaign:
+        campaign_message_ids = [
+            message_id for message_id in selected_campaign.send_logs.exclude(provider_message_id__isnull=True).exclude(provider_message_id='')
+            .order_by('-created_at').values_list('provider_message_id', flat=True)
+        ]
+        unique_campaign_message_ids = []
+        seen_campaign_message_ids = set()
+        for message_id in campaign_message_ids:
+            if message_id in seen_campaign_message_ids:
+                continue
+            seen_campaign_message_ids.add(message_id)
+            unique_campaign_message_ids.append(message_id)
+        provider_tools['campaign_message_ids'] = unique_campaign_message_ids
+        provider_tools['latest_message_id'] = unique_campaign_message_ids[0] if unique_campaign_message_ids else ''
+        provider_tools['campaign_message_ids_text'] = ','.join(unique_campaign_message_ids)
+        provider_tools['message_id_count'] = len(unique_campaign_message_ids)
+
+        if provider_tools['requested_action'] == 'latest_status' and provider_tools['latest_message_id']:
+            provider_tools['status_message_id'] = provider_tools['latest_message_id']
+        elif provider_tools['requested_action'] == 'campaign_multi_status' and provider_tools['campaign_message_ids_text']:
+            provider_tools['multi_status_message_ids'] = provider_tools['campaign_message_ids_text']
+        elif provider_tools['requested_action'] == 'balance':
+            provider_tools['balance_requested'] = True
+
+        if provider_tools['status_message_id']:
+            provider_tools['status_result'] = query_sms_status(
+                provider_tools['status_message_id'],
+                context={'source': 'dashboard_bulk_sms_provider_tools', 'tool': 'status', 'campaign_id': selected_campaign.id},
+            )
+            provider_tools['status_summary'] = _build_provider_result_summary(provider_tools['status_result'], kind='status')
+        if provider_tools['multi_status_message_ids']:
+            provider_tools['multi_status_result'] = query_sms_multi_status(
+                provider_tools['multi_status_message_ids'],
+                context={'source': 'dashboard_bulk_sms_provider_tools', 'tool': 'multi_status', 'campaign_id': selected_campaign.id},
+            )
+            provider_tools['multi_status_summary'] = _build_provider_result_summary(provider_tools['multi_status_result'], kind='multi_status')
+            if provider_tools['multi_status_summary'] and provider_tools['multi_status_summary'].get('rows'):
+                query_value = provider_tools['multi_status_query'].lower()
+                filtered_rows = provider_tools['multi_status_summary']['rows']
+                if query_value:
+                    filtered_rows = [
+                        row for row in filtered_rows
+                        if query_value in str(row.get('message_id', '')).lower()
+                        or query_value in str(row.get('status_text', '')).lower()
+                        or query_value in str(row.get('detail_text', '')).lower()
+                    ]
+                provider_tools['multi_status_summary']['total_row_count'] = len(provider_tools['multi_status_summary']['rows'])
+                provider_tools['multi_status_summary']['filtered_row_count'] = len(filtered_rows)
+                multi_status_page_obj = Paginator(filtered_rows, 10).get_page(provider_tools['multi_status_page'])
+                provider_tools['multi_status_page_obj'] = multi_status_page_obj
+                provider_tools['multi_status_summary']['rows'] = list(multi_status_page_obj.object_list)
+                multi_status_query_params = {
+                    'campaign': selected_campaign.id,
+                    'scroll_to': 'campaign-provider-tools',
+                    'provider_action': 'campaign_multi_status',
+                }
+                if provider_tools['multi_status_query']:
+                    multi_status_query_params['multi_status_query'] = provider_tools['multi_status_query']
+                provider_tools['multi_status_query_string'] = urlencode(multi_status_query_params)
+        if provider_tools['balance_requested']:
+            provider_tools['balance_result'] = query_sms_balance(
+                context={'source': 'dashboard_bulk_sms_provider_tools', 'tool': 'balance', 'campaign_id': selected_campaign.id},
+            )
+            provider_tools['balance_summary'] = _build_provider_result_summary(provider_tools['balance_result'], kind='balance')
+
     selected_campaign_progress = None
     if selected_campaign:
         progress_snapshot = sync_bulk_sms_status(selected_campaign)
@@ -10047,7 +10241,7 @@ def dashboard_bulk_sms_center(request):
             'segments_per_recipient': sms_unit_summary['segments'],
             'estimated_total_units': sms_unit_summary['estimated_total_units'],
             'sms_caller_id': resolve_sms_caller_id(selected_campaign.sms_type),
-            'gateway_mode_label': 'Bulk endpoint',
+            'gateway_mode_label': 'Provider campaign endpoint',
             'gateway_url': resolve_sms_url(is_bulk=True),
         }
     base_query = {}
@@ -10120,6 +10314,7 @@ def dashboard_bulk_sms_center(request):
         'audit_category_cards': audit_category_cards,
         'bulk_sms_filter_query': urlencode(filter_query),
         'default_sms_type': BulkSMS.SMS_TYPE_NON_MASKING,
+        'provider_tools': provider_tools,
         'sms_type_limits': {
             BulkSMS.SMS_TYPE_MASKING: get_sms_segment_char_limit(BulkSMS.SMS_TYPE_MASKING),
             BulkSMS.SMS_TYPE_NON_MASKING: get_sms_segment_char_limit(BulkSMS.SMS_TYPE_NON_MASKING),

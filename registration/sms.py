@@ -97,10 +97,23 @@ def _normalize_destination(phone, country):
     return normalized, ''
 
 
-def _build_payload(to_user, message, *, sms_type=None):
-    payload = {
+def _gateway_auth_payload():
+    return {
         'apikey': settings.SMS_GATEWAY_API_KEY,
         'secretkey': settings.SMS_GATEWAY_SECRET_KEY,
+    }
+
+
+def _gateway_auth_params():
+    return {
+        'apikey': settings.SMS_GATEWAY_API_KEY,
+        'secretkey': settings.SMS_GATEWAY_SECRET_KEY,
+    }
+
+
+def _build_payload(to_user, message, *, sms_type=None):
+    payload = {
+        **_gateway_auth_payload(),
         'callerID': resolve_sms_caller_id(sms_type),
         'toUser': to_user,
         'messageContent': message,
@@ -109,6 +122,101 @@ def _build_payload(to_user, message, *, sms_type=None):
     if sms_hash:
         payload['hash'] = sms_hash
     return payload
+
+
+def _build_bulk_campaign_payload(phone_numbers, message, *, sms_type=None):
+    payload = {
+        **_gateway_auth_payload(),
+        'content': [
+            {
+                'callerID': resolve_sms_caller_id(sms_type),
+                'toUser': ','.join(phone_numbers),
+                'messageContent': message,
+            }
+        ],
+    }
+    sms_hash = getattr(settings, 'SMS_GATEWAY_HASH', '').strip()
+    if sms_hash:
+        payload['hash'] = sms_hash
+    return payload
+
+
+def _perform_sms_get_request(url, *, params, context=None, log_label='SMS GET API'):
+    context = context or {}
+    if not url:
+        return {'status': 'skipped', 'reason': 'gateway_not_configured'}
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=getattr(settings, 'SMS_REQUEST_TIMEOUT', 15),
+        )
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_data = response.text
+    except requests.RequestException as exc:
+        logger.exception('%s request failed. context=%s', log_label, context)
+        return {'status': 'failed', 'reason': 'request_exception', 'message': str(exc)}
+
+    provider_status = response_data.get('Status') if isinstance(response_data, dict) else None
+    ok = response.ok and (provider_status in SUCCESS_STATUSES or provider_status is None)
+    log_method = logger.info if ok else logger.warning
+    log_method(
+        '%s response. http_status=%s provider_status=%s response=%s context=%s',
+        log_label,
+        response.status_code,
+        provider_status,
+        _response_preview(response_data),
+        context,
+    )
+    return {
+        'status': 'ok' if ok else 'failed',
+        'http_status': response.status_code,
+        'provider_status': provider_status,
+        'response': response_data,
+        'url': url,
+    }
+
+
+def query_sms_status(message_id, *, context=None):
+    message_id = (message_id or '').strip()
+    if not message_id:
+        return {'status': 'skipped', 'reason': 'missing_message_id'}
+    return _perform_sms_get_request(
+        getattr(settings, 'SMS_GATEWAY_DLR_URL', '').strip(),
+        params={**_gateway_auth_params(), 'messageid': message_id},
+        context=context,
+        log_label='SMS status API',
+    )
+
+
+def query_sms_multi_status(message_ids, *, context=None):
+    if isinstance(message_ids, str):
+        values = [item.strip() for item in message_ids.replace('\n', ',').split(',') if item.strip()]
+    else:
+        values = [str(item).strip() for item in (message_ids or []) if str(item).strip()]
+    if not values:
+        return {'status': 'skipped', 'reason': 'missing_message_ids'}
+    return _perform_sms_get_request(
+        getattr(settings, 'SMS_GATEWAY_MULTI_STATUS_URL', '').strip(),
+        params={**_gateway_auth_params(), 'messageids': ','.join(values)},
+        context=context,
+        log_label='SMS multi-status API',
+    )
+
+
+def query_sms_balance(*, context=None):
+    client_id = getattr(settings, 'SMS_GATEWAY_CLIENT_ID', '').strip()
+    if not client_id:
+        return {'status': 'skipped', 'reason': 'missing_client_id'}
+    return _perform_sms_get_request(
+        getattr(settings, 'SMS_GATEWAY_BALANCE_URL', '').strip(),
+        params={'client': client_id},
+        context=context,
+        log_label='SMS balance API',
+    )
 
 
 def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING):
@@ -196,7 +304,7 @@ def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUN
         return {'status': 'skipped', 'reason': 'gateway_not_configured', 'numbers': normalized_numbers, 'skipped': skipped_numbers}
 
     message = (message or '').strip()
-    payload = _build_payload(','.join(normalized_numbers), message, sms_type=sms_type)
+    payload = _build_bulk_campaign_payload(normalized_numbers, message, sms_type=sms_type)
     try:
         response = requests.post(
             resolve_sms_url(is_bulk=True),
