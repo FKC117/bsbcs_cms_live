@@ -1,0 +1,332 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chest Card Bulk Export</title>
+  {% if base_url %}<base href="{{ base_url }}">{% endif %}
+  <style>
+    :root {
+      --accent: {{ design.accent_color|default:'#1769c2' }};
+      --background: {{ design.background_color|default:'#f8fbff' }};
+      --ink: {{ design.font_color|default:'#0f172a' }};
+      --muted: color-mix(in srgb, var(--ink) 68%, white);
+      --line: color-mix(in srgb, var(--accent) 22%, white);
+      --accent-soft: color-mix(in srgb, var(--accent) 14%, white);
+      --accent-strong: color-mix(in srgb, var(--accent) 26%, transparent);
+      --panel-bg: color-mix(in srgb, white 82%, var(--background));
+    }
+    * { box-sizing: border-box; }
+    @page {
+      size: {{ design.width_mm }}mm {{ design.height_mm }}mm;
+      margin: 0;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .page {
+      width: {{ design.width_mm }}mm;
+      height: {{ design.height_mm }}mm;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+    }
+    .page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, white 72%, var(--background)) 0%, var(--background) 54%, color-mix(in srgb, var(--accent) 28%, var(--background)) 100%);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 20%, transparent), transparent 32%),
+        radial-gradient(circle at bottom left, color-mix(in srgb, var(--accent) 22%, white), transparent 30%),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 18%),
+        linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 18%;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, white), transparent);
+      pointer-events: none;
+    }
+    .bg-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.14;
+    }
+    .top-band, .footer-band {
+      position: relative;
+      z-index: 1;
+      flex: 0 0 auto;
+      padding-inline: 7%;
+    }
+    .top-band {
+      padding-top: 6%;
+      padding-bottom: 4%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      background: linear-gradient(180deg, color-mix(in srgb, white 78%, var(--accent)), transparent);
+    }
+    .logo-stack {
+      display: flex;
+      align-items: center;
+      gap: 0.95rem;
+      min-width: 0;
+    }
+    .logo-chip {
+      width: 19%;
+      max-width: 92px;
+      min-width: 56px;
+      aspect-ratio: 1;
+      border-radius: 20px;
+      background: #ffffff;
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, white);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 16%, transparent);
+      padding: 8px;
+    }
+    .logo-chip img, .event-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .logo-chip img {
+      transform: scale(1.04);
+    }
+    .event-mark {
+      width: 15%;
+      max-width: 76px;
+      min-width: 48px;
+      aspect-ratio: 1;
+      border-radius: 22px;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, white), color-mix(in srgb, var(--accent) 24%, var(--background)));
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, white);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      padding: 8px;
+      box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+    .event-mark-fallback {
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      text-align: center;
+      line-height: 1.2;
+    }
+    .content {
+      position: relative;
+      z-index: 1;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      padding: 0 7% 5%;
+      min-height: 0;
+    }
+    .eyebrow {
+      font-size: clamp(0.78rem, 2vw, 1.05rem);
+      font-weight: 900;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .event {
+      margin-top: 0.55rem;
+      font-size: clamp(0.82rem, 2.2vw, 1.1rem);
+      font-weight: 800;
+      color: color-mix(in srgb, var(--ink) 90%, var(--accent));
+      line-height: 1.3;
+      max-width: 86%;
+    }
+    .name-wrap {
+      margin-top: auto;
+      margin-bottom: auto;
+      padding-block: 8%;
+    }
+    .name {
+      font-size: clamp(1.85rem, 7vw, 3.6rem);
+      font-weight: 900;
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      max-width: 90%;
+      text-shadow: 0 16px 28px color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+    .org {
+      margin-top: 1rem;
+      font-size: clamp(0.95rem, 2.6vw, 1.35rem);
+      line-height: 1.35;
+      color: var(--muted);
+      max-width: 88%;
+    }
+    .org::after {
+      content: '';
+      display: block;
+      width: min(28%, 120px);
+      height: 4px;
+      margin-top: 1rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 24%, white));
+    }
+    .footer-band {
+      padding-bottom: 6%;
+    }
+    .footer-shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.9rem 1rem;
+      border-radius: 24px;
+      background: linear-gradient(135deg, color-mix(in srgb, white 78%, var(--background)), color-mix(in srgb, white 56%, var(--accent)));
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, white);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 18px 34px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+    .footer-shell::before {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 12px;
+      border-radius: 24px 0 0 24px;
+      background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 28%, white));
+    }
+    .footer-copy {
+      min-width: 0;
+      max-width: 56%;
+      padding-left: 0.3rem;
+    }
+    .footer-title {
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .invoice {
+      margin-top: 0.45rem;
+      font-size: clamp(0.86rem, 2vw, 1.05rem);
+      font-weight: 800;
+      color: color-mix(in srgb, var(--ink) 88%, var(--accent));
+      line-height: 1.25;
+      word-break: break-word;
+    }
+    .footer-note {
+      margin-top: 0.55rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: color-mix(in srgb, var(--ink) 58%, white);
+    }
+    .qr-block {
+      flex: 0 0 auto;
+      border-radius: 20px;
+      background: color-mix(in srgb, white 92%, var(--background));
+      padding: 0.8rem;
+      box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 18%, white);
+    }
+    .qr-block img {
+      display: block;
+      width: min(24vw, 108px);
+      height: min(24vw, 108px);
+    }
+    .footer-strip {
+      margin-top: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.76rem;
+      color: color-mix(in srgb, var(--ink) 62%, white);
+    }
+    .footer-brand {
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--ink) 72%, var(--accent));
+    }
+  </style>
+</head>
+<body>
+  {% for item in items %}
+    <main class="page">
+      <section class="card">
+        {% if design.html_background_image %}<img class="bg-image" src="{{ design.html_background_image.url }}" alt="">{% endif %}
+
+        <div class="top-band">
+          <div class="logo-stack">
+            {% if site_settings and site_settings.logo %}
+              <div class="logo-chip"><img src="{{ site_settings.logo.url }}" alt="Site logo"></div>
+            {% endif %}
+            <div>
+              <div class="eyebrow">{{ badge_title }}</div>
+              {% if design.show_event_name %}<div class="event">{{ event.name }} {{ event.year }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="event-mark">
+            {% if event.event_logo %}
+              <img src="{{ event.event_logo.url }}" alt="Event logo">
+            {% else %}
+              <div class="event-mark-fallback">{{ event.name|slice:':10' }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="name-wrap">
+            <div class="name">{{ item.participant_name }}</div>
+            {% if design.show_organization and item.participant_organization %}<div class="org">{{ item.participant_organization }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="footer-band">
+          <div class="footer-shell">
+            <div class="footer-copy">
+              <div class="footer-title">Registration Badge</div>
+              {% if design.show_invoice_number %}<div class="invoice">Invoice: {{ item.invoice_number }}</div>{% endif %}
+              <div class="footer-note">Scan the QR code at the registration desk for a faster check-in experience.</div>
+            </div>
+            <div class="qr-block">
+              <img src="{{ item.qr_code_url }}" alt="Participant QR">
+            </div>
+          </div>
+          <div class="footer-strip">
+            <div class="footer-brand">{{ site_settings.site_name|default:'BSBCS' }}</div>
+            <div>{{ event.start_date|date:'d M Y' }} | {{ event.venue|default:'InterContinental Dhaka' }}</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  {% endfor %}
+</body>
+</html>

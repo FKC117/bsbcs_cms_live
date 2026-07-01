@@ -5,3 +5,6 @@ class RegistrationConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'registration'
     verbose_name = 'Conference Management System (CMS)'
+
+    def ready(self):
+        import registration.signals  # noqa: F401

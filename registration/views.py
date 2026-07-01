@@ -3051,6 +3051,91 @@ def _speaker_certificate_output_filename(person_name):
     return f"BBCC_Speaker_Certificate_{safe_name}.jpg"
 
 
+def _chest_card_output_filename(participant_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in participant_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Participant'
+    return f"BSBCS_Chest_Card_{safe_name}.png"
+
+
+def _chest_card_pdf_output_filename(participant_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in participant_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Participant'
+    return f"BSBCS_Chest_Card_{safe_name}.pdf"
+
+
+def _chest_card_bulk_pdf_output_filename(event):
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    return f"BSBCS_Chest_Cards_{event_slug}.pdf"
+
+
+def _chest_card_vendor_zip_output_filename(event):
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    return f"BSBCS_Chest_Cards_{event_slug}_vendor_bundle.zip"
+
+
+def _mm_to_px(value_mm, dpi):
+    return max(int(round(float(value_mm) * float(dpi) / 25.4)), 1)
+
+
+def _load_badge_font(size):
+    candidates = ['arial.ttf', r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\ARIAL.TTF', 'DejaVuSans.ttf']
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _wrap_text_to_width(draw, text, font, max_width):
+    words = [word for word in (text or '').split() if word]
+    if not words:
+        return ['']
+    lines = []
+    current = []
+    for word in words:
+        candidate = ' '.join(current + [word])
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        width = bbox[2] - bbox[0]
+        if width <= max_width or not current:
+            current.append(word)
+        else:
+            lines.append(' '.join(current))
+            current = [word]
+    if current:
+        lines.append(' '.join(current))
+    return lines
+
+
+def _fit_text_to_box(draw, text, box_width, box_height, start_size):
+    min_size = 12
+    for size in range(max(int(start_size), min_size), min_size - 1, -1):
+        font = _load_badge_font(size)
+        lines = _wrap_text_to_width(draw, text, font, box_width)
+        line_boxes = [draw.textbbox((0, 0), line or ' ', font=font) for line in lines]
+        line_height = max((bbox[3] - bbox[1]) for bbox in line_boxes) if line_boxes else size
+        total_height = (line_height * len(lines)) + max(len(lines) - 1, 0) * 4
+        max_line_width = max((bbox[2] - bbox[0]) for bbox in line_boxes) if line_boxes else 0
+        if total_height <= box_height and max_line_width <= box_width:
+            return font, lines, line_height
+    fallback_font = _load_badge_font(min_size)
+    fallback_lines = _wrap_text_to_width(draw, text, fallback_font, box_width)
+    fallback_bbox = draw.textbbox((0, 0), fallback_lines[0] or ' ', font=fallback_font)
+    return fallback_font, fallback_lines, fallback_bbox[3] - fallback_bbox[1]
+
+
+def _hex_to_rgb(hex_value, default=(15, 23, 42)):
+    value = (hex_value or '').strip().lstrip('#')
+    if len(value) == 3:
+        value = ''.join(ch * 2 for ch in value)
+    if len(value) != 6:
+        return default
+    try:
+        return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+    except ValueError:
+        return default
+
+
 def _event_certificate_date_label(event):
     if not event or not event.start_date:
         return ''
@@ -3786,7 +3871,7 @@ def _get_certificate_signatories(certificate):
     ]
 
 
-def _render_certificate_html_to_jpeg(template_name, context, output_path, capture_width=1632, capture_height=1155):
+def _render_html_template_to_image(template_name, context, output_path, capture_width=1632, capture_height=1155, image_format='JPEG'):
     output = Path(output_path)
     render_dir = output.parent / 'html_render'
     render_dir.mkdir(parents=True, exist_ok=True)
@@ -3794,46 +3879,101 @@ def _render_certificate_html_to_jpeg(template_name, context, output_path, captur
     png_path = render_dir / f"{output.stem}.png"
     chrome_profile = Path(tempfile.mkdtemp(prefix=f"{output.stem}_chrome_"))
     chrome_home = Path(tempfile.mkdtemp(prefix=f"{output.stem}_home_"))
-    chrome_config = chrome_home / "config"
-    chrome_cache = chrome_home / "cache"
-    chrome_runtime = chrome_home / "runtime"
+    chrome_config = chrome_home / 'config'
+    chrome_cache = chrome_home / 'cache'
+    chrome_runtime = chrome_home / 'runtime'
     for path in (chrome_config, chrome_cache, chrome_runtime):
         path.mkdir(parents=True, exist_ok=True)
     html_path.write_text(render_to_string(template_name, context), encoding='utf-8')
 
     chrome = _get_chrome_executable()
     if not chrome:
-        raise RuntimeError("Chrome/Edge was not found on the server, so the HTML certificate cannot be rendered to JPEG.")
+        raise RuntimeError('Chrome/Edge was not found on the server, so the HTML design cannot be rendered to an image.')
 
     file_url = html_path.resolve().as_uri()
     command = [
         chrome,
-        "--headless=new",
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-crash-reporter",
-        "--disable-crashpad",
-        "--disable-breakpad",
-        "--disable-features=Crashpad",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--hide-scrollbars",
-        "--allow-file-access-from-files",
-        f"--user-data-dir={chrome_profile.resolve()}",
-        f"--window-size={capture_width},{capture_height}",
-        f"--screenshot={png_path.resolve()}",
+        '--headless=new',
+        '--no-sandbox',
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--disable-crash-reporter',
+        '--disable-crashpad',
+        '--disable-breakpad',
+        '--disable-features=Crashpad',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--hide-scrollbars',
+        '--allow-file-access-from-files',
+        f'--user-data-dir={chrome_profile.resolve()}',
+        f'--window-size={capture_width},{capture_height}',
+        f'--screenshot={png_path.resolve()}',
         file_url,
     ]
     env = os.environ.copy()
-    env["HOME"] = str(chrome_home.resolve())
-    env["XDG_CONFIG_HOME"] = str(chrome_config.resolve())
-    env["XDG_CACHE_HOME"] = str(chrome_cache.resolve())
-    env["XDG_RUNTIME_DIR"] = str(chrome_runtime.resolve())
+    env['HOME'] = str(chrome_home.resolve())
+    env['XDG_CONFIG_HOME'] = str(chrome_config.resolve())
+    env['XDG_CACHE_HOME'] = str(chrome_cache.resolve())
+    env['XDG_RUNTIME_DIR'] = str(chrome_runtime.resolve())
     subprocess.run(command, check=True, timeout=30, cwd=str(settings.BASE_DIR), env=env)
 
-    image = Image.open(png_path).convert('RGB')
-    image.save(output_path, 'JPEG', quality=95)
+    image = Image.open(png_path)
+    if (image_format or 'JPEG').upper() == 'PNG':
+        image.save(output_path, 'PNG')
+    else:
+        image.convert('RGB').save(output_path, 'JPEG', quality=95)
+
+
+def _render_html_template_to_pdf(template_name, context, output_path):
+    output = Path(output_path)
+    render_dir = output.parent / 'html_render'
+    render_dir.mkdir(parents=True, exist_ok=True)
+    html_path = render_dir / f"{output.stem}.html"
+    pdf_path = render_dir / f"{output.stem}.pdf"
+    chrome_profile = Path(tempfile.mkdtemp(prefix=f"{output.stem}_chrome_pdf_"))
+    chrome_home = Path(tempfile.mkdtemp(prefix=f"{output.stem}_home_pdf_"))
+    chrome_config = chrome_home / 'config'
+    chrome_cache = chrome_home / 'cache'
+    chrome_runtime = chrome_home / 'runtime'
+    for path in (chrome_config, chrome_cache, chrome_runtime):
+        path.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(render_to_string(template_name, context), encoding='utf-8')
+
+    chrome = _get_chrome_executable()
+    if not chrome:
+        raise RuntimeError('Chrome/Edge was not found on the server, so the HTML design cannot be rendered to PDF.')
+
+    file_url = html_path.resolve().as_uri()
+    command = [
+        chrome,
+        '--headless=new',
+        '--no-sandbox',
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--disable-crash-reporter',
+        '--disable-crashpad',
+        '--disable-breakpad',
+        '--disable-features=Crashpad',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--allow-file-access-from-files',
+        '--print-to-pdf-no-header',
+        '--no-pdf-header-footer',
+        f'--user-data-dir={chrome_profile.resolve()}',
+        f'--print-to-pdf={pdf_path.resolve()}',
+        file_url,
+    ]
+    env = os.environ.copy()
+    env['HOME'] = str(chrome_home.resolve())
+    env['XDG_CONFIG_HOME'] = str(chrome_config.resolve())
+    env['XDG_CACHE_HOME'] = str(chrome_cache.resolve())
+    env['XDG_RUNTIME_DIR'] = str(chrome_runtime.resolve())
+    subprocess.run(command, check=True, timeout=30, cwd=str(settings.BASE_DIR), env=env)
+    shutil.copyfile(pdf_path, output_path)
+
+
+def _render_certificate_html_to_jpeg(template_name, context, output_path, capture_width=1632, capture_height=1155):
+    _render_html_template_to_image(template_name, context, output_path, capture_width=capture_width, capture_height=capture_height, image_format='JPEG')
 
 
 def _render_html_certificate_to_jpeg(request, participant, event, certificate, output_path):
@@ -3878,6 +4018,378 @@ def _render_speaker_certificate_to_jpeg(request, person, event, certificate, out
         'speaker_body': _render_speaker_certificate_body(certificate, event),
     }
     _render_certificate_html_to_jpeg('certificate_design/speaker_certificate.html', context, output_path)
+
+
+def _chest_card_base_url(request=None):
+    if request is not None:
+        return request.build_absolute_uri('/')
+    site_url = (getattr(settings, 'SITE_URL', '') or 'http://127.0.0.1:8000').strip()
+    return f"{site_url.rstrip('/')}/"
+
+
+def _render_chest_card_html_to_png(request, participant, event, design, payment_status, output_path):
+    base_url = _chest_card_base_url(request)
+    capture_width = _mm_to_px(design.width_mm, design.dpi)
+    capture_height = _mm_to_px(design.height_mm, design.dpi)
+    from website.models import SiteSettings
+
+    context = {
+        'participant_name': participant.name,
+        'participant_organization': participant.organization or '',
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Participant',
+        'invoice_number': payment_status.merchant_invoice_number if payment_status else '',
+        'qr_code_url': payment_status.qr_code.url if payment_status and payment_status.qr_code else '',
+        'capture_mode': True,
+        'base_url': base_url,
+    }
+    _render_html_template_to_image('chest_card_design/chest_card.html', context, output_path, capture_width=capture_width, capture_height=capture_height, image_format='PNG')
+
+
+def _render_bulk_chest_card_html_to_pdf(request, event, design, payments, output_path):
+    from website.models import SiteSettings
+
+    base_url = _chest_card_base_url(request)
+    items = []
+    for payment_status in payments:
+        participant = payment_status.participant
+        items.append({
+            'participant_name': participant.name,
+            'participant_organization': participant.organization or '',
+            'invoice_number': payment_status.merchant_invoice_number or '',
+            'qr_code_url': payment_status.qr_code.url if payment_status.qr_code else '',
+        })
+
+    context = {
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Participant',
+        'capture_mode': False,
+        'pdf_mode': True,
+        'base_url': base_url,
+        'items': items,
+    }
+    _render_html_template_to_pdf('chest_card_design/chest_card_bulk.html', context, output_path)
+
+
+def _render_chest_card_html_to_pdf(request, participant, event, design, payment_status, output_path):
+    from website.models import SiteSettings
+
+    base_url = _chest_card_base_url(request)
+    context = {
+        'participant_name': participant.name,
+        'participant_organization': participant.organization or '',
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Participant',
+        'invoice_number': payment_status.merchant_invoice_number if payment_status else '',
+        'qr_code_url': payment_status.qr_code.url if payment_status and payment_status.qr_code else '',
+        'capture_mode': False,
+        'pdf_mode': True,
+        'base_url': base_url,
+    }
+    _render_html_template_to_pdf('chest_card_design/chest_card.html', context, output_path)
+
+
+def _render_png_badge_to_pdf(png_path, pdf_path, width_mm, height_mm):
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    canvas = pdf_canvas.Canvas(pdf_path, pagesize=(float(width_mm) * mm, float(height_mm) * mm))
+    canvas.drawImage(str(png_path), 0, 0, width=float(width_mm) * mm, height=float(height_mm) * mm, preserveAspectRatio=False, mask='auto')
+    canvas.showPage()
+    canvas.save()
+
+
+def _render_overlay_chest_card_to_png(participant, design, payment_status, output_path):
+    if not payment_status or not payment_status.qr_code:
+        raise ValueError('QR code is required before generating an overlay chest card.')
+
+    width_px = _mm_to_px(design.width_mm, design.dpi)
+    height_px = _mm_to_px(design.height_mm, design.dpi)
+    if design.overlay_reference_image:
+        canvas = Image.open(design.overlay_reference_image.path).convert('RGBA').resize((width_px, height_px))
+    else:
+        canvas = Image.new('RGBA', (width_px, height_px), (255, 255, 255, 0))
+
+    qr_size_px = _mm_to_px(design.qr_size_mm, design.dpi)
+    qr_x_px = _mm_to_px(design.qr_x_mm, design.dpi)
+    qr_y_px = _mm_to_px(design.qr_y_mm, design.dpi)
+    qr_image = Image.open(payment_status.qr_code.path).convert('RGBA').resize((qr_size_px, qr_size_px))
+    canvas.paste(qr_image, (qr_x_px, qr_y_px), qr_image)
+
+    draw = ImageDraw.Draw(canvas)
+    box_x = _mm_to_px(design.name_x_mm, design.dpi)
+    box_y = _mm_to_px(design.name_y_mm, design.dpi)
+    box_width = _mm_to_px(design.name_width_mm, design.dpi)
+    box_height = _mm_to_px(design.name_height_mm, design.dpi)
+    font, lines, line_height = _fit_text_to_box(draw, participant.name, box_width, box_height, design.font_size_pt)
+    total_height = (line_height * len(lines)) + max(len(lines) - 1, 0) * 4
+    current_y = box_y + max((box_height - total_height) // 2, 0)
+    fill = _hex_to_rgb(design.font_color)
+
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line or ' ', font=font)
+        line_width = bbox[2] - bbox[0]
+        if design.text_align == ChestCardDesign.TEXT_ALIGN_LEFT:
+            current_x = box_x
+        elif design.text_align == ChestCardDesign.TEXT_ALIGN_RIGHT:
+            current_x = box_x + max(box_width - line_width, 0)
+        else:
+            current_x = box_x + max((box_width - line_width) // 2, 0)
+        draw.text((current_x, current_y), line, font=font, fill=fill)
+        current_y += line_height + 4
+
+    canvas.save(output_path, 'PNG')
+
+
+def _media_relative_path(file_path):
+    relative_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
+    return relative_path.replace('\\', '/')
+
+
+def _get_or_create_chest_card(participant, payment_status=None):
+    if not participant:
+        return None
+    chest_card, _ = ChestCard.objects.get_or_create(
+        participant=participant,
+        defaults={
+            'event': participant.event,
+            'payment_status': payment_status,
+        },
+    )
+    updates = []
+    if chest_card.event_id != participant.event_id:
+        chest_card.event = participant.event
+        updates.append('event')
+    if payment_status and chest_card.payment_status_id != payment_status.id:
+        chest_card.payment_status = payment_status
+        updates.append('payment_status')
+    if updates:
+        chest_card.save(update_fields=updates + ['updated_at'])
+    return chest_card
+
+
+def _mark_event_chest_cards_outdated(event):
+    if not event:
+        return
+    ChestCard.objects.filter(event=event).exclude(status=ChestCard.STATUS_PENDING).update(status=ChestCard.STATUS_OUTDATED)
+
+
+def ensure_participant_chest_card_generated(participant, request=None):
+    if not participant:
+        return None
+
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=participant.event).first()
+    chest_card = _get_or_create_chest_card(participant, payment_status=payment_status)
+    if not chest_card:
+        return None
+
+    if not participant.approved or participant.denied:
+        chest_card.status = ChestCard.STATUS_PENDING
+        chest_card.last_error = None
+        chest_card.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    if not payment_status or payment_status.status not in ['paid', 'completed']:
+        chest_card.status = ChestCard.STATUS_PENDING
+        chest_card.last_error = None
+        chest_card.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    if not payment_status.qr_code:
+        chest_card.status = ChestCard.STATUS_PENDING
+        chest_card.last_error = 'QR code is not ready yet.'
+        chest_card.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    design = ChestCardDesign.objects.filter(event=participant.event).first()
+    if not design:
+        chest_card.status = ChestCard.STATUS_PENDING
+        chest_card.last_error = 'Chest card design is not configured for this event.'
+        chest_card.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    try:
+        output_paths = {
+            'pdf': _generate_chest_card_file(request, participant, participant.event, design, output_format='pdf'),
+        }
+        if design.design_mode == ChestCardDesign.MODE_OVERLAY:
+            output_paths['png'] = _generate_chest_card_file(request, participant, participant.event, design, output_format='png')
+
+        chest_card.payment_status = payment_status
+        chest_card.generated_pdf = _media_relative_path(output_paths['pdf'])
+        if output_paths.get('png'):
+            chest_card.generated_png = _media_relative_path(output_paths['png'])
+        chest_card.generated_at = timezone.now()
+        chest_card.design_updated_at = design.updated_at
+        chest_card.status = ChestCard.STATUS_GENERATED
+        chest_card.last_error = None
+        chest_card.save()
+        return output_paths
+    except Exception as exc:
+        chest_card.status = ChestCard.STATUS_FAILED
+        chest_card.last_error = str(exc)
+        chest_card.save(update_fields=['status', 'last_error', 'updated_at'])
+        raise
+
+
+def _chest_card_cache_timestamp(*values):
+    latest = 0.0
+    for value in values:
+        if not value:
+            continue
+        if hasattr(value, 'timestamp'):
+            latest = max(latest, value.timestamp())
+    return latest
+
+
+def _is_cached_chest_card_current(output_path, design, payment_status):
+    if not os.path.exists(output_path):
+        return False
+    required_ts = _chest_card_cache_timestamp(
+        getattr(design, 'updated_at', None),
+        getattr(payment_status, 'updated_at', None),
+    )
+    if not required_ts:
+        return True
+    return os.path.getmtime(output_path) >= required_ts
+
+
+def _sync_chest_card_file_record(participant, event, payment_status, design, output_path, output_format):
+    chest_card = _get_or_create_chest_card(participant, payment_status=payment_status)
+    if not chest_card:
+        return
+
+    file_timestamp = datetime.fromtimestamp(os.path.getmtime(output_path), tz=timezone.get_current_timezone()) if os.path.exists(output_path) else timezone.now()
+    chest_card.event = event
+    chest_card.payment_status = payment_status
+    if (output_format or 'pdf').lower() == 'png':
+        chest_card.generated_png = _media_relative_path(output_path)
+    else:
+        chest_card.generated_pdf = _media_relative_path(output_path)
+        if design.design_mode == ChestCardDesign.MODE_HTML:
+            chest_card.generated_png = None
+    chest_card.generated_at = file_timestamp
+    chest_card.design_updated_at = getattr(design, 'updated_at', None)
+    chest_card.status = ChestCard.STATUS_GENERATED
+    chest_card.last_error = None
+    chest_card.save()
+
+
+def _generate_chest_card_file(request, participant, event, design, output_format='pdf'):
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+    if not payment_status:
+        raise ValueError('No payment row was found for this participant and event.')
+    if not payment_status.qr_code:
+        raise ValueError('Generate the participant QR code first from Payment Center before creating the chest card.')
+
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    output_dir = os.path.join(settings.MEDIA_ROOT, 'chest_cards', 'generated', event_slug)
+    os.makedirs(output_dir, exist_ok=True)
+
+    if (output_format or 'pdf').lower() == 'png':
+        output_filename = _chest_card_output_filename(participant.name)
+        output_path = os.path.join(output_dir, output_filename)
+        if _is_cached_chest_card_current(output_path, design, payment_status):
+            _sync_chest_card_file_record(participant, event, payment_status, design, output_path, 'png')
+            return output_path
+        if design.design_mode == ChestCardDesign.MODE_HTML:
+            _render_chest_card_html_to_png(request, participant, event, design, payment_status, output_path)
+        else:
+            _render_overlay_chest_card_to_png(participant, design, payment_status, output_path)
+        _sync_chest_card_file_record(participant, event, payment_status, design, output_path, 'png')
+        return output_path
+
+    output_filename = _chest_card_pdf_output_filename(participant.name)
+    output_path = os.path.join(output_dir, output_filename)
+    if _is_cached_chest_card_current(output_path, design, payment_status):
+        _sync_chest_card_file_record(participant, event, payment_status, design, output_path, 'pdf')
+        return output_path
+    if design.design_mode == ChestCardDesign.MODE_HTML:
+        _render_chest_card_html_to_pdf(request, participant, event, design, payment_status, output_path)
+    else:
+        temp_png_path = os.path.join(output_dir, _chest_card_output_filename(participant.name))
+        if not _is_cached_chest_card_current(temp_png_path, design, payment_status):
+            _render_overlay_chest_card_to_png(participant, design, payment_status, temp_png_path)
+            _sync_chest_card_file_record(participant, event, payment_status, design, temp_png_path, 'png')
+        _render_png_badge_to_pdf(temp_png_path, output_path, design.width_mm, design.height_mm)
+    _sync_chest_card_file_record(participant, event, payment_status, design, output_path, 'pdf')
+    return output_path
+
+
+def _render_chest_card_png_to_bulk_pdf(output_path, png_paths, width_mm, height_mm):
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    canvas = pdf_canvas.Canvas(output_path, pagesize=(float(width_mm) * mm, float(height_mm) * mm))
+    for png_path in png_paths:
+        canvas.setPageSize((float(width_mm) * mm, float(height_mm) * mm))
+        canvas.drawImage(str(png_path), 0, 0, width=float(width_mm) * mm, height=float(height_mm) * mm, preserveAspectRatio=False, mask='auto')
+        canvas.showPage()
+    canvas.save()
+    return output_path
+
+
+def _build_chest_card_bulk_pdf(request, event, design, payments):
+    if not payments:
+        raise ValueError('No QR-ready participants are available for bulk PDF generation.')
+
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    output_dir = os.path.join(settings.MEDIA_ROOT, 'chest_cards', 'generated', event_slug, 'bulk')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, _chest_card_bulk_pdf_output_filename(event))
+
+    if design.design_mode == ChestCardDesign.MODE_HTML:
+        _render_bulk_chest_card_html_to_pdf(request, event, design, payments, output_path)
+        return output_path, len(payments)
+
+    png_paths = []
+    for payment in payments:
+        png_paths.append(_generate_chest_card_file(request, payment.participant, event, design, output_format='png'))
+    return _render_chest_card_png_to_bulk_pdf(output_path, png_paths, design.width_mm, design.height_mm), len(png_paths)
+
+
+def _build_chest_card_vendor_zip(request, event, design, payments):
+    if not payments:
+        raise ValueError('No QR-ready participants are available for vendor export.')
+
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(['participant_name', 'email', 'phone', 'organization', 'invoice_number', 'pdf_file'])
+
+    zip_buffer = io.BytesIO()
+    used_names = set()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for payment in payments:
+            pdf_path = _generate_chest_card_file(request, payment.participant, event, design, output_format='pdf')
+            file_name = os.path.basename(pdf_path)
+            if file_name in used_names:
+                stem, extension = os.path.splitext(file_name)
+                file_name = f'{stem}_{payment.id}{extension}'
+            used_names.add(file_name)
+
+            with open(pdf_path, 'rb') as pdf_file:
+                archive.writestr(file_name, pdf_file.read())
+
+            participant = payment.participant
+            csv_writer.writerow([
+                participant.name,
+                participant.email,
+                participant.phone,
+                participant.organization or '',
+                payment.merchant_invoice_number or '',
+                file_name,
+            ])
+
+        archive.writestr('manifest.csv', csv_buffer.getvalue().encode('utf-8'))
+
+    zip_buffer.seek(0)
+    return zip_buffer, len(used_names)
 
 
 def _generate_speaker_certificate_file(request, event, person, certificate, issued_by=None):
@@ -8193,6 +8705,225 @@ def dashboard_certificate_center(request):
         },
     }
     return render(request, 'dashboard_certificate_center.html', context)
+
+
+def _parse_chest_card_decimal(request, key, default):
+    raw_value = (request.POST.get(key) or '').strip()
+    if not raw_value:
+        return default
+    try:
+        return Decimal(raw_value)
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError(f"Enter a valid number for {key.replace('_', ' ')}.")
+
+
+def _parse_chest_card_int(request, key, default):
+    raw_value = (request.POST.get(key) or '').strip()
+    if not raw_value:
+        return default
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Enter a valid whole number for {key.replace('_', ' ')}.")
+
+
+def _chest_card_rows(event, query=''):
+    rows = []
+    query_text = (query or '').strip()
+    payments = PaymentStatus.objects.select_related('participant', 'event').filter(
+        event=event,
+        participant__isnull=False,
+        participant__approved=True,
+        participant__denied=False,
+        status__in=['paid', 'completed'],
+    )
+    if query_text:
+        payments = payments.filter(
+            Q(participant__name__icontains=query_text)
+            | Q(participant__email__icontains=query_text)
+            | Q(participant__phone__icontains=query_text)
+            | Q(merchant_invoice_number__icontains=query_text)
+            | Q(participant__organization__icontains=query_text)
+        )
+    for payment in payments.order_by('participant__name', 'participant__email'):
+        participant = payment.participant
+        rows.append({
+            'payment': payment,
+            'participant': participant,
+            'invoice_number': payment.merchant_invoice_number or '-',
+            'organization': participant.organization or '-',
+            'qr_ready': bool(payment.qr_code),
+            'payment_ready': payment.status in ['paid', 'completed'],
+        })
+    return rows
+
+
+@dashboard_permission_required('chest_cards')
+def dashboard_chest_card_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    default_event = events.filter(event_status='active').first() or events.first()
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    if not event_filter and default_event:
+        event_filter = str(default_event.id)
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    selected_event = events.filter(pk=event_filter).first() if event_filter else None
+
+    query_params = {}
+    if selected_event:
+        query_params['event'] = selected_event.id
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = f"{reverse('dashboard_chest_card_center')}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        action = request.POST.get('chest_card_action')
+        try:
+            if not selected_event:
+                raise ValueError('Choose an event before updating chest cards.')
+
+            design, created = ChestCardDesign.objects.get_or_create(event=selected_event)
+
+            if action == 'save_design':
+                design_mode = request.POST.get('design_mode') or ChestCardDesign.MODE_HTML
+                if design_mode not in dict(ChestCardDesign.MODE_CHOICES):
+                    design_mode = ChestCardDesign.MODE_HTML
+                design.design_mode = design_mode
+                design.width_mm = _parse_chest_card_decimal(request, 'width_mm', design.width_mm)
+                design.height_mm = _parse_chest_card_decimal(request, 'height_mm', design.height_mm)
+                design.dpi = max(_parse_chest_card_int(request, 'dpi', design.dpi), 72)
+                design.badge_title = (request.POST.get('badge_title') or '').strip() or None
+                design.accent_color = (request.POST.get('accent_color') or '').strip() or '#1769c2'
+                design.background_color = (request.POST.get('background_color') or '').strip() or '#f8fbff'
+                design.name_x_mm = _parse_chest_card_decimal(request, 'name_x_mm', design.name_x_mm)
+                design.name_y_mm = _parse_chest_card_decimal(request, 'name_y_mm', design.name_y_mm)
+                design.name_width_mm = _parse_chest_card_decimal(request, 'name_width_mm', design.name_width_mm)
+                design.name_height_mm = _parse_chest_card_decimal(request, 'name_height_mm', design.name_height_mm)
+                design.qr_x_mm = _parse_chest_card_decimal(request, 'qr_x_mm', design.qr_x_mm)
+                design.qr_y_mm = _parse_chest_card_decimal(request, 'qr_y_mm', design.qr_y_mm)
+                design.qr_size_mm = _parse_chest_card_decimal(request, 'qr_size_mm', design.qr_size_mm)
+                design.font_size_pt = max(_parse_chest_card_int(request, 'font_size_pt', design.font_size_pt), 10)
+                design.font_color = (request.POST.get('font_color') or '').strip() or '#0f172a'
+                text_align = request.POST.get('text_align') or ChestCardDesign.TEXT_ALIGN_CENTER
+                if text_align not in dict(ChestCardDesign.TEXT_ALIGN_CHOICES):
+                    text_align = ChestCardDesign.TEXT_ALIGN_CENTER
+                design.text_align = text_align
+                design.show_event_name = bool(request.POST.get('show_event_name'))
+                design.show_organization = bool(request.POST.get('show_organization'))
+                design.show_invoice_number = bool(request.POST.get('show_invoice_number'))
+                for field_name in ('overlay_reference_image', 'html_background_image'):
+                    if request.POST.get(f'clear_{field_name}'):
+                        setattr(design, field_name, None)
+                    elif request.FILES.get(field_name):
+                        setattr(design, field_name, request.FILES[field_name])
+                design.save()
+                _mark_event_chest_cards_outdated(selected_event)
+                dashboard_log_action(request, design, ADDITION if created else CHANGE, 'Updated chest card design from Chest Card Center dashboard.')
+                messages.success(request, f'Chest card setup updated for {selected_event.name}.')
+
+            elif action in ['download_chest_card_pdf', 'print_chest_card_pdf']:
+                payment = get_object_or_404(PaymentStatus.objects.select_related('participant', 'event'), pk=request.POST.get('payment_id'), event=selected_event)
+                output_path = _generate_chest_card_file(request, payment.participant, selected_event, design, output_format='pdf')
+                dashboard_log_action(request, payment, CHANGE, f'Generated chest card PDF for {payment.participant.name}.')
+                as_attachment = action != 'print_chest_card_pdf'
+                response = FileResponse(open(output_path, 'rb'), as_attachment=as_attachment, filename=os.path.basename(output_path))
+                response['Content-Type'] = 'application/pdf'
+                if not as_attachment:
+                    response['Content-Disposition'] = f'inline; filename="{os.path.basename(output_path)}"'
+                return response
+
+            elif action == 'scan_print':
+                scan_code = (request.POST.get('scan_code') or '').strip()
+                if not scan_code:
+                    raise ValueError('Enter or scan a code first.')
+                eligible_payments = PaymentStatus.objects.select_related('participant', 'event').filter(
+                    event=selected_event,
+                    participant__approved=True,
+                    status__in=['paid', 'completed'],
+                )
+                token_candidate = scan_code.rstrip('/').rsplit('/', 1)[-1]
+                scan_filter = (
+                    Q(merchant_invoice_number__iexact=scan_code)
+                    | Q(participant__email__iexact=scan_code)
+                    | Q(participant__phone__iexact=scan_code)
+                )
+                try:
+                    from uuid import UUID
+                    scan_filter |= Q(qr_token=UUID(token_candidate))
+                except (TypeError, ValueError, AttributeError):
+                    pass
+                if scan_code.isdigit():
+                    scan_filter |= Q(pk=int(scan_code)) | Q(participant_id=int(scan_code))
+                matches = list(eligible_payments.filter(scan_filter)[:2])
+                if not matches:
+                    raise ValueError('No completed approved participant matched this scan for the selected event.')
+                if len(matches) > 1:
+                    raise ValueError('More than one participant matched this scan. Search manually and print from the exact row.')
+                payment = matches[0]
+                if not payment.qr_code:
+                    raise ValueError(f'{payment.participant.name} does not have a registration QR code yet.')
+                output_path = _generate_chest_card_file(request, payment.participant, selected_event, design, output_format='pdf')
+                dashboard_log_action(request, payment, CHANGE, f'Printed chest card by QR scan for {payment.participant.name}.')
+                response = FileResponse(open(output_path, 'rb'), as_attachment=False, filename=os.path.basename(output_path))
+                response['Content-Type'] = 'application/pdf'
+                response['Content-Disposition'] = f'inline; filename="{os.path.basename(output_path)}"'
+                return response
+
+            elif action == 'download_bulk_chest_card_pdf':
+                rows = _chest_card_rows(selected_event, search_query)
+                ready_payments = [row['payment'] for row in rows if row['qr_ready']]
+                output_path, generated_count = _build_chest_card_bulk_pdf(request, selected_event, design, ready_payments)
+                dashboard_log_action(request, selected_event, CHANGE, f'Generated bulk chest card PDF ({generated_count} participants).')
+                response = FileResponse(open(output_path, 'rb'), as_attachment=True, filename=os.path.basename(output_path))
+                response['Content-Type'] = 'application/pdf'
+                return response
+
+            elif action == 'download_vendor_chest_card_zip':
+                rows = _chest_card_rows(selected_event, search_query)
+                ready_payments = [row['payment'] for row in rows if row['qr_ready']]
+                zip_buffer, generated_count = _build_chest_card_vendor_zip(request, selected_event, design, ready_payments)
+                dashboard_log_action(request, selected_event, CHANGE, f'Generated chest card vendor ZIP ({generated_count} participants).')
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{_chest_card_vendor_zip_output_filename(selected_event)}"'
+                return response
+
+            else:
+                messages.error(request, 'Choose a valid chest card action.')
+        except Exception as exc:
+            logger.exception('Chest card center action failed: %s', exc)
+            messages.error(request, str(exc))
+        return redirect(redirect_url)
+
+    design = ChestCardDesign.objects.filter(event=selected_event).first() if selected_event else None
+    rows = _chest_card_rows(selected_event, search_query) if selected_event else []
+    ready_rows = [row for row in rows if row['qr_ready']]
+    quick_match = rows[0] if len(rows) == 1 else None
+    page_obj = Paginator(rows, 15).get_page(request.GET.get('page'))
+    qr_ready_total = sum(1 for row in rows if row['qr_ready'])
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'design': design,
+        'page_obj': page_obj,
+        'ready_rows': ready_rows,
+        'quick_match': quick_match,
+        'current_filters': {
+            'event': str(selected_event.id) if selected_event else '',
+            'q': search_query,
+        },
+        'totals': {
+            'design_ready': bool(design),
+            'participants': len(rows),
+            'qr_ready': qr_ready_total,
+            'qr_pending': max(len(rows) - qr_ready_total, 0),
+            'mode': design.get_design_mode_display() if design else 'Not set',
+        },
+    }
+    return render(request, 'dashboard_chest_card_center.html', context)
 
 
 def _presentation_file_exists(file_field):

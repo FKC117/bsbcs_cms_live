@@ -1,0 +1,873 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chest Card Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .helper-text {
+            margin-top: 0.35rem;
+            font-size: 0.78rem;
+            line-height: 1.45;
+            color: #64748b;
+        }
+        .mode-panel[hidden] {
+            display: none !important;
+        }
+        .setup-details > summary {
+            list-style: none;
+        }
+        .setup-details > summary::-webkit-details-marker {
+            display: none;
+        }
+        .setup-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 0.45rem 0.7rem 0.45rem 0.95rem;
+            border-radius: 999px;
+            border: 1px solid #D9E4EF;
+            background: #F8FAFC;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+        }
+        .setup-chevron {
+            display: inline-grid;
+            place-items: center;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 999px;
+            background: #E2E8F0;
+            color: #0f172a;
+            font-size: 1rem;
+            font-weight: 900;
+            line-height: 1;
+            transition: transform 0.18s ease, background-color 0.18s ease;
+        }
+        .setup-details:hover .setup-chevron {
+            background: #CBD5E1;
+        }
+        .setup-details[open] .setup-chevron {
+            transform: rotate(180deg);
+        }
+        .color-field {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .color-swatch {
+            width: 3rem;
+            height: 3rem;
+            flex: 0 0 3rem;
+            padding: 0.2rem;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.9rem;
+            background: #fff;
+            cursor: pointer;
+        }
+        .color-swatch::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        .color-swatch::-webkit-color-swatch {
+            border: 0;
+            border-radius: 0.7rem;
+        }
+        .theme-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .theme-preset {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.7rem 0.9rem;
+            border: 1px solid #D9E4EF;
+            border-radius: 1rem;
+            background: #fff;
+            color: #0f172a;
+            font-size: 0.82rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .theme-preset:hover {
+            border-color: #1769C2;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+        }
+        .theme-preset-swatches {
+            display: flex;
+            align-items: center;
+        }
+        .theme-preset-swatch {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 999px;
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+            margin-left: -0.22rem;
+        }
+        .theme-preset-swatch:first-child {
+            margin-left: 0;
+        }
+        .scanner-shell {
+            display: grid;
+            gap: 1rem;
+        }
+        .scanner-preview {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #BFDBFE;
+            border-radius: 1rem;
+            background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+            min-height: 220px;
+        }
+        .scanner-video {
+            width: 100%;
+            height: 100%;
+            min-height: 220px;
+            object-fit: cover;
+            display: block;
+        }
+        .scanner-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(15,23,42,0.12), rgba(15,23,42,0.3));
+        }
+        .scanner-frame {
+            position: absolute;
+            inset: 16% 12%;
+            border: 3px solid rgba(255,255,255,0.92);
+            border-radius: 1rem;
+            box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.28);
+        }
+        .scanner-frame::before,
+        .scanner-frame::after {
+            content: '';
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: rgba(34, 197, 94, 0.85);
+        }
+        .scanner-frame::before {
+            top: 28%;
+        }
+        .scanner-frame::after {
+            bottom: 28%;
+        }
+        .scanner-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.8rem;
+            border-radius: 999px;
+            background: #EFF6FF;
+            color: #1D4ED8;
+            font-size: 0.82rem;
+            font-weight: 800;
+        }
+        .scanner-status.is-success {
+            background: #ECFDF5;
+            color: #047857;
+        }
+        .scanner-status.is-error {
+            background: #FEF2F2;
+            color: #B91C1C;
+        }
+        .scanner-status-dot {
+            width: 0.55rem;
+            height: 0.55rem;
+            border-radius: 999px;
+            background: currentColor;
+        }
+        .scanner-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .queue-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .queue-table th,
+        .queue-table td {
+            padding: 0.95rem 1rem;
+            border-top: 1px solid #D9E4EF;
+            vertical-align: top;
+            text-align: left;
+        }
+        .queue-table thead th {
+            border-top: 0;
+            background: #f1f5f9;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        @media (max-width: 900px) {
+            .queue-table,
+            .queue-table thead,
+            .queue-table tbody,
+            .queue-table tr,
+            .queue-table th,
+            .queue-table td {
+                display: block;
+            }
+            .queue-table thead {
+                display: none;
+            }
+            .queue-table tr + tr {
+                border-top: 1px solid #D9E4EF;
+            }
+            .queue-table td {
+                border-top: 0;
+                padding-top: 0.55rem;
+                padding-bottom: 0.55rem;
+            }
+            .queue-label {
+                display: block;
+                margin-bottom: 0.25rem;
+                font-size: 0.68rem;
+                font-weight: 900;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                color: #64748b;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Chest card workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_560px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Chest card center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Configure and generate chest cards for one event.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Use a preprinted-paper overlay or a full HTML design. The chest card queue is limited to approved participants whose payment is completed, because this badge acts as the gatepass.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid content-end">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Load</button>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search participant, email, phone, organization, invoice">
+                    <a href="{% url 'dashboard_chest_card_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Setup status</div>
+                <div class="mt-1 text-xl font-black {% if totals.design_ready %}text-bsbcs-green{% else %}text-bsbcs-amber{% endif %}">{% if totals.design_ready %}Ready{% else %}Setup{% endif %}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Mode</div>
+                <div class="mt-1 text-xl font-black text-ink">{{ totals.mode }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Eligible queue</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.participants }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">QR ready</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.qr_ready }}</div>
+            </div>
+        </section>
+
+        {% if selected_event %}
+        <section class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
+            <details class="setup-details rounded-3xl border border-line bg-white shadow-quiet" {% if not totals.design_ready %}open{% endif %}>
+                <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-5">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Design setup</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Chest card setup</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Open this panel when you need to adjust the chest card design, size, or alignment settings.</p>
+                    </div>
+                    <div class="setup-toggle">
+                        <span class="rounded-full px-3 py-1 text-xs font-black {% if totals.design_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %}">{% if totals.design_ready %}Setup saved{% else %}Setup required{% endif %}</span>
+                        <span class="setup-chevron">&#9662;</span>
+                    </div>
+                </summary>
+                <form method="post" enctype="multipart/form-data" class="border-t border-line px-5 py-5">
+                    {% csrf_token %}
+                    <input type="hidden" name="chest_card_action" value="save_design">
+                    <input type="hidden" name="event" value="{{ selected_event.id }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Live setup form</div>
+                            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Choose one mode first. The form will only show the fields needed for that mode, and every field includes helper text so the setup stays clear.</p>
+                        </div>
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save chest card setup</button>
+                    </div>
+
+                    <div>
+                        <label class="compact-label">Color presets</label>
+                        <div class="theme-presets">
+                            <button type="button" class="theme-preset" data-theme-preset data-accent="#1769c2" data-background="#f8fbff" data-font="#0f172a">
+                                <span class="theme-preset-swatches">
+                                    <span class="theme-preset-swatch" style="background:#1769c2"></span>
+                                    <span class="theme-preset-swatch" style="background:#f8fbff"></span>
+                                    <span class="theme-preset-swatch" style="background:#0f172a"></span>
+                                </span>
+                                Professional Blue
+                            </button>
+                            <button type="button" class="theme-preset" data-theme-preset data-accent="#b7791f" data-background="#fffaf0" data-font="#4a2f12">
+                                <span class="theme-preset-swatches">
+                                    <span class="theme-preset-swatch" style="background:#b7791f"></span>
+                                    <span class="theme-preset-swatch" style="background:#fffaf0"></span>
+                                    <span class="theme-preset-swatch" style="background:#4a2f12"></span>
+                                </span>
+                                Soft Gold
+                            </button>
+                            <button type="button" class="theme-preset" data-theme-preset data-accent="#0f9d7a" data-background="#f2fffb" data-font="#123b32">
+                                <span class="theme-preset-swatches">
+                                    <span class="theme-preset-swatch" style="background:#0f9d7a"></span>
+                                    <span class="theme-preset-swatch" style="background:#f2fffb"></span>
+                                    <span class="theme-preset-swatch" style="background:#123b32"></span>
+                                </span>
+                                Conference Green
+                            </button>
+                            <button type="button" class="theme-preset" data-theme-preset data-accent="#1d3557" data-background="#f6f8fc" data-font="#111827">
+                                <span class="theme-preset-swatches">
+                                    <span class="theme-preset-swatch" style="background:#1d3557"></span>
+                                    <span class="theme-preset-swatch" style="background:#f6f8fc"></span>
+                                    <span class="theme-preset-swatch" style="background:#111827"></span>
+                                </span>
+                                Classic Navy
+                            </button>
+                        </div>
+                        <p class="helper-text">Pick a ready-made palette and the three color fields will update automatically. You can still fine-tune each color after that.</p>
+                    </div>
+
+                    <div class="mt-5 grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="compact-label" for="design_mode">Chest card mode</label>
+                        <select id="design_mode" name="design_mode" class="workflow-select">
+                            <option value="html" {% if not design or design.design_mode == 'html' %}selected{% endif %}>HTML design</option>
+                            <option value="overlay" {% if design and design.design_mode == 'overlay' %}selected{% endif %}>Preprinted overlay</option>
+                        </select>
+                        <p class="helper-text">Choose <strong>HTML design</strong> when the system should generate the full badge. Choose <strong>Preprinted overlay</strong> when your paper already has the design and we only place name and QR.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="badge_title">Badge title</label>
+                        <input id="badge_title" name="badge_title" class="workflow-input" value="{{ design.badge_title|default:'Participant' }}" placeholder="Participant / Delegate / Faculty">
+                        <p class="helper-text">Short label shown near the top of the badge in HTML mode.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 md:grid-cols-4">
+                    <div>
+                        <label class="compact-label" for="width_mm">Width (mm)</label>
+                        <input id="width_mm" name="width_mm" type="number" step="0.01" class="workflow-input" value="{{ design.width_mm|default:105 }}">
+                        <p class="helper-text">Final badge width in millimeters.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="height_mm">Height (mm)</label>
+                        <input id="height_mm" name="height_mm" type="number" step="0.01" class="workflow-input" value="{{ design.height_mm|default:148 }}">
+                        <p class="helper-text">Final badge height in millimeters.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="dpi">DPI</label>
+                        <input id="dpi" name="dpi" type="number" min="72" class="workflow-input" value="{{ design.dpi|default:300 }}">
+                        <p class="helper-text">Higher DPI helps when overlay assets are rendered for print output and preview quality.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="text_align">Text align</label>
+                        <select id="text_align" name="text_align" class="workflow-select">
+                            <option value="left" {% if design and design.text_align == 'left' %}selected{% endif %}>Left</option>
+                            <option value="center" {% if not design or design.text_align == 'center' %}selected{% endif %}>Center</option>
+                            <option value="right" {% if design and design.text_align == 'right' %}selected{% endif %}>Right</option>
+                        </select>
+                        <p class="helper-text">Controls how the participant name sits inside the available text box.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 md:grid-cols-4">
+                    <div>
+                        <label class="compact-label" for="accent_color">Accent color</label>
+                        <div class="color-field">
+                            <input id="accent_color_picker" type="color" value="{{ design.accent_color|default:'#1769c2' }}" class="color-swatch" data-color-target="accent_color">
+                            <input id="accent_color" name="accent_color" class="workflow-input" value="{{ design.accent_color|default:'#1769c2' }}" data-color-input>
+                        </div>
+                        <p class="helper-text">Used by the built-in HTML badge design.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="background_color">Background color</label>
+                        <div class="color-field">
+                            <input id="background_color_picker" type="color" value="{{ design.background_color|default:'#f8fbff' }}" class="color-swatch" data-color-target="background_color">
+                            <input id="background_color" name="background_color" class="workflow-input" value="{{ design.background_color|default:'#f8fbff' }}" data-color-input>
+                        </div>
+                        <p class="helper-text">Main background color for the built-in HTML badge.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="font_size_pt">Font size</label>
+                        <input id="font_size_pt" name="font_size_pt" type="number" min="10" class="workflow-input" value="{{ design.font_size_pt|default:28 }}">
+                        <p class="helper-text">Starting font size for overlay name placement.</p>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="font_color">Font color</label>
+                        <div class="color-field">
+                            <input id="font_color_picker" type="color" value="{{ design.font_color|default:'#0f172a' }}" class="color-swatch" data-color-target="font_color">
+                            <input id="font_color" name="font_color" class="workflow-input" value="{{ design.font_color|default:'#0f172a' }}" data-color-input>
+                        </div>
+                        <p class="helper-text">Used mainly for overlay text color.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-2 md:grid-cols-3">
+                    <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                        <input type="checkbox" name="show_event_name" class="h-4 w-4 rounded border-line" {% if not design or design.show_event_name %}checked{% endif %}>
+                        Show event name
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                        <input type="checkbox" name="show_organization" class="h-4 w-4 rounded border-line" {% if not design or design.show_organization %}checked{% endif %}>
+                        Show organization
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                        <input type="checkbox" name="show_invoice_number" class="h-4 w-4 rounded border-line" {% if not design or design.show_invoice_number %}checked{% endif %}>
+                        Show invoice number
+                    </label>
+                </div>
+
+                <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                    <div class="mode-panel rounded-2xl border border-amber-100 bg-amber-50/50 p-4" data-mode-panel="overlay">
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Overlay mode</div>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this when the paper is already preprinted and the system only places the participant name and QR in exact boxes.</p>
+                        <div class="mt-4">
+                            <label class="compact-label" for="overlay_reference_image">Reference image</label>
+                            <p class="helper-text">Optional preview image of your preprinted paper so you can align the live text and QR boxes on screen.</p>
+                            <input id="overlay_reference_image" name="overlay_reference_image" type="file" accept="image/*" class="workflow-input">
+                            {% if design and design.overlay_reference_image %}
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <a href="{{ design.overlay_reference_image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View reference</a>
+                                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                        <input type="checkbox" name="clear_overlay_reference_image" class="h-3.5 w-3.5 rounded border-pink-200">
+                                        Remove on save
+                                    </label>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div><label class="compact-label" for="name_x_mm">Name X (mm)</label><input id="name_x_mm" name="name_x_mm" type="number" step="0.01" class="workflow-input" value="{{ design.name_x_mm|default:15 }}"></div>
+                            <div><label class="compact-label" for="name_y_mm">Name Y (mm)</label><input id="name_y_mm" name="name_y_mm" type="number" step="0.01" class="workflow-input" value="{{ design.name_y_mm|default:48 }}"></div>
+                            <div><label class="compact-label" for="name_width_mm">Name width (mm)</label><input id="name_width_mm" name="name_width_mm" type="number" step="0.01" class="workflow-input" value="{{ design.name_width_mm|default:75 }}"></div>
+                            <div><label class="compact-label" for="name_height_mm">Name height (mm)</label><input id="name_height_mm" name="name_height_mm" type="number" step="0.01" class="workflow-input" value="{{ design.name_height_mm|default:28 }}"></div>
+                            <div><label class="compact-label" for="qr_x_mm">QR X (mm)</label><input id="qr_x_mm" name="qr_x_mm" type="number" step="0.01" class="workflow-input" value="{{ design.qr_x_mm|default:30 }}"></div>
+                            <div><label class="compact-label" for="qr_y_mm">QR Y (mm)</label><input id="qr_y_mm" name="qr_y_mm" type="number" step="0.01" class="workflow-input" value="{{ design.qr_y_mm|default:90 }}"></div>
+                            <div><label class="compact-label" for="qr_size_mm">QR size (mm)</label><input id="qr_size_mm" name="qr_size_mm" type="number" step="0.01" class="workflow-input" value="{{ design.qr_size_mm|default:28 }}"></div>
+                        </div>
+                    </div>
+
+                    <div class="mode-panel rounded-2xl border border-blue-100 bg-blue-50/40 p-4" data-mode-panel="html">
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">HTML mode</div>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use the built-in HTML layout when you want the whole chest card designed by the system and exported as PDF. You do not need a background image unless you want a custom backdrop or artwork.</p>
+                        <div class="mt-4">
+                            <label class="compact-label" for="html_background_image">Optional background image</label>
+                            <p class="helper-text">Leave this empty to use the built-in HTML chest card design. Upload one only if you want custom artwork behind the content.</p>
+                            <input id="html_background_image" name="html_background_image" type="file" accept="image/*" class="workflow-input">
+                            {% if design and design.html_background_image %}
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <a href="{{ design.html_background_image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue">View background</a>
+                                    <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-pink-50 px-3 py-1.5 text-xs font-black text-bsbcs-pink">
+                                        <input type="checkbox" name="clear_html_background_image" class="h-3.5 w-3.5 rounded border-pink-200">
+                                        Remove on save
+                                    </label>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-4 rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-600 ring-1 ring-blue-100">
+                            The HTML card already has its own built-in design. Leave the background image empty if you want to use that default design. Upload one only when you want a custom background behind the text and QR.
+                        </div>
+                    </div>
+                </div>
+                </form>
+            </details>
+
+            <section id="chest-card-queue" class="rounded-3xl border border-line bg-white p-5 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Generation queue</div>
+                <h2 class="mt-1 text-2xl font-black text-ink">Participants for {{ selected_event.name }} {{ selected_event.year }}</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-600">This queue shows only approved participants with completed payment. Registration kit issue is not required for chest cards because the badge itself is the gatepass.</p>
+
+                <section class="mt-4 grid gap-3 lg:grid-cols-[minmax(320px,0.7fr)_minmax(0,1fr)]">
+                    <form method="post" id="chest-card-scan-form" target="print-frame" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                        {% csrf_token %}
+                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                        <input type="hidden" name="chest_card_action" value="scan_print">
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Scan desk</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Scan and print immediately</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Scan the secure QR printed on the participant invoice, or use invoice number, email, or phone for the selected event.</p>
+                        <label class="compact-label mt-4" for="scan_code">Scan / code</label>
+                        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                            <input id="scan_code" name="scan_code" class="workflow-input" placeholder="Focus here before scanning" autocomplete="off" autofocus>
+                            <button type="button" id="open-qr-scanner" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Scan QR</button>
+                            <button class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700">Print chest card</button>
+                        </div>
+                        <div class="mt-3 rounded-xl bg-green-50 p-3 text-xs font-bold leading-5 text-bsbcs-green ring-1 ring-green-100">
+                            Successful scan opens the participant chest card PDF and triggers the browser print dialog.
+                        </div>
+                    </form>
+
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">Manual search</div>
+                        <p class="mt-1 text-sm leading-6 text-slate-600">Search by invoice number, participant name, email, or phone. If one participant matches, you can print from the quick result below.</p>
+                        <form method="get" class="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end">
+                            <input type="hidden" name="event" value="{{ current_filters.event }}">
+                            <div class="min-w-0 flex-1">
+                                <label class="compact-label" for="instant_chest_search">Invoice or participant search</label>
+                                <input id="instant_chest_search" type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search by invoice, participant, email, phone, organization">
+                            </div>
+                            <div class="flex flex-wrap gap-2 lg:flex-none">
+                                <button class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Find chest card</button>
+                                <a href="{% url 'dashboard_chest_card_center' %}?event={{ current_filters.event }}" class="grid place-items-center rounded-xl border border-line px-5 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                            </div>
+                        </form>
+                        <p class="helper-text">This search also filters the queue and is ready for barcode scanner input because scanners usually type into this field like a keyboard.</p>
+                        {% if current_filters.q and quick_match %}
+                            <div class="mt-4 rounded-2xl bg-white p-4 ring-1 ring-blue-100">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-teal">Quick match</div>
+                                        <div class="mt-1 text-lg font-black text-ink">{{ quick_match.participant.name }}</div>
+                                        <div class="text-sm font-semibold text-slate-500">{{ quick_match.participant.email }} | {{ quick_match.participant.phone }}</div>
+                                        <div class="mt-2 text-sm text-slate-600">{{ quick_match.organization }} | {{ quick_match.invoice_number }}</div>
+                                    </div>
+                                    <div class="min-w-[240px] space-y-2">
+                                        <form method="post" target="print-frame">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="chest_card_action" value="print_chest_card_pdf">
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="payment_id" value="{{ quick_match.payment.id }}">
+                                            <button {% if not quick_match.qr_ready %}disabled{% endif %} class="w-full rounded-xl px-4 py-3 text-sm font-black text-white {% if quick_match.qr_ready %}bg-bsbcs-green hover:bg-emerald-700{% else %}cursor-not-allowed bg-slate-300 text-slate-600{% endif %}">Open and print chest card</button>
+                                        </form>
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="chest_card_action" value="download_chest_card_pdf">
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="payment_id" value="{{ quick_match.payment.id }}">
+                                            <button {% if not quick_match.qr_ready %}disabled{% endif %} class="w-full rounded-xl border border-line px-4 py-3 text-sm font-black {% if quick_match.qr_ready %}bg-white text-bsbcs-blue hover:border-bsbcs-blue{% else %}cursor-not-allowed bg-slate-100 text-slate-400{% endif %}">Download PDF</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                {% if not quick_match.qr_ready %}
+                                    <p class="helper-text">This participant still needs a QR code from Payment Center before the chest card can be generated.</p>
+                                {% endif %}
+                            </div>
+                        {% elif current_filters.q %}
+                            <p class="helper-text mt-3">{{ page_obj.paginator.count }} participant{{ page_obj.paginator.count|pluralize }} matched this search. Refine the query if you want a single instant result.</p>
+                        {% endif %}
+                    </div>
+                </section>
+
+                <div class="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                    <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-green">Bulk export</div>
+                    <div class="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+                        <div>
+                            <p class="text-sm leading-6 text-slate-600">Generate a single combined PDF for all QR-ready participants in the current filtered queue, or download a vendor ZIP with one PDF per participant plus a manifest file.</p>
+                            <p class="helper-text">Current filtered queue: {{ page_obj.paginator.count }} participants. QR-ready for export: {{ ready_rows|length }}.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 xl:justify-end">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="chest_card_action" value="download_bulk_chest_card_pdf">
+                                <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <button {% if not ready_rows %}disabled{% endif %} class="rounded-xl px-4 py-2.5 text-sm font-black text-white {% if ready_rows %}bg-bsbcs-green hover:bg-emerald-700{% else %}cursor-not-allowed bg-slate-300 text-slate-600{% endif %}">Download combined PDF</button>
+                            </form>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="chest_card_action" value="download_vendor_chest_card_zip">
+                                <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <button {% if not ready_rows %}disabled{% endif %} class="rounded-xl px-4 py-2.5 text-sm font-black text-white {% if ready_rows %}bg-bsbcs-blue hover:bg-bsbcs-navy{% else %}cursor-not-allowed bg-slate-300 text-slate-600{% endif %}">Download vendor ZIP</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 overflow-hidden rounded-2xl border border-line">
+                    <table class="queue-table">
+                        <thead>
+                            <tr>
+                                <th>Participant</th>
+                                <th>Organization</th>
+                                <th>Invoice</th>
+                                <th>QR</th>
+                                <th>PDF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in page_obj.object_list %}
+                                <tr>
+                                    <td>
+                                        <span class="queue-label">Participant</span>
+                                        <div class="font-black text-ink">{{ row.participant.name }}</div>
+                                        <div class="text-xs font-semibold text-slate-500">{{ row.participant.email }} | {{ row.participant.phone }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="queue-label">Organization</span>
+                                        <div class="font-semibold text-slate-600">{{ row.organization }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="queue-label">Invoice</span>
+                                        <div class="font-semibold text-slate-600">{{ row.invoice_number }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="queue-label">QR</span>
+                                        {% if row.qr_ready %}
+                                            <span class="rounded-full bg-green-50 px-2.5 py-1 text-xs font-black text-bsbcs-green">Ready</span>
+                                        {% else %}
+                                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-bsbcs-amber">Missing</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="chest_card_action" value="download_chest_card_pdf">
+                                            <input type="hidden" name="event" value="{{ selected_event.id }}">
+                                            <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                            <input type="hidden" name="payment_id" value="{{ row.payment.id }}">
+                                            <button {% if not row.qr_ready %}disabled{% endif %} class="w-full rounded-xl px-3 py-2 text-xs font-black text-white {% if row.qr_ready %}bg-bsbcs-blue hover:bg-bsbcs-navy{% else %}cursor-not-allowed bg-slate-300 text-slate-600{% endif %}">Generate PDF</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-sm font-semibold text-slate-500">No participant payment rows matched this event and search filter.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div class="text-sm font-semibold text-slate-500">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            {% if page_obj.has_previous %}
+                                <a href="?event={{ current_filters.event }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}&page=1#chest-card-queue" class="rounded-xl border border-line px-3 py-2 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">First</a>
+                                <a href="?event={{ current_filters.event }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}&page={{ page_obj.previous_page_number }}#chest-card-queue" class="rounded-xl border border-line px-3 py-2 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Previous</a>
+                            {% endif %}
+                            <span class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-600">{{ page_obj.number }}</span>
+                            {% if page_obj.has_next %}
+                                <a href="?event={{ current_filters.event }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}&page={{ page_obj.next_page_number }}#chest-card-queue" class="rounded-xl border border-line px-3 py-2 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Next</a>
+                                <a href="?event={{ current_filters.event }}{% if current_filters.q %}&q={{ current_filters.q|urlencode }}{% endif %}&page={{ page_obj.paginator.num_pages }}#chest-card-queue" class="rounded-xl border border-line px-3 py-2 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Last</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </section>
+        {% else %}
+            <section class="mt-4 rounded-3xl border border-dashed border-line bg-white px-6 py-12 text-center text-slate-500 shadow-quiet">
+                Choose an event to start configuring chest cards.
+            </section>
+        {% endif %}
+        </main>
+</div>
+    <div id="qr-scanner-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="qr-scanner-title">
+        <div class="qr-scanner-panel flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-lift sm:h-auto sm:max-h-[94vh] sm:max-w-2xl sm:rounded-2xl sm:border sm:border-white/20">
+            <div class="flex shrink-0 items-start justify-between gap-4 bg-gradient-to-r from-bsbcs-navy to-bsbcs-teal px-4 py-3 text-white sm:px-5 sm:py-4">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Chest card desk</div>
+                    <h2 id="qr-scanner-title" class="mt-1 text-lg font-black !text-white sm:text-xl">Scan participant QR code</h2>
+                    <p class="mt-1 text-xs font-semibold !text-white/75">Keep the QR flat, bright, and centered inside the square.</p>
+                </div>
+                <button type="button" id="close-qr-scanner" class="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/25 text-xl font-black text-white hover:bg-white/10" aria-label="Close scanner">&times;</button>
+            </div>
+            <div class="flex min-h-0 flex-1 flex-col">
+                <div class="shrink-0 space-y-2 p-3 sm:p-4">
+                    <div id="qr-scanner-status" class="rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-bsbcs-blue ring-1 ring-blue-100">Preparing camera...</div>
+                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        <select id="qr-camera-select" class="workflow-select" aria-label="Choose camera"><option value="">Detecting cameras...</option></select>
+                        <button type="button" id="restart-qr-camera" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Restart camera</button>
+                    </div>
+                </div>
+                <div id="kit-qr-reader" class="min-h-0 overflow-hidden border-y border-line bg-slate-950 sm:mx-4 sm:rounded-xl sm:border"></div>
+                <div id="kit-qr-frame-decoder" class="hidden"></div>
+                <div class="shrink-0 space-y-3 border-t border-line bg-white p-3 sm:border-t-0 sm:p-4">
+                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        <input id="qr-manual-code" class="workflow-input" placeholder="QR / invoice code if camera fails" autocomplete="off">
+                        <button type="button" id="submit-manual-qr-code" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Use Code</button>
+                    </div>
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <button type="button" id="scan-current-frame" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-emerald-700">Scan Frame</button>
+                        <label class="grid cursor-pointer place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Scan saved QR image<input type="file" id="qr-image-input" accept="image/*" class="hidden"></label>
+                        <button type="button" id="cancel-qr-scanner" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<script src="{% static 'js/vendor/html5-qrcode.min.js' %}"></script>
+<script>
+(() => {
+ const modal=document.getElementById('qr-scanner-modal'),openButton=document.getElementById('open-qr-scanner'),status=document.getElementById('qr-scanner-status'),scanInput=document.getElementById('scan_code'),scanForm=document.getElementById('chest-card-scan-form'),imageInput=document.getElementById('qr-image-input'),cameraSelect=document.getElementById('qr-camera-select'),restartCameraButton=document.getElementById('restart-qr-camera'),manualQrCode=document.getElementById('qr-manual-code'),submitManualQrCode=document.getElementById('submit-manual-qr-code'),scanCurrentFrameButton=document.getElementById('scan-current-frame');
+ const closeButtons=[document.getElementById('close-qr-scanner'),document.getElementById('cancel-qr-scanner')].filter(Boolean); const ENV='__environment__'; let scanner=null,frameDecoder=null,scannerRunning=false,scannerStarting=false,submitting=false,cameraDevices=[],frameScanTimer=null,frameScanRunning=false,activeCameraLabel='';
+ const setStatus=(m,t='blue')=>{ if(!status) return; status.textContent=m; status.className='rounded-xl px-3 py-2 text-sm font-bold ring-1'; if(t==='green') status.classList.add('bg-green-50','text-bsbcs-green','ring-green-100'); else if(t==='pink') status.classList.add('bg-pink-50','text-bsbcs-pink','ring-pink-100'); else status.classList.add('bg-blue-50','text-bsbcs-blue','ring-blue-100'); };
+ const stopScanner=async(hide=true)=>{ clearInterval(frameScanTimer); if(scannerRunning&&scanner){try{await scanner.stop();}catch(e){}} if(scanner){try{scanner.clear();}catch(e){}} scanner=null; scannerRunning=false; scannerStarting=false; frameScanRunning=false; if(hide&&modal){modal.classList.add('hidden'); modal.classList.remove('flex');}};
+ const submitDecodedCode=async(v)=>{ if(submitting||!v) return; submitting=true; scanInput.value=v.trim(); setStatus('QR matched. Opening chest card for print...','green'); await stopScanner(); scanForm.submit(); setTimeout(()=>submitting=false,1200); };
+ const loadCameras=async()=>{ cameraDevices=await Html5Qrcode.getCameras(); cameraSelect.innerHTML=''; const env=document.createElement('option'); env.value=ENV; env.textContent='Back camera auto'; cameraSelect.appendChild(env); cameraDevices.forEach((c,i)=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.label||`Camera ${i+1}`; cameraSelect.appendChild(o); }); const rear=cameraDevices.find(c=>/back|rear|environment/i.test(c.label||'')); cameraSelect.value=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)?ENV:(rear?rear.id:ENV); return cameraSelect.value; };
+ const decodeCurrentFrame=async(manual=false)=>{ if(frameScanRunning||submitting||!window.Html5Qrcode) return; const video=document.querySelector('#kit-qr-reader video'); if(!video||!video.videoWidth||!video.videoHeight){ if(manual) setStatus('Camera frame is not ready yet. Wait one second and try again.','pink'); return; } frameScanRunning=true; try{ const canvas=document.createElement('canvas'); canvas.width=video.videoWidth; canvas.height=video.videoHeight; const ctx=canvas.getContext('2d',{willReadFrequently:true}); ctx.drawImage(video,0,0,canvas.width,canvas.height); const blob=await new Promise(r=>canvas.toBlob(r,'image/png')); if(!blob) return; const file=new File([blob],'qr-camera-frame.png',{type:'image/png'}); if(!frameDecoder) frameDecoder=new Html5Qrcode('kit-qr-frame-decoder'); const decodedText=await frameDecoder.scanFile(file,false); await submitDecodedCode(decodedText);}catch(e){ if(manual&&!submitting) setStatus('No QR found in this frame. Fill the square and try again.','pink'); } finally{ frameScanRunning=false; }};
+ const startFrameLoop=()=>{ clearInterval(frameScanTimer); frameScanTimer=setInterval(()=>decodeCurrentFrame(false),1400); };
+ const startScanner=async()=>{ if(scannerStarting) return; if(!window.Html5Qrcode){ setStatus('QR scanner library could not load. Use manual code entry.','pink'); return; } if(!window.isSecureContext){ setStatus('Camera scanning requires HTTPS or localhost. Use saved-image scan or manual entry.','pink'); return; } await stopScanner(false); scannerStarting=true; scanner=new Html5Qrcode('kit-qr-reader',{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false}); setStatus('Detecting available cameras...'); try{ const selectedId=cameraSelect.value||await loadCameras(); activeCameraLabel=selectedId; await scanner.start(selectedId===ENV?{facingMode:'environment'}:selectedId,{fps:12,qrbox:(window.matchMedia('(max-width: 640px)').matches?{width:240,height:240}:{width:280,height:280}),disableFlip:false},submitDecodedCode,()=>{}); scannerRunning=true; scannerStarting=false; startFrameLoop(); setStatus('Live camera ready. Hold the complete QR code steady inside the square.','green'); }catch(e){ scannerRunning=false; scannerStarting=false; setStatus(`Camera could not start. ${(e&&e.message)||e}`,'pink'); console.error(e); }};
+ if(openButton) openButton.addEventListener('click', async()=>{ submitting=false; modal.classList.remove('hidden'); modal.classList.add('flex'); await startScanner(); });
+ if(cameraSelect) cameraSelect.addEventListener('change', startScanner); if(restartCameraButton) restartCameraButton.addEventListener('click', startScanner); if(scanCurrentFrameButton) scanCurrentFrameButton.addEventListener('click', ()=>decodeCurrentFrame(true)); closeButtons.forEach(b=>b.addEventListener('click', ()=>stopScanner())); if(modal) modal.addEventListener('click',(e)=>{ if(e.target===modal) stopScanner(); }); document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&modal&&!modal.classList.contains('hidden')) stopScanner(); });
+ if(imageInput) imageInput.addEventListener('change', async()=>{ const file=imageInput.files&&imageInput.files[0]; if(!file||!window.Html5Qrcode) return; if(scannerRunning){try{await scanner.stop();}catch(e){} scannerRunning=false;} if(!scanner) scanner=new Html5Qrcode('kit-qr-reader'); setStatus('Reading QR image...'); try{ const decodedText=await scanner.scanFile(file,true); await submitDecodedCode(decodedText);}catch(e){ setStatus('No readable QR code was found in that image.','pink'); } finally{ imageInput.value=''; }});
+ if(submitManualQrCode) submitManualQrCode.addEventListener('click', async()=>{ const code=manualQrCode.value.trim(); if(!code){ setStatus('Enter the QR or invoice code first.','pink'); manualQrCode.focus(); return; } await submitDecodedCode(code); }); if(manualQrCode) manualQrCode.addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); submitManualQrCode.click(); }});
+})();
+</script>
+<iframe id="print-frame" name="print-frame" class="hidden"></iframe>
+<script>
+    (() => {
+        const modeSelect = document.getElementById('design_mode');
+        const panels = Array.from(document.querySelectorAll('[data-mode-panel]'));
+        const colorPickers = Array.from(document.querySelectorAll('[data-color-target]'));
+        const themePresets = Array.from(document.querySelectorAll('[data-theme-preset]'));
+        const printFrame = document.getElementById('print-frame');
+
+        const syncModePanels = () => {
+            if (!modeSelect || !panels.length) return;
+            const activeMode = modeSelect.value;
+            panels.forEach((panel) => {
+                panel.hidden = panel.dataset.modePanel !== activeMode;
+            });
+        };
+
+        const normalizeHex = (value) => {
+            const raw = (value || '').trim();
+            return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : null;
+        };
+
+        colorPickers.forEach((picker) => {
+            const target = document.getElementById(picker.dataset.colorTarget);
+            if (!target) return;
+            picker.addEventListener('input', () => {
+                target.value = picker.value.toLowerCase();
+            });
+            target.addEventListener('input', () => {
+                const normalized = normalizeHex(target.value);
+                if (normalized) {
+                    picker.value = normalized;
+                }
+            });
+        });
+
+        const applyThemeValue = (fieldId, value) => {
+            const input = document.getElementById(fieldId);
+            if (!input) return;
+            const normalized = normalizeHex(value);
+            if (!normalized) return;
+            input.value = normalized;
+            const picker = document.querySelector(`[data-color-target="${fieldId}"]`);
+            if (picker) {
+                picker.value = normalized;
+            }
+        };
+
+        themePresets.forEach((preset) => {
+            preset.addEventListener('click', () => {
+                applyThemeValue('accent_color', preset.dataset.accent);
+                applyThemeValue('background_color', preset.dataset.background);
+                applyThemeValue('font_color', preset.dataset.font);
+            });
+        });
+
+        if (modeSelect) {
+            modeSelect.addEventListener('change', syncModePanels);
+        }
+        if (printFrame) {
+            printFrame.addEventListener('load', () => {
+                window.setTimeout(() => {
+                    try {
+                        printFrame.contentWindow.focus();
+                        printFrame.contentWindow.print();
+                    } catch (error) {
+                        console.warn('Print trigger failed', error);
+                    }
+                }, 500);
+            });
+        }
+        syncModePanels();
+    })();
+</script>
+</body>
+</html>

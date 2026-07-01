@@ -111,6 +111,17 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.change_feedbackquestion",
         ),
     },
+    "chest_cards": {
+        "read": (
+            "registration.view_chestcarddesign",
+            "registration.view_paymentstatus",
+            "registration.view_participant",
+        ),
+        "write": (
+            "registration.add_chestcarddesign",
+            "registration.change_chestcarddesign",
+        ),
+    },
     "bulk_email": {
         "read": (
             "registration.view_bulkemail",

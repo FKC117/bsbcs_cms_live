@@ -1694,7 +1694,31 @@ class ThankYouEmailLogAdmin(admin.ModelAdmin):
 
 # Certificate admin starts ----------------------------------------------------#
 
-from .models import Certificate, CertificateSignatory, SpeakerCertificate, SpeakerCertificateEmailLog
+from .models import Certificate, ChestCard, ChestCardDesign, CertificateSignatory, SpeakerCertificate, SpeakerCertificateEmailLog
+
+
+@admin.register(ChestCardDesign)
+class ChestCardDesignAdmin(admin.ModelAdmin):
+    list_display = ('event', 'design_mode', 'width_mm', 'height_mm', 'dpi', 'updated_at')
+    list_filter = ('design_mode', 'event')
+    search_fields = ('event__name',)
+    readonly_fields = ('updated_at',)
+    fieldsets = (
+        (None, {'fields': ('event', 'design_mode', 'width_mm', 'height_mm', 'dpi', 'updated_at')}),
+        ('Shared styling', {'fields': ('badge_title', 'accent_color', 'background_color', 'show_event_name', 'show_organization', 'show_invoice_number')}),
+        ('Overlay mode', {'fields': ('overlay_reference_image', 'name_x_mm', 'name_y_mm', 'name_width_mm', 'name_height_mm', 'qr_x_mm', 'qr_y_mm', 'qr_size_mm', 'font_size_pt', 'font_color', 'text_align')}),
+        ('HTML mode', {'fields': ('html_background_image',)}),
+    )
+
+
+@admin.register(ChestCard)
+class ChestCardAdmin(admin.ModelAdmin):
+    list_display = ('participant', 'event', 'payment_status', 'status', 'generated_at', 'design_updated_at', 'updated_at')
+    list_filter = ('status', 'event', 'generated_at', 'updated_at')
+    search_fields = ('participant__name', 'participant__email', 'participant__phone', 'payment_status__merchant_invoice_number', 'event__name')
+    readonly_fields = ('generated_at', 'design_updated_at', 'updated_at')
+
+
 
 
 class CertificateSignatoryInline(admin.TabularInline):

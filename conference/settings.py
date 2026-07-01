@@ -74,7 +74,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_countries',
     'website',
-    'registration',
+    'registration.apps.RegistrationConfig',
     'import_export',
     'crispy_forms',
     'crispy_tailwind',
