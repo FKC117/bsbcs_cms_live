@@ -24,7 +24,7 @@ def normalize_country_name(value):
 
 def setup_country_choice_field(field, css_class, *, include_blank=True):
     field.choices = COUNTRY_NAME_CHOICES if include_blank else COUNTRY_NAME_REQUIRED_CHOICES
-    field.widget = forms.Select(attrs={'class': css_class})
+    field.widget = forms.Select(choices=field.choices, attrs={'class': css_class})
 
 
 def normalize_phone_number(raw_phone, country=''):

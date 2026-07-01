@@ -18,7 +18,7 @@ from registration.models import (
     BulkEmail, BulkEmailRecipient, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
     SpeakerOutreachTemplatePreset,
 )
-from registration.forms import ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
+from registration.forms import DashboardParticipantCreateForm, ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
 from registration.phone_audit import apply_phone_fixes, build_phone_fix_report, run_phone_audit
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
@@ -2456,6 +2456,23 @@ class PhoneValidationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(UserProfile.objects.filter(user=login_user).exists())
+
+    def test_dashboard_participant_form_renders_country_options_and_defaults_to_bangladesh(self):
+        form = DashboardParticipantCreateForm(prefix='participant')
+
+        rendered = str(form['country'])
+
+        self.assertIn('Bangladesh', rendered)
+        self.assertIn('selected', rendered)
+        self.assertIn('value="Bangladesh"', rendered)
+
+    def test_dashboard_participant_form_keeps_profile_country_when_provided(self):
+        form = DashboardParticipantCreateForm(prefix='participant', initial={'country': 'Canada'})
+
+        rendered = str(form['country'])
+
+        self.assertIn('value="Canada" selected', rendered)
+        self.assertIn('Bangladesh', rendered)
 
 
 class PhoneAuditTests(TestCase):
