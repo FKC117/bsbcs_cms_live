@@ -38,7 +38,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {% for video in videos %}
                         <div class="bg-gray-200 p-4 rounded-lg shadow">
-                            <iframe width="100%" height="215" src="{{ video.youtube_url|youtube_embed }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="no-referrer-when-downgrade" loading="lazy"></iframe>
+                            <iframe width="100%" height="215" src="{{ video.youtube_url|youtube_embed }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
                             {% if video.caption %}
                                 <p class="mt-2 text-center text-gray-700">{{ video.caption }}</p>
                             {% endif %}

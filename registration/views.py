@@ -9696,9 +9696,9 @@ def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
 def dashboard_event_media_center(request):
     site_settings = SiteSettings.objects.first()
     events = Event.objects.order_by('-year', '-start_date', 'name')
-    event_filter = (request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')).strip()
-    media_filter = (request.POST.get('media_type') if request.method == 'POST' else request.GET.get('media_type', 'all')).strip() or 'all'
-    search_query = (request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')).strip()
+    event_filter = ((request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')) or '').strip()
+    media_filter = ((request.POST.get('media_type') if request.method == 'POST' else request.GET.get('media_type', 'all')) or 'all').strip() or 'all'
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
 
     query_params = {}
     if event_filter:
