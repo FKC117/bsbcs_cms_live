@@ -47,8 +47,8 @@ def resolve_sms_caller_id(sms_type=None):
 def get_sms_segment_char_limit(sms_type=None):
     sms_type = normalize_sms_type(sms_type)
     if sms_type == SMS_TYPE_MASKING:
-        return max(int(getattr(settings, 'SMS_MASKING_CHAR_LIMIT', 100) or 100), 1)
-    return max(int(getattr(settings, 'SMS_NON_MASKING_CHAR_LIMIT', 100) or 100), 1)
+        return max(int(getattr(settings, 'SMS_MASKING_CHAR_LIMIT', 160) or 160), 1)
+    return max(int(getattr(settings, 'SMS_NON_MASKING_CHAR_LIMIT', 160) or 160), 1)
 
 
 def calculate_sms_segments(message, sms_type=None):

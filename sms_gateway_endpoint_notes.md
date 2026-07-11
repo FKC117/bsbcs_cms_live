@@ -1,6 +1,13 @@
 # SMS Gateway Endpoint Notes
 
-This note summarizes the endpoints listed in `sms gateway/smpp.revesms.com.txt`, what each one is for, and which ones our project currently uses.
+This note summarizes the endpoints listed in the provider files in `sms gateway/`, what each one is for, and which ones our project currently uses.
+
+Important:
+- the PDF shows HTTPS variants for bulk send and multi-status
+- our current working setup uses HTTPS for single send, bulk send, single status, multi-status, and balance
+- the code is fully env-driven, so local and live will follow whatever values are set in each `.env`
+- masking now uses approved sender ID `BSBCS`
+- non-masking uses numeric sender ID `1234`
 
 ## Endpoints We Use
 
@@ -22,8 +29,8 @@ Purpose: send bulk SMS from the dashboard bulk SMS portal.
 Configured with:
 - `SMS_GATEWAY_BULK_URL`
 
-Recommended value:
-- `http://smpp.revesms.com:7788/send`
+Configured value we are currently following:
+- `https://smpp.revesms.com:7790/send`
 
 Used by code:
 - `registration.sms.send_bulk_sms()`
@@ -34,12 +41,12 @@ Purpose: check message delivery status later using provider message ID.
 Configured with:
 - `SMS_GATEWAY_DLR_URL`
 
-Recommended value:
+Configured value we are currently following:
 - `https://smpp.revesms.com:7790/getstatus`
 
 Current status:
 - configured in `.env`
-- not yet used by our code
+- used by our provider tools / delivery status checks
 
 ## Fallback Endpoint
 
@@ -76,6 +83,7 @@ Purpose:
 - non-HTTPS version of single message status check
 
 Current status:
+- not preferred
 - not used
 
 ### 7. Multi-status endpoint
@@ -84,9 +92,11 @@ Current status:
 Purpose:
 - fetch status for multiple provider message IDs at once
 
+Configured value we are currently following:
+- `https://smpp.revesms.com:7790/getmultistatus`
+
 Current status:
-- not used
-- may be useful later if we build delivery reconciliation for bulk campaigns
+- used by the bulk SMS campaign dashboard
 
 ### 8. Balance API
 Examples:
@@ -96,8 +106,11 @@ Examples:
 Purpose:
 - fetch account balance from the provider
 
+Configured value we are currently following:
+- `https://smpp.revesms.com/sms/smsConfiguration/smsClientBalance.jsp`
+
 Current status:
-- not used
+- used by the bulk SMS campaign dashboard
 
 ### 9. C panel / alternate API host
 Examples:
@@ -156,12 +169,15 @@ The bulk SMS UI uses these settings to:
 SMS_ENABLED=True
 SMS_GATEWAY_URL=https://smpp.revesms.com:7790/sendtext
 SMS_GATEWAY_SINGLE_URL=https://smpp.revesms.com:7790/sendtext
-SMS_GATEWAY_BULK_URL=http://smpp.revesms.com:7788/send
+SMS_GATEWAY_BULK_URL=https://smpp.revesms.com:7790/send
 SMS_GATEWAY_DLR_URL=https://smpp.revesms.com:7790/getstatus
+SMS_GATEWAY_MULTI_STATUS_URL=https://smpp.revesms.com:7790/getmultistatus
+SMS_GATEWAY_BALANCE_URL=https://smpp.revesms.com/sms/smsConfiguration/smsClientBalance.jsp
+SMS_GATEWAY_CLIENT_ID=...
 SMS_GATEWAY_API_KEY=...
 SMS_GATEWAY_SECRET_KEY=...
 SMS_GATEWAY_CALLER_ID=1234
-SMS_GATEWAY_MASKING_CALLER_ID=1234
+SMS_GATEWAY_MASKING_CALLER_ID=BSBCS
 SMS_GATEWAY_NON_MASKING_CALLER_ID=1234
 SMS_GATEWAY_HASH=
 SMS_REQUEST_TIMEOUT=15
@@ -173,9 +189,12 @@ SMS_NON_MASKING_CHAR_LIMIT=160
 
 - Automatic system SMS uses the single endpoint.
 - Dashboard bulk SMS uses the bulk endpoint.
-- DLR endpoint is saved for future delivery tracking.
-- We prefer HTTPS where the provider clearly supports it.
-- We do not force HTTPS for bulk until the provider gives an HTTPS bulk URL.
+- DLR endpoint is used for delivery tracking.
+- Multi-status and balance endpoints are used in the bulk SMS dashboard.
+- We are following the current `.env` choice exactly:
+- single SMS, bulk send, single status, multi-status, and balance use HTTPS
+- masking sender ID is `BSBCS`
+- non-masking sender ID is `1234`
 
 
 ## Endpoint Usage Matrix
@@ -183,10 +202,12 @@ SMS_NON_MASKING_CHAR_LIMIT=160
 | Endpoint | Purpose | Used Now | Where In Code |
 |---|---|---:|---|
 | `https://smpp.revesms.com:7790/sendtext` | Single/system SMS send | Yes | `registration.sms.send_sms()` |
-| `http://smpp.revesms.com:7788/send` | Bulk/campaign SMS send | Yes | `registration.sms.send_bulk_sms()` |
+| `https://smpp.revesms.com:7790/send` | Bulk/campaign SMS send | Yes | `registration.sms.send_bulk_sms()` |
 | `https://smpp.revesms.com:7790/getstatus` | Single message delivery/status lookup | Yes | `registration.sms.query_sms_status()` |
-| `http://smpp.revesms.com:7788/getmultistatus` | Multi-message campaign status lookup | Yes | `registration.sms.query_sms_multi_status()` |
+| `https://smpp.revesms.com:7790/getmultistatus` | Multi-message campaign status lookup | Yes | `registration.sms.query_sms_multi_status()` |
 | `https://smpp.revesms.com/sms/smsConfiguration/smsClientBalance.jsp` | Provider balance lookup | Yes | `registration.sms.query_sms_balance()` |
+| `http://smpp.revesms.com:7788/send` | HTTP bulk/campaign send fallback | No | Not currently selected in `.env` |
+| `http://smpp.revesms.com:7788/getmultistatus` | HTTP multi-status fallback | No | Not currently selected in `.env` |
 | `http://smpp.revesms.com:7788/sendtext` | HTTP fallback for single SMS | No | Not used |
 | `http://smpp.revesms.com:7788/getstatus` | HTTP fallback for single status lookup | No | Not used |
 | `http://bulksms.smsvaults.work:7788/sendtext` | Whitelabel single SMS send | No | Not used |
@@ -223,4 +244,6 @@ These appeared in older provider materials and Postman collections, but our impl
 - Dashboard campaigns use the provider bulk/campaign `send` endpoint.
 - Delivery confirmation is checked through `getstatus` and `getmultistatus`.
 - Provider balance is checked through the balance JSP endpoint.
+- The project does not hardcode local vs live SMS URLs; both environments follow their own `.env`.
+- The project does not hardcode masking/non-masking sender IDs either; both are controlled by `.env`.
 - We are not using SMPP, raw IP endpoints, whitelabel endpoints, or older alternate hosts.
