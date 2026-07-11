@@ -10913,16 +10913,38 @@ def dashboard_sms_template_center(request):
             messages.success(request, f'SMS template reset to default: {selected_template.label}.')
             return redirect(f"{reverse('dashboard_sms_template_center')}?template={selected_template.template_key}")
 
-    template_rows = []
+    def _template_group_label(template_key):
+        if template_key.startswith('registration_'):
+            return 'Registration SMS'
+        if template_key.startswith('abstract_'):
+            return 'Abstract SMS'
+        if template_key.startswith('membership_'):
+            return 'Membership SMS'
+        if 'payment_' in template_key:
+            return 'Payment SMS'
+        return 'Other SMS'
+
+    grouped_template_rows = []
+    group_order = ['Registration SMS', 'Abstract SMS', 'Membership SMS', 'Payment SMS', 'Other SMS']
+    grouped_map = {label: [] for label in group_order}
     for template in templates:
-        template_rows.append({
+        row = {
             'template': template,
             'is_selected': bool(selected_template and template.id == selected_template.id),
-        })
+        }
+        group_label = _template_group_label(template.template_key)
+        if 'payment_' in template.template_key:
+            group_label = 'Payment SMS'
+        grouped_map.setdefault(group_label, []).append(row)
+
+    for label in group_order:
+        rows = grouped_map.get(label) or []
+        if rows:
+            grouped_template_rows.append({'label': label, 'rows': rows})
 
     return render(request, 'dashboard_sms_template_center.html', {
         'site_settings': SiteSettings.objects.first(),
-        'template_rows': template_rows,
+        'grouped_template_rows': grouped_template_rows,
         'selected_template': selected_template,
         'default_template': defaults_map.get(selected_template.template_key, {}) if selected_template else {},
         'current_filters': {'event': ''},

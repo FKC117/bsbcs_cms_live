@@ -60,18 +60,25 @@
                     <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Templates</div>
                     <h2 class="mt-1 text-2xl font-black text-ink">System SMS list</h2>
                 </div>
-                <div class="space-y-3">
-                    {% for row in template_rows %}
-                        <a href="?template={{ row.template.template_key }}" class="block rounded-2xl border p-4 transition {% if row.is_selected %}border-bsbcs-blue bg-blue-50/70{% else %}border-line bg-slate-50/70 hover:border-bsbcs-blue hover:bg-white{% endif %}">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.template.label }}</div>
-                                    <div class="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ row.template.template_key }}</div>
-                                </div>
-                                <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-line">Masking</span>
+                <div class="space-y-4">
+                    {% for group in grouped_template_rows %}
+                        <section>
+                            <div class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{{ group.label }}</div>
+                            <div class="space-y-3">
+                                {% for row in group.rows %}
+                                    <a href="?template={{ row.template.template_key }}" class="block rounded-2xl border p-4 transition {% if row.is_selected %}border-bsbcs-blue bg-blue-50/70{% else %}border-line bg-slate-50/70 hover:border-bsbcs-blue hover:bg-white{% endif %}">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div class="text-sm font-black text-ink">{{ row.template.label }}</div>
+                                                <div class="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ row.template.template_key }}</div>
+                                            </div>
+                                            <span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-bsbcs-blue ring-1 ring-line">Masking</span>
+                                        </div>
+                                        <p class="mt-2 text-sm leading-5 text-slate-600">{{ row.template.description|default:'No description set.' }}</p>
+                                    </a>
+                                {% endfor %}
                             </div>
-                            <p class="mt-2 text-sm leading-5 text-slate-600">{{ row.template.description|default:'No description set.' }}</p>
-                        </a>
+                        </section>
                     {% endfor %}
                 </div>
             </aside>
