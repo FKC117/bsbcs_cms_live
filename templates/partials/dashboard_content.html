@@ -50,6 +50,7 @@
       {% if dashboard_access.bulk_sms %}<a href="{% url 'dashboard_sms_template_center' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">SMS templates</a>{% endif %}
       {% if dashboard_access.dashboard %}<a href="{% url 'dashboard_journey_lookup' %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Journey lookup</a>{% endif %}
       {% if dashboard_access.abstracts %}<a href="{% url 'dashboard_abstract_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Abstracts approval</a>{% endif %}
+      {% if dashboard_access.media %}<a href="{% url 'dashboard_event_media_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Event media</a>{% endif %}
       {% if dashboard_access.presentations %}<a href="{% url 'dashboard_presentation_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Presentations</a>{% endif %}
       {% if dashboard_access.certificates %}<a href="{% url 'dashboard_certificate_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Certificates</a>{% endif %}
       {% if dashboard_access.chest_cards %}<a href="{% url 'dashboard_chest_card_center' %}{% if current_filters.event %}?event={{ current_filters.event }}{% endif %}" class="rounded-xl border border-line px-3 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Chest cards</a>{% endif %}
@@ -479,3 +480,4 @@
 </section>
 
 {{ dashboard_chart_data|json_script:"dashboard-chart-data" }}
+

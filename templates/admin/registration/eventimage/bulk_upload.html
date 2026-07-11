@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">Event images</a>
+    &rsaquo; Bulk upload
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Bulk upload event images</h1>
+    <p>Select one event, then upload multiple image files at once. If you add a caption prefix, the system will number the uploaded images automatically.</p>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row">
+                <div>
+                    <label for="id_event" class="required">Event:</label>
+                    <select name="event" id="id_event" required>
+                        <option value="">Select event</option>
+                        {% for event in events %}
+                            <option value="{{ event.id }}" {% if selected_event_id == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div>
+                    <label for="id_caption_prefix">Caption prefix:</label>
+                    <input type="text" name="caption_prefix" id="id_caption_prefix" placeholder="Example: Day 1 session">
+                </div>
+            </div>
+            <div class="form-row">
+                <div>
+                    <label for="id_images" class="required">Images:</label>
+                    <input type="file" name="images" id="id_images" accept="image/*" multiple required>
+                </div>
+            </div>
+        </fieldset>
+        <div class="submit-row">
+            <a href="{{ changelist_url }}" class="button cancel-link">Back to image list</a>
+            <input type="submit" value="Upload images" class="default">
+        </div>
+    </form>
+</div>
+{% endblock %}

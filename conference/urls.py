@@ -33,6 +33,7 @@ from registration.views import (
     registration_qr_checkin,
     dashboard_certificate_center,
     dashboard_chest_card_center,
+    dashboard_event_media_center,
     dashboard_presentation_center,
     dashboard_bulk_email_center,
     dashboard_bulk_sms_center,
@@ -75,6 +76,7 @@ urlpatterns = [
     path('registration-checkin/<uuid:token>/', registration_qr_checkin, name='registration_qr_checkin'),
     path('dashboard/certificate-center/', dashboard_certificate_center, name='dashboard_certificate_center'),
     path('dashboard/chest-card-center/', dashboard_chest_card_center, name='dashboard_chest_card_center'),
+    path('dashboard/event-media-center/', dashboard_event_media_center, name='dashboard_event_media_center'),
     path('dashboard/presentation-center/', dashboard_presentation_center, name='dashboard_presentation_center'),
     path('dashboard/bulk-email-center/', dashboard_bulk_email_center, name='dashboard_bulk_email_center'),
     path('dashboard/bulk-sms-center/', dashboard_bulk_sms_center, name='dashboard_bulk_sms_center'),
@@ -124,3 +126,4 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

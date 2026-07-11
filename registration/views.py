@@ -9692,6 +9692,155 @@ def _presentation_upload_rows(event_filter='', source_filter='all', query=''):
     return rows
 
 
+@dashboard_permission_required('media')
+def dashboard_event_media_center(request):
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    event_filter = (request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')).strip()
+    media_filter = (request.POST.get('media_type') if request.method == 'POST' else request.GET.get('media_type', 'all')).strip() or 'all'
+    search_query = (request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')).strip()
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if media_filter != 'all':
+        query_params['media_type'] = media_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('dashboard_event_media_center')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        action = (request.POST.get('media_action') or '').strip()
+        selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
+
+        if action == 'upload_images':
+            uploaded_files = [file for file in request.FILES.getlist('images') if file]
+            image_titles = request.POST.getlist('image_titles')
+            if not selected_event:
+                messages.error(request, 'Choose an event before uploading images.')
+            elif not uploaded_files:
+                messages.error(request, 'Select one or more image files to upload.')
+            else:
+                created_count = 0
+                for index, uploaded_file in enumerate(uploaded_files):
+                    title = image_titles[index].strip() if index < len(image_titles) else ''
+                    file_name = os.path.splitext(os.path.basename(uploaded_file.name))[0].replace('_', ' ').replace('-', ' ').strip()
+                    fallback_title = f"{selected_event.name} {selected_event.year} - {file_name or ('Image ' + str(index + 1))}"
+                    image = EventImage.objects.create(
+                        event=selected_event,
+                        image=uploaded_file,
+                        caption=title or fallback_title,
+                    )
+                    dashboard_log_action(request, image, ADDITION, 'Uploaded event image from Event Media Center dashboard.')
+                    created_count += 1
+                dashboard_log_action(request, selected_event, CHANGE, f'Uploaded {created_count} event gallery image(s) from Event Media Center dashboard.')
+                messages.success(request, f'{created_count} image(s) uploaded for {selected_event.name} {selected_event.year}.')
+            return redirect(redirect_url)
+
+        if action == 'add_video':
+            youtube_url = (request.POST.get('youtube_url') or '').strip()
+            caption = (request.POST.get('video_caption') or '').strip()
+            if not selected_event:
+                messages.error(request, 'Choose an event before adding a video.')
+                return redirect(redirect_url)
+            if not youtube_url:
+                messages.error(request, 'Add a YouTube video URL first.')
+                return redirect(redirect_url)
+            try:
+                URLValidator()(youtube_url)
+            except ValidationError:
+                messages.error(request, 'Enter a valid YouTube URL.')
+                return redirect(redirect_url)
+            if 'youtube.com' not in youtube_url and 'youtu.be' not in youtube_url:
+                messages.error(request, 'Only YouTube links are supported for event videos.')
+                return redirect(redirect_url)
+
+            video = EventVideo.objects.create(
+                event=selected_event,
+                youtube_url=youtube_url,
+                caption=caption,
+            )
+            dashboard_log_action(request, video, ADDITION, 'Added event video from Event Media Center dashboard.')
+            dashboard_log_action(request, selected_event, CHANGE, 'Added event gallery video from Event Media Center dashboard.')
+            messages.success(request, f'Video saved for {selected_event.name} {selected_event.year}.')
+            return redirect(redirect_url)
+
+        if action == 'delete_image':
+            image = get_object_or_404(EventImage.objects.select_related('event'), pk=request.POST.get('image_id'))
+            image_label = image.caption or image.image.name.rsplit('/', 1)[-1]
+            event_label = f'{image.event.name} {image.event.year}'
+            dashboard_log_action(request, image, DELETION, 'Deleted event image from Event Media Center dashboard.')
+            image.delete()
+            messages.success(request, f'Deleted image "{image_label}" from {event_label}.')
+            return redirect(redirect_url)
+
+        if action == 'delete_video':
+            video = get_object_or_404(EventVideo.objects.select_related('event'), pk=request.POST.get('video_id'))
+            event_label = f'{video.event.name} {video.event.year}'
+            dashboard_log_action(request, video, DELETION, 'Deleted event video from Event Media Center dashboard.')
+            video.delete()
+            messages.success(request, f'Deleted video from {event_label}.')
+            return redirect(redirect_url)
+
+    images = EventImage.objects.select_related('event').order_by('-id')
+    videos = EventVideo.objects.select_related('event').order_by('-id')
+
+    if event_filter:
+        images = images.filter(event_id=event_filter)
+        videos = videos.filter(event_id=event_filter)
+
+    if search_query:
+        images = images.filter(
+            Q(caption__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(image__icontains=search_query)
+        )
+        videos = videos.filter(
+            Q(caption__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(youtube_url__icontains=search_query)
+        )
+
+    if media_filter == 'images':
+        videos = EventVideo.objects.none()
+    elif media_filter == 'videos':
+        images = EventImage.objects.none()
+
+    selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
+    image_page_obj = Paginator(images, 12).get_page(request.GET.get('images_page'))
+    video_page_obj = Paginator(videos, 8).get_page(request.GET.get('videos_page'))
+
+    totals = {
+        'images': images.count(),
+        'videos': videos.count(),
+        'events_with_media': Event.objects.filter(
+            Q(eventimage__isnull=False) | Q(eventvideo__isnull=False)
+        ).distinct().count(),
+        'selected_event_images': EventImage.objects.filter(event=selected_event).count() if selected_event else 0,
+        'selected_event_videos': EventVideo.objects.filter(event=selected_event).count() if selected_event else 0,
+    }
+
+    return render(request, 'dashboard_event_media_center.html', {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'image_page_obj': image_page_obj,
+        'video_page_obj': video_page_obj,
+        'totals': totals,
+        'current_filters': {
+            'event': event_filter,
+            'media_type': media_filter,
+            'q': search_query,
+        },
+        'admin_links': {
+            'images': reverse('admin:registration_eventimage_changelist'),
+            'videos': reverse('admin:registration_eventvideo_changelist'),
+        },
+    })
+
+
 @dashboard_permission_required('presentations')
 def dashboard_presentation_center(request):
     site_settings = SiteSettings.objects.first()
@@ -12087,6 +12236,11 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
+
+
+
+
 
 
 

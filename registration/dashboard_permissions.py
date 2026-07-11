@@ -98,6 +98,20 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.change_presentationupload",
         ),
     },
+    "media": {
+        "read": (
+            "registration.view_eventimage",
+            "registration.view_eventvideo",
+        ),
+        "write": (
+            "registration.add_eventimage",
+            "registration.change_eventimage",
+            "registration.delete_eventimage",
+            "registration.add_eventvideo",
+            "registration.change_eventvideo",
+            "registration.delete_eventvideo",
+        ),
+    },
     "certificates": {
         "read": (
             "registration.view_certificate",
@@ -211,3 +225,4 @@ def dashboard_access_map(user):
         area: user_can_access_dashboard_area(user, area)
         for area in DASHBOARD_PERMISSION_GROUPS
     }
+

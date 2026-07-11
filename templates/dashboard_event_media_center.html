@@ -1,0 +1,456 @@
+{% load static %}
+{% load registration_filters %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Event Media Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input,
+        .workflow-select,
+        .workflow-file,
+        .workflow-textarea {
+            width: 100%;
+            border: 1px solid #D9E4EF;
+            border-radius: 0.75rem;
+            background: #fff;
+            padding: 0.65rem 0.8rem;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .workflow-file { padding: 0.55rem 0.7rem; }
+        .workflow-textarea { min-height: 96px; resize: vertical; }
+        .workflow-input:focus,
+        .workflow-select:focus,
+        .workflow-file:focus,
+        .workflow-textarea:focus {
+            border-color: #1769C2;
+            box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14);
+        }
+        .compact-label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .upload-row {
+            display: grid;
+            gap: 1rem;
+            border: 1px solid #D9E4EF;
+            border-radius: 1rem;
+            background: #F8FAFC;
+            padding: 1rem;
+        }
+        .upload-thumb {
+            aspect-ratio: 4 / 3;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 0.9rem;
+            background: #E2E8F0;
+        }
+        .upload-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .media-filter-top,
+        .media-filter-bottom {
+            display: grid;
+            gap: 0.5rem;
+        }
+        .media-filter-action {
+            display: grid;
+            align-content: end;
+        }
+        @media (min-width: 768px) {
+            .media-filter-top {
+                grid-template-columns: 150px 180px minmax(0, 1fr) auto;
+                align-items: end;
+            }
+            .media-filter-bottom {
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: center;
+            }
+        }
+        @media (min-width: 900px) {
+            .upload-row {
+                grid-template-columns: 260px minmax(0, 1fr);
+                align-items: start;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Event media workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/dashboard_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 xl:grid-cols-[minmax(0,1fr)_620px] xl:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Event media center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Upload galleries and YouTube links without going row by row.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Bulk upload event photos with editable titles, add event videos, review what is already attached to each event, and clean up mistakes before visitors see the gallery.</p>
+            </div>
+            <form method="get" class="rounded-[1.35rem] border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="media-filter-top">
+                    <div>
+                        <label class="compact-label" for="media_type">Source</label>
+                        <select id="media_type" name="media_type" class="workflow-select">
+                            <option value="all" {% if current_filters.media_type == 'all' %}selected{% endif %}>All sources</option>
+                            <option value="images" {% if current_filters.media_type == 'images' %}selected{% endif %}>Images</option>
+                            <option value="videos" {% if current_filters.media_type == 'videos' %}selected{% endif %}>Videos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="status_type">Status</label>
+                        <select id="status_type" name="status_type" class="workflow-select" disabled>
+                            <option selected>All media records</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            <option value="">All events</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="media-filter-action">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                    </div>
+                </div>
+                <div class="media-filter-bottom mt-2">
+                    <div>
+                        <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search title, filename, or YouTube URL">
+                    </div>
+                    <a href="{% url 'dashboard_event_media_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Filtered images</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ totals.images }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Filtered videos</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.videos }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Events with media</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.events_with_media }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Selected event</div>
+                <div class="mt-1 text-sm font-black text-ink">{% if selected_event %}{{ selected_event.name }} {{ selected_event.year }}{% else %}All events{% endif %}</div>
+                {% if selected_event %}
+                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ totals.selected_event_images }} images, {{ totals.selected_event_videos }} videos</div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,.8fr)]">
+            <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <div class="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Bulk image upload</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Upload many event photos in one action</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Pick the event, choose multiple files, then give each image its own title. If you leave a title empty, we will create one from the event name, year, and file name.</p>
+                    </div>
+                    <a href="{{ admin_links.images }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open image admin</a>
+                </div>
+                <div class="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-end">
+                    <div>
+                        <label class="compact-label" for="upload-event">Event</label>
+                        <select id="upload-event" name="event" class="workflow-select" required>
+                            <option value="">Select event</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="images">Images</label>
+                        <input id="images" type="file" name="images" class="workflow-file" accept="image/*" multiple required>
+                    </div>
+                </div>
+                <div class="mt-4 rounded-2xl border border-dashed border-line bg-slate-50/70 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div class="text-sm font-black text-ink">Titles per image</div>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">Each selected file will appear here with its own title field.</p>
+                        </div>
+                        <span id="media-upload-count" class="rounded-full bg-white px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-line">No files selected</span>
+                    </div>
+                    <div id="media-upload-list" class="mt-4 space-y-3">
+                        <div class="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm font-semibold text-slate-500">Choose image files to generate title inputs.</div>
+                    </div>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-xs font-semibold text-slate-500">Left blank? We will save it as: event name + year + file name.</p>
+                    <button type="submit" name="media_action" value="upload_images" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Upload images</button>
+                </div>
+            </form>
+
+            <form method="post" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <div class="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">YouTube videos</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Attach videos to the event gallery</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Paste the public YouTube URL and add an optional caption. These videos appear with the event gallery immediately.</p>
+                    </div>
+                    <a href="{{ admin_links.videos }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open video admin</a>
+                </div>
+                <div class="grid gap-4">
+                    <div>
+                        <label class="compact-label" for="video-event">Event</label>
+                        <select id="video-event" name="event" class="workflow-select" required>
+                            <option value="">Select event</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="youtube_url">YouTube URL</label>
+                        <input id="youtube_url" type="url" name="youtube_url" class="workflow-input" placeholder="https://www.youtube.com/watch?v=..." required>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="video_caption">Caption</label>
+                        <textarea id="video_caption" name="video_caption" class="workflow-textarea" placeholder="Optional video caption"></textarea>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center justify-end">
+                    <button type="submit" name="media_action" value="add_video" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save video</button>
+                </div>
+            </form>
+        </section>
+
+        {% if selected_event %}
+            <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Public result</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">{{ selected_event.name }} {{ selected_event.year }} gallery page</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-600">Use this after upload to verify what visitors can see.</p>
+                    </div>
+                    <a href="{% url 'registration:event_gallery' selected_event.id %}" target="_blank" rel="noopener noreferrer" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-green-700">Open public gallery</a>
+                </div>
+            </section>
+        {% endif %}
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Image library</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Uploaded event photos</h2>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ image_page_obj.paginator.count }} total</span>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {% for image in image_page_obj %}
+                        <article class="overflow-hidden rounded-2xl border border-line bg-slate-50/70">
+                            <div class="aspect-[4/3] bg-slate-100">
+                                <img src="{{ image.image.url }}" alt="{{ image.caption|default:image.event.name }}" class="h-full w-full object-cover">
+                            </div>
+                            <div class="p-3">
+                                <div class="text-sm font-black text-ink">{{ image.caption|default:"Untitled image" }}</div>
+                                <div class="mt-1 text-xs font-semibold text-slate-500">{{ image.event.name }} {{ image.event.year }}</div>
+                                <div class="mt-3 flex items-center justify-between gap-2">
+                                    <a href="{{ image.image.url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open</a>
+                                    <form method="post" onsubmit="return confirm('Delete this image?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="image_id" value="{{ image.id }}">
+                                        <button type="submit" name="media_action" value="delete_image" class="rounded-lg bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm font-semibold text-slate-500 sm:col-span-2 xl:col-span-3">No images match this filter yet.</div>
+                    {% endfor %}
+                </div>
+                {% if image_page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex items-center justify-between gap-3 text-sm font-bold text-slate-600">
+                        <span>Page {{ image_page_obj.number }} of {{ image_page_obj.paginator.num_pages }}</span>
+                        <div class="flex gap-2">
+                            {% if image_page_obj.has_previous %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.previous_page_number }}&videos_page={{ video_page_obj.number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Previous</a>
+                            {% endif %}
+                            {% if image_page_obj.has_next %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.next_page_number }}&videos_page={{ video_page_obj.number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Next</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Video library</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Saved YouTube videos</h2>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ video_page_obj.paginator.count }} total</span>
+                </div>
+                <div class="space-y-3">
+                    {% for video in video_page_obj %}
+                        <article class="overflow-hidden rounded-2xl border border-line bg-slate-50/70">
+                            <div class="aspect-video bg-slate-100">
+                                <iframe width="100%" height="100%" src="{{ video.youtube_url|youtube_embed }}" title="{{ video.caption|default:video.event.name }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>
+                            </div>
+                            <div class="p-3">
+                                <div class="text-sm font-black text-ink">{{ video.caption|default:"Untitled video" }}</div>
+                                <div class="mt-1 text-xs font-semibold text-slate-500">{{ video.event.name }} {{ video.event.year }}</div>
+                                <div class="mt-3 flex items-center justify-between gap-2">
+                                    <a href="{{ video.youtube_url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open YouTube</a>
+                                    <form method="post" onsubmit="return confirm('Delete this video?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="video_id" value="{{ video.id }}">
+                                        <button type="submit" name="media_action" value="delete_video" class="rounded-lg bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm font-semibold text-slate-500">No videos match this filter yet.</div>
+                    {% endfor %}
+                </div>
+                {% if video_page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex items-center justify-between gap-3 text-sm font-bold text-slate-600">
+                        <span>Page {{ video_page_obj.number }} of {{ video_page_obj.paginator.num_pages }}</span>
+                        <div class="flex gap-2">
+                            {% if video_page_obj.has_previous %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.number }}&videos_page={{ video_page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Previous</a>
+                            {% endif %}
+                            {% if video_page_obj.has_next %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.number }}&videos_page={{ video_page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Next</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</div>
+<script>
+    (function () {
+        const fileInput = document.getElementById('images');
+        const eventSelect = document.getElementById('upload-event');
+        const list = document.getElementById('media-upload-list');
+        const counter = document.getElementById('media-upload-count');
+
+        if (!fileInput || !eventSelect || !list || !counter) {
+            return;
+        }
+
+        function sanitizeFileName(name) {
+            const withoutExtension = name.replace(/\.[^.]+$/, '');
+            return withoutExtension.replace(/[_-]+/g, ' ').trim();
+        }
+
+        function fallbackTitle(fileName, index) {
+            const option = eventSelect.options[eventSelect.selectedIndex];
+            const eventLabel = option && option.value ? option.text.trim() : 'Event image';
+            const fileLabel = sanitizeFileName(fileName) || ('Image ' + (index + 1));
+            return eventLabel + ' - ' + fileLabel;
+        }
+
+        function renderRows() {
+            const files = Array.from(fileInput.files || []);
+            counter.textContent = files.length ? files.length + ' file(s) selected' : 'No files selected';
+
+            if (!files.length) {
+                list.innerHTML = '<div class="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm font-semibold text-slate-500">Choose image files to generate title inputs.</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+            files.forEach((file, index) => {
+                const row = document.createElement('div');
+                row.className = 'upload-row';
+
+                const thumb = document.createElement('div');
+                thumb.className = 'upload-thumb';
+                const img = document.createElement('img');
+                img.alt = file.name;
+                thumb.appendChild(img);
+
+                const right = document.createElement('div');
+                right.className = 'space-y-3';
+                right.innerHTML = [
+                    '<div>',
+                    '<div class="text-sm font-black text-ink">' + file.name + '</div>',
+                    '<div class="mt-1 text-xs font-semibold text-slate-500">Leave the title empty to use: ' + fallbackTitle(file.name, index) + '</div>',
+                    '</div>',
+                    '<div>',
+                    '<label class="compact-label">Image title</label>',
+                    '<input type="text" name="image_titles" class="workflow-input" placeholder="' + fallbackTitle(file.name, index).replace(/"/g, '&quot;') + '">',
+                    '</div>'
+                ].join('');
+
+                row.appendChild(thumb);
+                row.appendChild(right);
+                list.appendChild(row);
+
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        fileInput.addEventListener('change', renderRows);
+        eventSelect.addEventListener('change', renderRows);
+    })();
+</script>
+</body>
+</html>
+
+

@@ -17,6 +17,7 @@ from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
 from .sms import get_system_sms_content
 import os
 from django.http import HttpResponse, HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html
 from django.utils import timezone
@@ -26,7 +27,7 @@ from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.tokens import default_token_generator
-from django.urls import reverse
+from django.urls import path, reverse
 from django.contrib.auth import get_user_model
 from .views import send_approval_email
 from .program_emails import send_program_assignment_email
@@ -479,7 +480,7 @@ class FeatureSpeakerAdmin(admin.ModelAdmin):
     list_per_page = 15
 admin.site.register(FeatureSpeaker, FeatureSpeakerAdmin)
 
-#from django.urls import reverse
+#from django.urls import path, reverse
 #def send_consolidated_email(participant, password, include_password):
 #    event = participant.event
 #    subject = f'Your Registration for {event.name} {event.year} is Approved!'
@@ -512,7 +513,7 @@ admin.site.register(FeatureSpeaker, FeatureSpeakerAdmin)
 
 
 
-from django.urls import reverse
+from django.urls import path, reverse
 def send_consolidated_email(request, participant, password, include_password):
     event = participant.event
     subject = f'Your Registration for {event.name} {event.year} is Approved!'
@@ -1537,12 +1538,85 @@ admin.site.register(Sponsor, SponsorAdmin)
 from .models import EventImage, EventVideo
 
 class EventImageAdmin(admin.ModelAdmin):
-    list_display = ('image', 'caption', 'event')
+    change_list_template = 'admin/registration/eventimage/change_list.html'
+    list_display = ('image_preview', 'caption', 'event', 'image_link')
     list_filter = ('event',)
+    search_fields = ('caption', 'event__name', 'image')
+    readonly_fields = ('image_preview',)
+    fields = ('event', 'caption', 'image', 'image_preview')
+
+    def get_urls(self):
+        info = self.model._meta.app_label, self.model._meta.model_name
+        custom_urls = [
+            path(
+                'bulk-upload/',
+                self.admin_site.admin_view(self.bulk_upload_view),
+                name='%s_%s_bulk_upload' % info,
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def image_preview(self, obj):
+        if obj and obj.image:
+            return format_html('<img src="{}" style="height: 84px; width: 120px; object-fit: cover; border-radius: 10px;" />', obj.image.url)
+        return 'No image uploaded'
+    image_preview.short_description = 'Preview'  # type: ignore
+
+    def image_link(self, obj):
+        if obj and obj.image:
+            return format_html('<a href="{}" target="_blank">Open file</a>', obj.image.url)
+        return 'No file'
+    image_link.short_description = 'File'  # type: ignore
+
+    def bulk_upload_view(self, request):
+        events = Event.objects.order_by('-year', '-start_date', 'name')
+        selected_event_id = (request.POST.get('event') or request.GET.get('event') or '').strip()
+        if request.method == 'POST':
+            selected_event = Event.objects.filter(pk=selected_event_id).first() if selected_event_id else None
+            uploaded_files = [file for file in request.FILES.getlist('images') if file]
+            caption_prefix = (request.POST.get('caption_prefix') or '').strip()
+            if not selected_event:
+                self.message_user(request, 'Choose an event before bulk uploading images.', messages.ERROR)
+            elif not uploaded_files:
+                self.message_user(request, 'Select one or more image files to upload.', messages.ERROR)
+            else:
+                created_count = 0
+                for index, uploaded_file in enumerate(uploaded_files, start=1):
+                    caption = ''
+                    if caption_prefix:
+                        caption = caption_prefix if len(uploaded_files) == 1 else f"{caption_prefix} {index}"
+                    image = EventImage.objects.create(
+                        event=selected_event,
+                        image=uploaded_file,
+                        caption=caption,
+                    )
+                    write_admin_audit_log(request, image, ADDITION, 'Bulk uploaded event image from admin media workflow.')
+                    created_count += 1
+                changelist_url = reverse('admin:registration_eventimage_changelist')
+                self.message_user(request, f'{created_count} image(s) uploaded for {selected_event.name} {selected_event.year}.', messages.SUCCESS)
+                return HttpResponseRedirect(f'{changelist_url}?event__id__exact={selected_event.id}')
+
+        context = {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': 'Bulk upload event images',
+            'events': events,
+            'selected_event_id': selected_event_id,
+            'changelist_url': reverse('admin:registration_eventimage_changelist'),
+        }
+        return TemplateResponse(request, 'admin/registration/eventimage/bulk_upload.html', context)
+
 
 class EventVideoAdmin(admin.ModelAdmin):
-    list_display = ('youtube_url', 'caption', 'event')
+    list_display = ('caption', 'event', 'youtube_link')
     list_filter = ('event',)
+    search_fields = ('caption', 'event__name', 'youtube_url')
+
+    def youtube_link(self, obj):
+        if obj and obj.youtube_url:
+            return format_html('<a href="{}" target="_blank">Open YouTube URL</a>', obj.youtube_url)
+        return 'No URL'
+    youtube_link.short_description = 'YouTube'  # type: ignore
 
 admin.site.register(EventImage, EventImageAdmin)
 admin.site.register(EventVideo, EventVideoAdmin)
@@ -1822,7 +1896,7 @@ class FeedbackQuestionAdmin(admin.ModelAdmin):
 
 
 from django.contrib import admin
-from django.urls import reverse
+from django.urls import path, reverse
 from django.utils.html import format_html
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
@@ -2388,7 +2462,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from urllib.parse import urlencode
-from django.urls import reverse
+from django.urls import path, reverse
 from .models import PendingPaymentReminder
 
 @admin.register(PendingPaymentReminder)
@@ -2545,3 +2619,5 @@ class LogEntryAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
