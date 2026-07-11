@@ -17,8 +17,7 @@ from .email_audit import consume_email_quota_reservations, record_email_audit, r
 from .email_rendering import render_rich_email_html
 from .models import EmailAuditLog, Participant, ParticipantEmailLog, SpeakerCertificate, SpeakerCertificateEmailLog, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, ThankYouEmailLog
 from .sms import (
-    build_registration_approval_sms,
-    build_registration_confirmation_sms,
+    get_system_sms_content,
     send_sms,
 )
 
@@ -116,8 +115,8 @@ def _send_email(
 
 
 @shared_task(bind=True)
-def send_sms_task(self, phone, message, country='Bangladesh', context=None, sms_type='non_masking'):
-    return send_sms(phone, message, country=country, context=context, sms_type=sms_type)
+def send_sms_task(self, phone, message, country='Bangladesh', context=None, sms_type='non_masking', fallback_sms_type=None):
+    return send_sms(phone, message, country=country, context=context, sms_type=sms_type, fallback_sms_type=fallback_sms_type)
 
 
 @shared_task(bind=True)
@@ -436,14 +435,22 @@ def send_participant_approval_email(
             },
             audit_sent_by_user_id=sent_by_user_id,
         )
-        sms_message = (
-            build_registration_approval_sms(participant)
+        sms_template_key = (
+            'registration_approval'
             if email_type == ParticipantEmailLog.TYPE_APPROVAL_PAYMENT
-            else build_registration_confirmation_sms(participant)
+            else 'registration_confirmation'
+        )
+        sms_payload = get_system_sms_content(
+            sms_template_key,
+            context={
+                'participant_name': participant.name,
+                'event_name': event.name,
+                'event_year': event.year,
+            },
         )
         send_sms(
             participant.phone,
-            sms_message,
+            sms_payload['body'],
             country=participant.country,
             context={
                 'source': 'participant_approval_email',
@@ -451,6 +458,8 @@ def send_participant_approval_email(
                 'event_id': event.id,
                 'email_type': email_type,
             },
+            sms_type=sms_payload['sms_type'],
+            fallback_sms_type=sms_payload.get('fallback_sms_type'),
         )
         if email_type == ParticipantEmailLog.TYPE_FREE_CONFIRMATION and payment_status:
             payment_status.email_sent = True

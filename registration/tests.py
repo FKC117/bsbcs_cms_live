@@ -17,13 +17,13 @@ from registration.models import (
     ProgramItemFaculty, AbstractSubmission, RegistrationKit,
     CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventAttendee, CorporatePayment,
     BulkEmail, BulkEmailRecipient, BulkEmailSendLog, BulkSMS, BulkSMSSendLog, PhoneGroup, SpeakerOutreachCoordination, SpeakerOutreachEmailLog, SpeakerOutreachTemplate,
-    SpeakerOutreachTemplatePreset,
+    SpeakerOutreachTemplatePreset, SystemSMSTemplate,
 )
 from registration.forms import DashboardParticipantCreateForm, ProgramSessionBuilderForm, RegistrationForm, UserProfileForm, normalize_phone_number
 from registration.phone_audit import apply_phone_fixes, build_phone_fix_report, run_phone_audit
 from registration.bulk_email_services import _send_bulk_email_recipient_direct
 from registration.email_rendering import render_rich_email_html
-from registration.sms import calculate_sms_segments
+from registration.sms import calculate_sms_segments, get_system_sms_content
 from registration.tasks import send_speaker_outreach_email_task
 from registration.pdf_utils import generate_invoice
 from registration.qr_utils import registration_qr_payload
@@ -2918,3 +2918,52 @@ class SmsServiceTests(TestCase):
 
         self.assertEqual(result['status'], 'sent')
         self.assertEqual(mock_post.call_args.args[0], 'http://smpp.revesms.com:7788/send')
+
+
+class SystemSMSTemplateTests(TestCase):
+    def test_get_system_sms_content_uses_database_template_and_type(self):
+        SystemSMSTemplate.objects.update_or_create(
+            template_key='registration_submission',
+            defaults={
+                'label': 'Registration submission',
+                'description': 'Test template',
+                'available_variables': 'participant_name, event_name, event_year',
+                'sms_type': 'masking',
+                'body': 'Hello {{ participant_name }} for {{ event_name }} {{ event_year }}',
+            },
+        )
+        payload = get_system_sms_content(
+            "registration_submission",
+            context={'participant_name': "Fazlul", 'event_name': "BSBCS Conference", 'event_year': 2026},
+        )
+        self.assertEqual(payload['sms_type'], 'masking')
+        self.assertEqual(payload['body'], 'Hello Fazlul for BSBCS Conference 2026')
+
+
+class SystemSMSPaymentTemplateTests(TestCase):
+    def test_get_system_sms_content_registration_payment_received_defaults_to_masking(self):
+        payload = get_system_sms_content(
+            'registration_payment_received',
+            context={
+                'participant_name': 'Fazlul',
+                'event_name': 'BSBCS Conference',
+                'event_year': 2026,
+                'transaction_reference': 'TRX123',
+            },
+        )
+        self.assertEqual(payload['sms_type'], 'masking')
+        self.assertEqual(payload['fallback_sms_type'], 'non_masking')
+        self.assertIn('TRX123', payload['body'])
+
+    def test_get_system_sms_content_membership_payment_received_defaults_to_masking(self):
+        payload = get_system_sms_content(
+            'membership_payment_received',
+            context={
+                'member_name': 'Fazlul',
+                'membership_type': 'Annual Membership',
+                'transaction_reference': 'TRX456',
+            },
+        )
+        self.assertEqual(payload['sms_type'], 'masking')
+        self.assertEqual(payload['fallback_sms_type'], 'non_masking')
+        self.assertIn('TRX456', payload['body'])

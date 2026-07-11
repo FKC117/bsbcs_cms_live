@@ -87,13 +87,13 @@ from .tasks import (
 )
 from .pdf_utils import generate_abstract_pdf, generate_event_report_pdf, generate_invoice
 from .sms import (
-    build_abstract_submission_sms,
-    build_registration_submission_sms,
     estimate_sms_units,
+    get_system_sms_content,
     get_sms_segment_char_limit,
     query_sms_balance,
     query_sms_multi_status,
     query_sms_status,
+    queue_registration_payment_received_sms,
     resolve_sms_caller_id,
     resolve_sms_url,
 )
@@ -1863,15 +1863,25 @@ def send_registration_form_submission_email(participant):
             'source': 'registration_submission',
         },
     )
+    sms_payload = get_system_sms_content(
+        'registration_submission',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+        },
+    )
     send_sms_task.delay(
         participant.phone,
-        build_registration_submission_sms(participant),
+        sms_payload['body'],
         country=participant.country,
         context={
             'source': 'registration_submission',
             'participant_id': participant.id,
             'event_id': participant.event_id,
         },
+        sms_type=sms_payload['sms_type'],
+        fallback_sms_type=sms_payload.get('fallback_sms_type'),
     )
 
 
@@ -2078,15 +2088,27 @@ def send_abstract_submission_email(participant):
         recipient_list=recipient_list,
         html_message=html_content,
     )
+    latest_abstract = participant.abstractsubmission_set.order_by('-id').first()
+    sms_payload = get_system_sms_content(
+        'abstract_submission',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+            'abstract_title': latest_abstract.title if latest_abstract else '',
+        },
+    )
     send_sms_task.delay(
         participant.phone,
-        build_abstract_submission_sms(participant),
+        sms_payload['body'],
         country=participant.country,
         context={
             'source': 'abstract_submission',
             'participant_id': participant.id,
             'event_id': participant.event_id,
         },
+        sms_type=sms_payload['sms_type'],
+        fallback_sms_type=sms_payload.get('fallback_sms_type'),
     )
 
 # ### Abstract Submission process, abstract submission mail Ends ----------------------------------###
@@ -2727,6 +2749,7 @@ def finalize_payment(request, event_id, participant_id):
                     payment_status.transaction_id = query_response.get('paymentID', payment_status.transaction_id)
                     payment_status.trxID = query_response.get('trxID', payment_status.trxID)
                     payment_status.save()
+                    queue_registration_payment_received_sms(payment_status, source='registration_payment_completed_already_completed')
                     _log_event_payment('warning', 'payment_execute_already_completed_marked_completed', request, payment_status, {
                         'status_before': status_before,
                         'status_after': payment_status.status,
@@ -2798,6 +2821,7 @@ def finalize_payment(request, event_id, participant_id):
             payment_status.transaction_id = execute_response.get('paymentID')
             payment_status.trxID = execute_response.get('trxID')  # Use trxID from execute response
             payment_status.save()
+            queue_registration_payment_received_sms(payment_status, source='registration_payment_completed')
             _log_event_payment('info', 'payment_finalize_marked_completed', request, payment_status, {
                 'status_before': status_before,
                 'status_after': payment_status.status,
@@ -8016,6 +8040,7 @@ def dashboard_payment_center(request):
                     pk=payment_id,
                 )
                 if payment_action == 'update':
+                    previous_status = payment_record.status
                     payment_record.status = request.POST.get('manual_status') or payment_record.status
                     payment_record.amount = _normalize_payment_amount(request.POST.get('manual_amount'), payment_record.amount)
                     payment_record.transaction_id = (request.POST.get('manual_transaction_id') or '').strip() or None
@@ -8024,6 +8049,8 @@ def dashboard_payment_center(request):
                     if invoice_number:
                         payment_record.merchant_invoice_number = invoice_number
                     payment_record.save()
+                    if payment_record.status in SUCCESS_PAYMENT_STATUSES and previous_status not in SUCCESS_PAYMENT_STATUSES:
+                        queue_registration_payment_received_sms(payment_record, source='dashboard_event_payment_completed')
                     dashboard_log_action(request, payment_record, CHANGE, 'Updated event payment from Payment Center dashboard.')
                     messages.success(request, f'Event payment updated for {payment_record.participant.name}.')
                 elif payment_action == 'generate_invoice':
@@ -10850,6 +10877,57 @@ def dashboard_bulk_sms_center(request):
     if request.GET.get('bulk_sms_partial') == 'audit_summary':
         return render(request, 'partials/dashboard_bulk_sms_audit.html', context)
     return render(request, 'dashboard_bulk_sms_center.html', context)
+
+
+@dashboard_permission_required('bulk_sms')
+def dashboard_sms_template_center(request):
+    from website.models import SiteSettings
+    from .sms import ensure_system_sms_templates, get_system_sms_template_defaults
+
+    ensure_system_sms_templates()
+    defaults_map = get_system_sms_template_defaults()
+    templates = list(SystemSMSTemplate.objects.all().order_by('label', 'id'))
+    template_map = {template.template_key: template for template in templates}
+
+    selected_key = (request.GET.get('template') or request.POST.get('template_key') or '').strip()
+    if not selected_key and templates:
+        selected_key = templates[0].template_key
+    selected_template = template_map.get(selected_key) if selected_key else (templates[0] if templates else None)
+
+    if request.method == 'POST' and selected_template:
+        action = (request.POST.get('sms_template_action') or '').strip()
+        default_template = defaults_map.get(selected_template.template_key, {})
+        if action == 'save':
+            selected_template.body = (request.POST.get('body') or '').strip()
+            selected_template.sms_type = SystemSMSTemplate.SMS_TYPE_MASKING
+            if not selected_template.body:
+                messages.error(request, 'SMS body cannot be empty.')
+            else:
+                selected_template.save(update_fields=['body', 'sms_type', 'updated_at'])
+                messages.success(request, f'SMS template updated: {selected_template.label}.')
+            return redirect(f"{reverse('dashboard_sms_template_center')}?template={selected_template.template_key}")
+        if action == 'reset':
+            selected_template.body = default_template.get('body', selected_template.body)
+            selected_template.sms_type = SystemSMSTemplate.SMS_TYPE_MASKING
+            selected_template.save(update_fields=['body', 'sms_type', 'updated_at'])
+            messages.success(request, f'SMS template reset to default: {selected_template.label}.')
+            return redirect(f"{reverse('dashboard_sms_template_center')}?template={selected_template.template_key}")
+
+    template_rows = []
+    for template in templates:
+        template_rows.append({
+            'template': template,
+            'is_selected': bool(selected_template and template.id == selected_template.id),
+        })
+
+    return render(request, 'dashboard_sms_template_center.html', {
+        'site_settings': SiteSettings.objects.first(),
+        'template_rows': template_rows,
+        'selected_template': selected_template,
+        'default_template': defaults_map.get(selected_template.template_key, {}) if selected_template else {},
+        'current_filters': {'event': ''},
+        'template_seed_ok': True,
+    })
 
 
 @dashboard_permission_required('payments')

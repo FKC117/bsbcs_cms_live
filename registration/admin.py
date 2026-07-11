@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup, SystemSMSTemplate
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -14,7 +14,7 @@ from .tasks import send_email_task, send_sms_task
 from .models import EmailAuditLog
 # SchedulingResource
 from .pdf_utils import generate_abstract_pdf, generate_corporate_invoice
-from .sms import build_abstract_approval_sms, build_registration_confirmation_sms
+from .sms import get_system_sms_content
 import os
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.crypto import get_random_string
@@ -63,6 +63,14 @@ class UserProfileAdmin(ImportExportModelAdmin):
 
     image_preview.short_description = "Current image"
 admin.site.register(UserProfile, UserProfileAdmin)
+
+
+@admin.register(SystemSMSTemplate)
+class SystemSMSTemplateAdmin(admin.ModelAdmin):
+    list_display = ('label', 'template_key', 'sms_type', 'updated_at')
+    list_filter = ('sms_type',)
+    search_fields = ('label', 'template_key', 'body', 'description', 'available_variables')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(CorporateAccountRequest)
@@ -598,15 +606,25 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
             'source': 'admin_free_confirmation',
         },
     )
+    sms_payload = get_system_sms_content(
+        'registration_confirmation',
+        context={
+            'participant_name': participant.name,
+            'event_name': event.name,
+            'event_year': event.year,
+        },
+    )
     send_sms_task.delay(
         participant.phone,
-        build_registration_confirmation_sms(participant),
+        sms_payload['body'],
         country=participant.country,
         context={
             'source': 'admin_free_confirmation',
             'participant_id': participant.id,
             'event_id': event.id,
         },
+        sms_type=sms_payload['sms_type'],
+        fallback_sms_type=sms_payload.get('fallback_sms_type'),
     )
 
 
@@ -1191,15 +1209,26 @@ def send_approval_email(abstract, approval_type):
     )
     profile = getattr(abstract.user, 'userprofile', None)
     if profile:
+        sms_payload = get_system_sms_content(
+            'abstract_approval',
+            context={
+                'participant_name': profile.name,
+                'event_name': abstract.event.name if abstract.event else '',
+                'event_year': abstract.event.year if abstract.event else '',
+                'approval_type': approval_type,
+                'abstract_title': abstract.title,
+            },
+        )
         send_sms_task.delay(
             profile.phone,
-            build_abstract_approval_sms(abstract, approval_type),
+            sms_payload['body'],
             country=profile.country,
             context={
                 'source': 'abstract_approval',
                 'abstract_submission_id': abstract.id,
                 'approval_type': approval_type,
             },
+            sms_type=sms_payload['sms_type'],
         )
 # Abstracts approval email END-----------------------------------------------------------------------------#
 # Program Schedule admin view START------------------------------------------------------------------------------#

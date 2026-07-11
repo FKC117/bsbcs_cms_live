@@ -2376,6 +2376,56 @@ class PhoneGroup(models.Model):
                 seen.add(phone)
         return phones
 
+class SystemSMSTemplate(models.Model):
+    TEMPLATE_REGISTRATION_SUBMISSION = 'registration_submission'
+    TEMPLATE_REGISTRATION_APPROVAL = 'registration_approval'
+    TEMPLATE_REGISTRATION_CONFIRMATION = 'registration_confirmation'
+    TEMPLATE_ABSTRACT_SUBMISSION = 'abstract_submission'
+    TEMPLATE_ABSTRACT_APPROVAL = 'abstract_approval'
+    TEMPLATE_REGISTRATION_PAYMENT_RECEIVED = 'registration_payment_received'
+    TEMPLATE_MEMBERSHIP_SUBMISSION = 'membership_submission'
+    TEMPLATE_MEMBERSHIP_PAYMENT_RECEIVED = 'membership_payment_received'
+    TEMPLATE_MEMBERSHIP_APPROVAL = 'membership_approval'
+    TEMPLATE_MEMBERSHIP_REJECTION = 'membership_rejection'
+
+    TEMPLATE_CHOICES = [
+        (TEMPLATE_REGISTRATION_SUBMISSION, 'Registration submission'),
+        (TEMPLATE_REGISTRATION_APPROVAL, 'Registration approval / payment'),
+        (TEMPLATE_REGISTRATION_CONFIRMATION, 'Registration confirmation'),
+        (TEMPLATE_ABSTRACT_SUBMISSION, 'Abstract submission'),
+        (TEMPLATE_ABSTRACT_APPROVAL, 'Abstract approval'),
+        (TEMPLATE_REGISTRATION_PAYMENT_RECEIVED, 'Registration payment received'),
+        (TEMPLATE_MEMBERSHIP_SUBMISSION, 'Membership submission'),
+        (TEMPLATE_MEMBERSHIP_PAYMENT_RECEIVED, 'Membership payment received'),
+        (TEMPLATE_MEMBERSHIP_APPROVAL, 'Membership approval'),
+        (TEMPLATE_MEMBERSHIP_REJECTION, 'Membership rejection'),
+    ]
+
+    SMS_TYPE_MASKING = 'masking'
+    SMS_TYPE_NON_MASKING = 'non_masking'
+    SMS_TYPE_CHOICES = [
+        (SMS_TYPE_MASKING, 'Masking'),
+        (SMS_TYPE_NON_MASKING, 'Non-masking'),
+    ]
+
+    template_key = models.CharField(max_length=80, choices=TEMPLATE_CHOICES, unique=True)
+    label = models.CharField(max_length=120)
+    description = models.TextField(blank=True, null=True)
+    available_variables = models.TextField(blank=True, null=True)
+    sms_type = models.CharField(max_length=20, choices=SMS_TYPE_CHOICES, default=SMS_TYPE_NON_MASKING)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['label']
+        verbose_name = 'System SMS template'
+        verbose_name_plural = 'System SMS templates'
+
+    def __str__(self):
+        return self.label
+
+
 # Bulk SMS Model Ends here------------------------------------------------------------------------------#
 
 # Pending Payment Reminder models starts here-------------------------------------------------------------#

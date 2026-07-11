@@ -12,7 +12,7 @@ from django.utils.html import strip_tags
 from .models import Member
 from registration.tasks import send_email_task, send_sms_task
 from registration.models import EmailAuditLog
-from registration.sms import build_membership_approval_sms, build_membership_rejection_sms, build_membership_submission_sms
+from registration.sms import get_system_sms_content
 import logging
 
 logger = logging.getLogger(__name__)
@@ -136,9 +136,13 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
         }
     elif instance.approval_status == 'pending':
         logger.info(f"[MEMBER SIGNAL] Processing pending submission for {user_email}")
+        sms_payload = get_system_sms_content(
+            'membership_submission',
+            context={'member_name': instance.user_profile.name},
+        )
         send_sms_task.delay(
             instance.user_profile.phone,
-            build_membership_submission_sms(instance),
+            sms_payload['body'],
             country=instance.user_profile.country,
             context={
                 'source': 'membership_submission',
@@ -146,6 +150,8 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
                 'approval_status': instance.approval_status,
                 'user_profile_id': instance.user_profile_id,
             },
+            sms_type=sms_payload['sms_type'],
+            fallback_sms_type=sms_payload.get('fallback_sms_type'),
         )
         return
     else:
@@ -173,14 +179,14 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
                 'user_profile_id': instance.user_profile_id,
             },
         )
-        sms_message = (
-            build_membership_approval_sms(instance)
-            if instance.approval_status == 'approved'
-            else build_membership_rejection_sms(instance)
+        sms_template_key = 'membership_approval' if instance.approval_status == 'approved' else 'membership_rejection'
+        sms_payload = get_system_sms_content(
+            sms_template_key,
+            context={'member_name': instance.user_profile.name},
         )
         send_sms_task.delay(
             instance.user_profile.phone,
-            sms_message,
+            sms_payload['body'],
             country=instance.user_profile.country,
             context={
                 'source': 'membership_status_change',
@@ -188,6 +194,8 @@ def send_member_approval_email(sender, instance, created, update_fields, **kwarg
                 'approval_status': instance.approval_status,
                 'user_profile_id': instance.user_profile_id,
             },
+            sms_type=sms_payload['sms_type'],
+            fallback_sms_type=sms_payload.get('fallback_sms_type'),
         )
         logger.info(f"[MEMBER SIGNAL] Email task queued successfully for {user_email}")
     except Exception as e:

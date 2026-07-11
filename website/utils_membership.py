@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 from django.conf import settings
 from registration.tasks import send_email_task
+from registration.sms import queue_membership_payment_received_sms
 from registration.models import EmailAuditLog
 from django.utils import timezone
 from reportlab.lib import colors
@@ -337,6 +338,12 @@ def complete_membership_payment(payment_record):
         send_membership_invoice_email(payment_record)
         logger.info(
             "membership_invoice_email_sent payment_id=%s user_profile_email=%s",
+            payment_record.id,
+            payment_record.user_profile.email,
+        )
+        queue_membership_payment_received_sms(payment_record)
+        logger.info(
+            "membership_payment_sms_queued payment_id=%s user_profile_email=%s",
             payment_record.id,
             payment_record.user_profile.email,
         )

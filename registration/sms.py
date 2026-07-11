@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from math import ceil
 from typing import Iterable
 
@@ -14,6 +15,66 @@ logger = logging.getLogger('sms')
 SUCCESS_STATUSES = {'0', 0}
 SMS_TYPE_MASKING = 'masking'
 SMS_TYPE_NON_MASKING = 'non_masking'
+SYSTEM_SMS_TEMPLATE_DEFAULTS = {
+    'registration_submission': {'label': 'Registration submission', 'description': 'Sent right after a participant submits event registration.', 'available_variables': 'participant_name, event_name, event_year', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your registration for {{ event_name }} {{ event_year }} has been submitted successfully. We will notify you after review.'},
+    'registration_approval': {'label': 'Registration approval / payment', 'description': 'Sent after admin approval when payment is still required.', 'available_variables': 'participant_name, event_name, event_year', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your registration for {{ event_name }} {{ event_year }} has been approved. Please check your email for the payment link and next steps.'},
+    'registration_confirmation': {'label': 'Registration confirmation', 'description': 'Sent after admin free confirmation or completed confirmation flow.', 'available_variables': 'participant_name, event_name, event_year', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your registration for {{ event_name }} {{ event_year }} is confirmed successfully. Please check your email for details.'},
+    'abstract_submission': {'label': 'Abstract submission', 'description': 'Sent right after abstract submission.', 'available_variables': 'participant_name, event_name, event_year, abstract_title', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your abstract has been submitted successfully for {{ event_name }} {{ event_year }}.'},
+    'abstract_approval': {'label': 'Abstract approval', 'description': 'Sent after abstract approval decision.', 'available_variables': 'participant_name, event_name, event_year, approval_type, abstract_title', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your abstract has been approved for {{ approval_type }} in {{ event_name }} {{ event_year }}.'},
+    'registration_payment_received': {'label': 'Registration payment received', 'description': 'Sent after event payment is completed.', 'available_variables': 'participant_name, event_name, event_year, transaction_reference', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: We received your payment (TRXID: {{ transaction_reference }}) for {{ event_name }} {{ event_year }}.'},
+    'membership_submission': {'label': 'Membership submission', 'description': 'Sent after membership form submission.', 'available_variables': 'member_name', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your membership application has been submitted successfully. We will notify you after review.'},
+    'membership_payment_received': {'label': 'Membership payment received', 'description': 'Sent after membership payment is completed.', 'available_variables': 'member_name, membership_type, transaction_reference', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: We received your membership payment (TRXID: {{ transaction_reference }}) for {{ membership_type }}.'},
+    'membership_approval': {'label': 'Membership approval', 'description': 'Sent after membership approval.', 'available_variables': 'member_name', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your membership application has been approved. Please log in to continue.'},
+    'membership_rejection': {'label': 'Membership rejection', 'description': 'Sent after membership rejection or update.', 'available_variables': 'member_name', 'sms_type': SMS_TYPE_MASKING, 'body': 'BSBCS: Your membership application has been updated. Please check your email for details.'},
+}
+
+
+def get_system_sms_template_defaults():
+    return {key: value.copy() for key, value in SYSTEM_SMS_TEMPLATE_DEFAULTS.items()}
+
+
+def ensure_system_sms_templates():
+    from .models import SystemSMSTemplate
+
+    for template_key, defaults in SYSTEM_SMS_TEMPLATE_DEFAULTS.items():
+        SystemSMSTemplate.objects.get_or_create(
+            template_key=template_key,
+            defaults={
+                'label': defaults['label'],
+                'description': defaults['description'],
+                'available_variables': defaults['available_variables'],
+                'sms_type': defaults['sms_type'],
+                'body': defaults['body'],
+            },
+        )
+
+
+def _render_sms_template_text(body, context=None):
+    context = context or {}
+
+    def replace(match):
+        key = (match.group(1) or '').strip()
+        value = context.get(key, '')
+        return '' if value is None else str(value)
+
+    return re.sub(r'\{\{\s*([a-zA-Z0-9_]+)\s*\}\}', replace, body or '')
+
+
+def get_system_sms_content(template_key, context=None):
+    from .models import SystemSMSTemplate
+
+    defaults = SYSTEM_SMS_TEMPLATE_DEFAULTS.get(template_key)
+    if defaults is None:
+        return {'body': '', 'sms_type': SMS_TYPE_MASKING, 'template': None, 'defaults': None}
+
+    try:
+        template = SystemSMSTemplate.objects.filter(template_key=template_key).first()
+    except Exception:
+        template = None
+
+    body = template.body if template and template.body else defaults['body']
+    sms_type = normalize_sms_type(template.sms_type if template and template.sms_type else defaults['sms_type'])
+    return {'body': _render_sms_template_text(body, context=context), 'sms_type': SMS_TYPE_MASKING, 'fallback_sms_type': SMS_TYPE_NON_MASKING, 'template': template, 'defaults': defaults}
 
 
 def _mask_phone(phone):
@@ -219,7 +280,7 @@ def query_sms_balance(*, context=None):
     )
 
 
-def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING):
+def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING, fallback_sms_type=None):
     context = context or {}
     message = (message or '').strip()
     if not message:
@@ -239,40 +300,55 @@ def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=
         logger.warning('SMS skipped because gateway configuration is incomplete. to=%s context=%s', _mask_phone(normalized_phone), context)
         return {'status': 'skipped', 'reason': 'gateway_not_configured', 'phone': normalized_phone}
 
-    payload = _build_payload(normalized_phone, message, sms_type=sms_type)
-    try:
-        response = requests.post(
-            resolve_sms_url(is_bulk=False),
-            json=payload,
-            headers={'Content-Type': 'application/json'},
-            timeout=getattr(settings, 'SMS_REQUEST_TIMEOUT', 15),
-        )
-        try:
-            response_data = response.json()
-        except ValueError:
-            response_data = response.text
-    except requests.RequestException as exc:
-        logger.exception('SMS request failed. to=%s context=%s', _mask_phone(normalized_phone), context)
-        return {'status': 'failed', 'reason': 'request_exception', 'phone': normalized_phone, 'message': str(exc)}
+    attempted_sms_type = normalize_sms_type(sms_type)
+    attempted_fallback_sms_type = normalize_sms_type(fallback_sms_type) if fallback_sms_type else None
 
-    provider_status = response_data.get('Status') if isinstance(response_data, dict) else None
-    ok = response.ok and provider_status in SUCCESS_STATUSES
-    log_method = logger.info if ok else logger.warning
-    log_method(
-        'SMS provider response. to=%s http_status=%s provider_status=%s response=%s context=%s',
-        _mask_phone(normalized_phone),
-        response.status_code,
-        provider_status,
-        _response_preview(response_data),
-        context,
-    )
-    return {
-        'status': 'sent' if ok else 'failed',
-        'phone': normalized_phone,
-        'http_status': response.status_code,
-        'provider_status': provider_status,
-        'response': response_data,
-    }
+    def _submit(current_sms_type):
+        payload = _build_payload(normalized_phone, message, sms_type=current_sms_type)
+        try:
+            response = requests.post(
+                resolve_sms_url(is_bulk=False),
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=getattr(settings, 'SMS_REQUEST_TIMEOUT', 15),
+            )
+            try:
+                response_data = response.json()
+            except ValueError:
+                response_data = response.text
+        except requests.RequestException as exc:
+            logger.exception('SMS request failed. to=%s sms_type=%s context=%s', _mask_phone(normalized_phone), current_sms_type, context)
+            return {'status': 'failed', 'reason': 'request_exception', 'phone': normalized_phone, 'message': str(exc), 'sms_type': current_sms_type}
+
+        provider_status = response_data.get('Status') if isinstance(response_data, dict) else None
+        ok = response.ok and provider_status in SUCCESS_STATUSES
+        log_method = logger.info if ok else logger.warning
+        log_method(
+            'SMS provider response. to=%s sms_type=%s http_status=%s provider_status=%s response=%s context=%s',
+            _mask_phone(normalized_phone),
+            current_sms_type,
+            response.status_code,
+            provider_status,
+            _response_preview(response_data),
+            context,
+        )
+        return {
+            'status': 'sent' if ok else 'failed',
+            'phone': normalized_phone,
+            'http_status': response.status_code,
+            'provider_status': provider_status,
+            'response': response_data,
+            'sms_type': current_sms_type,
+        }
+
+    result = _submit(attempted_sms_type)
+    if result.get('status') == 'sent' or not attempted_fallback_sms_type or attempted_fallback_sms_type == attempted_sms_type:
+        return result
+
+    logger.warning('SMS primary route failed; trying fallback sender. to=%s primary=%s fallback=%s context=%s', _mask_phone(normalized_phone), attempted_sms_type, attempted_fallback_sms_type, context)
+    fallback_result = _submit(attempted_fallback_sms_type)
+    fallback_result['fallback_from_sms_type'] = attempted_sms_type
+    return fallback_result
 
 
 def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUNTRY, context=None, sms_type=SMS_TYPE_NON_MASKING):
@@ -342,32 +418,141 @@ def send_bulk_sms(phone_numbers: Iterable[str], message, *, country=DEFAULT_COUN
 
 
 def build_registration_submission_sms(participant):
-    return f"BSBCS: Your registration for {participant.event.name} {participant.event.year} has been submitted successfully. We will notify you after review."
+    return get_system_sms_content(
+        'registration_submission',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+        },
+    )['body']
 
 
 def build_registration_approval_sms(participant):
-    return f"BSBCS: Your registration for {participant.event.name} {participant.event.year} has been approved. Please complete payment from your account."
+    return get_system_sms_content(
+        'registration_approval',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+        },
+    )['body']
 
 
 def build_registration_confirmation_sms(participant):
-    return f"BSBCS: Your registration for {participant.event.name} {participant.event.year} is confirmed."
+    return get_system_sms_content(
+        'registration_confirmation',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+        },
+    )['body']
 
 
 def build_abstract_submission_sms(participant):
-    return f"BSBCS: Your abstract for {participant.event.name} {participant.event.year} has been submitted successfully."
+    latest_abstract = participant.abstractsubmission_set.order_by('-id').first()
+    return get_system_sms_content(
+        'abstract_submission',
+        context={
+            'participant_name': participant.name,
+            'event_name': participant.event.name,
+            'event_year': participant.event.year,
+            'abstract_title': latest_abstract.title if latest_abstract else '',
+        },
+    )['body']
 
 
 def build_abstract_approval_sms(abstract, approval_type):
-    return f"BSBCS: Your abstract for {abstract.event.name} {abstract.event.year} has been approved for {approval_type.lower()}."
+    profile = getattr(abstract.user, 'userprofile', None)
+    return get_system_sms_content(
+        'abstract_approval',
+        context={
+            'participant_name': profile.name if profile else getattr(abstract.user, 'username', ''),
+            'event_name': abstract.event.name if abstract.event else '',
+            'event_year': abstract.event.year if abstract.event else '',
+            'approval_type': approval_type,
+            'abstract_title': abstract.title,
+        },
+    )['body']
 
 
 def build_membership_submission_sms(member):
-    return 'BSBCS: Your membership application has been submitted successfully. We will notify you after review.'
+    return get_system_sms_content(
+        'membership_submission',
+        context={'member_name': member.user_profile.name if member.user_profile else ''},
+    )['body']
 
 
 def build_membership_approval_sms(member):
-    return 'BSBCS: Your membership application has been approved. Please log in to continue.'
+    return get_system_sms_content(
+        'membership_approval',
+        context={'member_name': member.user_profile.name if member.user_profile else ''},
+    )['body']
 
 
 def build_membership_rejection_sms(member):
-    return 'BSBCS: Your membership application has been updated. Please check your email for details.'
+    return get_system_sms_content(
+        'membership_rejection',
+        context={'member_name': member.user_profile.name if member.user_profile else ''},
+    )['body']
+
+
+def _payment_transaction_reference(record):
+    return getattr(record, 'trxID', None) or getattr(record, 'transaction_id', None) or getattr(record, 'merchant_invoice_number', None) or 'N/A'
+
+
+def queue_registration_payment_received_sms(payment_status, *, source='registration_payment_completed'):
+    from .tasks import send_sms_task
+
+    participant = payment_status.participant
+    payload = get_system_sms_content(
+        'registration_payment_received',
+        context={
+            'participant_name': participant.name,
+            'event_name': payment_status.event.name,
+            'event_year': payment_status.event.year,
+            'transaction_reference': _payment_transaction_reference(payment_status),
+        },
+    )
+    send_sms_task.delay(
+        participant.phone,
+        payload['body'],
+        country=participant.country,
+        context={
+            'source': source,
+            'participant_id': participant.id,
+            'event_id': payment_status.event_id,
+            'payment_status_id': payment_status.id,
+            'transaction_reference': _payment_transaction_reference(payment_status),
+        },
+        sms_type=payload['sms_type'],
+        fallback_sms_type=payload.get('fallback_sms_type'),
+    )
+
+
+def queue_membership_payment_received_sms(payment_record, *, source='membership_payment_completed'):
+    from registration.tasks import send_sms_task
+
+    profile = payment_record.user_profile
+    payload = get_system_sms_content(
+        'membership_payment_received',
+        context={
+            'member_name': profile.name,
+            'membership_type': payment_record.membership_type.name if payment_record.membership_type else 'membership',
+            'transaction_reference': _payment_transaction_reference(payment_record),
+        },
+    )
+    send_sms_task.delay(
+        profile.phone,
+        payload['body'],
+        country=profile.country,
+        context={
+            'source': source,
+            'user_profile_id': profile.id,
+            'membership_payment_id': payment_record.id,
+            'transaction_reference': _payment_transaction_reference(payment_record),
+        },
+        sms_type=payload['sms_type'],
+        fallback_sms_type=payload.get('fallback_sms_type'),
+    )

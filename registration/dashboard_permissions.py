@@ -138,12 +138,14 @@ DASHBOARD_PERMISSION_GROUPS = {
         "read": (
             "registration.view_bulksms",
             "registration.view_phonegroup",
+            "registration.view_systemsmstemplate",
         ),
         "write": (
             "registration.add_bulksms",
             "registration.change_bulksms",
             "registration.add_phonegroup",
             "registration.change_phonegroup",
+            "registration.change_systemsmstemplate",
         ),
     },
     "staff_activity": {
