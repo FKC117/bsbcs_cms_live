@@ -136,6 +136,23 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.change_chestcarddesign",
         ),
     },
+    "food_tokens": {
+        "read": (
+            "registration.view_foodtokendesign",
+            "registration.view_foodtoken",
+            "registration.view_foodtokenredemptionlog",
+            "registration.view_paymentstatus",
+            "registration.view_participant",
+        ),
+        "write": (
+            "registration.add_foodtokendesign",
+            "registration.change_foodtokendesign",
+            "registration.add_foodtoken",
+            "registration.change_foodtoken",
+            "registration.add_foodtokenredemptionlog",
+            "registration.change_foodtokenredemptionlog",
+        ),
+    },
     "bulk_email": {
         "read": (
             "registration.view_bulkemail",

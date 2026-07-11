@@ -6,8 +6,8 @@
     {% if dashboard_access.participants %}<a href="{% url 'dashboard_participant_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="hidden rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition lg:inline-flex {% if current_url == 'dashboard_participant_center' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Participants</a>{% endif %}
     {% if dashboard_access.payments %}<a href="{% url 'dashboard_payment_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="hidden rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition xl:inline-flex {% if current_url == 'dashboard_payment_center' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Payments</a>{% endif %}
 
-    {% if dashboard_access.program or dashboard_access.membership or dashboard_access.corporate or dashboard_access.kits or dashboard_access.bulk_email or dashboard_access.bulk_sms or dashboard_access.abstracts or dashboard_access.media or dashboard_access.presentations or dashboard_access.certificates or dashboard_access.chest_cards %}<details class="group relative">
-        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition marker:hidden {% if current_url == 'dashboard_membership_center' or current_url == 'dashboard_corporate_center' or current_url == 'dashboard_registration_kit_center' or current_url == 'dashboard_bulk_email_center' or current_url == 'dashboard_bulk_sms_center' or current_url == 'dashboard_sms_template_center' or current_url == 'dashboard_abstract_center' or current_url == 'dashboard_event_media_center' or current_url == 'dashboard_certificate_center' or current_url == 'dashboard_chest_card_center' or current_url == 'dashboard_presentation_center' or current_url == 'dashboard_speaker_outreach_center' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">
+    {% if dashboard_access.program or dashboard_access.membership or dashboard_access.corporate or dashboard_access.kits or dashboard_access.bulk_email or dashboard_access.bulk_sms or dashboard_access.abstracts or dashboard_access.media or dashboard_access.presentations or dashboard_access.certificates or dashboard_access.chest_cards or dashboard_access.food_tokens %}<details class="group relative" data-dashboard-more-menu>
+        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition marker:hidden {% if current_url == 'dashboard_membership_center' or current_url == 'dashboard_corporate_center' or current_url == 'dashboard_registration_kit_center' or current_url == 'dashboard_bulk_email_center' or current_url == 'dashboard_bulk_sms_center' or current_url == 'dashboard_sms_template_center' or current_url == 'dashboard_abstract_center' or current_url == 'dashboard_event_media_center' or current_url == 'dashboard_certificate_center' or current_url == 'dashboard_chest_card_center' or current_url == 'dashboard_food_token_center' or current_url == 'dashboard_presentation_center' or current_url == 'dashboard_speaker_outreach_center' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">
             More
             <span class="text-xs transition group-open:rotate-180">v</span>
         </summary>
@@ -25,11 +25,33 @@
             {% if dashboard_access.presentations %}<a href="{% url 'dashboard_presentation_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="block rounded-xl px-3 py-2 text-sm font-black {% if current_url == 'dashboard_presentation_center' %}bg-blue-50 text-bsbcs-blue{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Presentations</a>{% endif %}
             {% if dashboard_access.certificates %}<a href="{% url 'dashboard_certificate_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="block rounded-xl px-3 py-2 text-sm font-black {% if current_url == 'dashboard_certificate_center' %}bg-blue-50 text-bsbcs-blue{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Certificates</a>{% endif %}
             {% if dashboard_access.chest_cards %}<a href="{% url 'dashboard_chest_card_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="block rounded-xl px-3 py-2 text-sm font-black {% if current_url == 'dashboard_chest_card_center' %}bg-blue-50 text-bsbcs-blue{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Chest cards</a>{% endif %}
+            {% if dashboard_access.food_tokens %}<a href="{% url 'dashboard_food_token_center' %}{% if event_query %}?event={{ event_query }}{% endif %}" class="block rounded-xl px-3 py-2 text-sm font-black {% if current_url == 'dashboard_food_token_center' %}bg-blue-50 text-bsbcs-blue{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Food tokens</a>{% endif %}
             <div class="my-2 border-t border-line"></div>
             <a href="{% url 'admin:index' %}" target="_blank" rel="noopener noreferrer" class="block rounded-xl bg-bsbcs-navy px-3 py-2 text-sm font-black text-white hover:bg-slate-800">Django Admin</a>
         </div>
     </details>{% endif %}
 </nav>
 {% endwith %}
+<script data-dashboard-more-menu-close-script>
+(() => {
+    const menus = Array.from(document.querySelectorAll('[data-dashboard-more-menu]'));
+    if (!menus.length) return;
 
+    document.addEventListener('click', (event) => {
+        menus.forEach((menu) => {
+            if (!menu.open) return;
+            if (!menu.contains(event.target)) {
+                menu.open = false;
+            }
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        menus.forEach((menu) => {
+            menu.open = false;
+        });
+    });
+})();
+</script>
 

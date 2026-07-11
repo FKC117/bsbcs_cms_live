@@ -1,0 +1,399 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Food Token Center</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .workflow-input, .workflow-select, .workflow-textarea { width: 100%; border: 1px solid #D9E4EF; border-radius: 0.75rem; background: #fff; padding: 0.65rem 0.8rem; font-size: 0.9rem; outline: none; }
+        .workflow-input:focus, .workflow-select:focus, .workflow-textarea:focus { border-color: #1769C2; box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14); }
+        .compact-label { display: block; margin-bottom: 0.3rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+        .status-pill { display: inline-flex; align-items: center; gap: 0.35rem; border-radius: 999px; padding: 0.35rem 0.7rem; font-size: 0.72rem; font-weight: 900; }
+        .scanner-panel { border: 1px solid #D9E4EF; border-radius: 1rem; background: #fff; overflow: hidden; }
+        .scanner-shell { display: grid; gap: 1rem; }
+        .scanner-preview { position: relative; overflow: hidden; border: 1px solid #BFDBFE; border-radius: 1rem; background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%); min-height: 220px; }
+        .scanner-frame { position: absolute; inset: 16% 12%; border: 3px solid rgba(255,255,255,0.92); border-radius: 1rem; box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.28); }
+        .scanner-status { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.8rem; border-radius: 999px; background: #EFF6FF; color: #1D4ED8; font-size: 0.82rem; font-weight: 800; }
+        .scanner-status-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background: currentColor; }
+        .token-table { width: 100%; border-collapse: collapse; }
+        .token-table th, .token-table td { padding: 0.9rem 1rem; border-top: 1px solid #D9E4EF; vertical-align: top; text-align: left; }
+        .token-table thead th { border-top: 0; background: #f1f5f9; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+        .design-mode-panel[hidden] { display: none !important; }
+        .setup-disclosure > summary { list-style: none; cursor: pointer; }
+        .setup-disclosure > summary::-webkit-details-marker { display: none; }
+        .setup-chevron { display: inline-block; transition: transform 0.2s ease; }
+        .setup-disclosure[open] .setup-chevron { transform: rotate(180deg); }
+        @media (max-width: 900px) {
+            .token-table, .token-table thead, .token-table tbody, .token-table tr, .token-table th, .token-table td { display: block; }
+            .token-table thead { display: none; }
+            .token-table tr + tr { border-top: 1px solid #D9E4EF; }
+            .token-table td { border-top: 0; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}<img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">{% else %}B{% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Food token workflow</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">{% include "partials/dashboard_nav.html" %}</div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Food token center</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Generate smaller coupons and redeem them multiple times when needed.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Uses the same participant QR identity as chest cards and kit scanning, but with a flexible redemption limit per participant.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <div>
+                        <label class="compact-label" for="event">Event</label>
+                        <select id="event" name="event" class="workflow-select">
+                            <option value="">All events</option>
+                            {% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search participant, email, phone, invoice">
+                    <a href="{% url 'dashboard_food_token_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}<section class="mb-3 space-y-2">{% for message in messages %}<div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">{{ message }}</div>{% endfor %}</section>{% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Enabled</div><div class="mt-1 text-2xl font-black text-ink">{% if totals.enabled %}Yes{% else %}No{% endif %}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Eligible</div><div class="mt-1 text-2xl font-black text-ink">{{ totals.participants }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">QR ready</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.qr_ready }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Redeemed</div><div class="mt-1 text-2xl font-black text-bsbcs-green">{{ totals.redeemed }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Remaining scans</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.remaining }}</div></div>
+        </section>
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
+            <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="event" value="{{ current_filters.event }}">
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <details class="setup-disclosure" {% if not design %}open{% endif %}>
+                    <summary class="flex items-start justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Setup</div>
+                            <h2 class="mt-1 text-2xl font-black text-ink">Event control and token design</h2>
+                            <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Enable the feature per event, define the default redemption count, and configure only the fields needed for the chosen mode.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="status-pill {% if totals.design_ready %}bg-green-50 text-bsbcs-green{% else %}bg-amber-50 text-bsbcs-amber{% endif %}">{{ totals.mode }}</span>
+                            <span class="setup-chevron text-lg font-black text-slate-400">v</span>
+                        </div>
+                    </summary>
+                    <div class="mt-4 border-t border-line pt-4">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Live setup form</div>
+                                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Choose one mode first. The form will only show the fields needed for that mode, and every field includes helper text so the setup stays clear.</p>
+                            </div>
+                            <button type="submit" name="food_token_action" value="save_design" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save setup</button>
+                        </div>
+
+                        <div class="mt-4">
+                            <label class="compact-label">Color presets</label>
+                            <div class="theme-presets">
+                                <button type="button" class="theme-preset" data-theme-preset data-accent="#1769c2" data-background="#f8fbff" data-font="#0f172a">
+                                    <span class="theme-preset-swatches">
+                                        <span class="theme-preset-swatch" style="background:#1769c2"></span>
+                                        <span class="theme-preset-swatch" style="background:#f8fbff"></span>
+                                        <span class="theme-preset-swatch" style="background:#0f172a"></span>
+                                    </span>
+                                    Professional Blue
+                                </button>
+                                <button type="button" class="theme-preset" data-theme-preset data-accent="#b7791f" data-background="#fffaf0" data-font="#4a2f12">
+                                    <span class="theme-preset-swatches">
+                                        <span class="theme-preset-swatch" style="background:#b7791f"></span>
+                                        <span class="theme-preset-swatch" style="background:#fffaf0"></span>
+                                        <span class="theme-preset-swatch" style="background:#4a2f12"></span>
+                                    </span>
+                                    Soft Gold
+                                </button>
+                                <button type="button" class="theme-preset" data-theme-preset data-accent="#0f9d7a" data-background="#f2fffb" data-font="#123b32">
+                                    <span class="theme-preset-swatches">
+                                        <span class="theme-preset-swatch" style="background:#0f9d7a"></span>
+                                        <span class="theme-preset-swatch" style="background:#f2fffb"></span>
+                                        <span class="theme-preset-swatch" style="background:#123b32"></span>
+                                    </span>
+                                    Conference Green
+                                </button>
+                                <button type="button" class="theme-preset" data-theme-preset data-accent="#1d3557" data-background="#f6f8fc" data-font="#111827">
+                                    <span class="theme-preset-swatches">
+                                        <span class="theme-preset-swatch" style="background:#1d3557"></span>
+                                        <span class="theme-preset-swatch" style="background:#f6f8fc"></span>
+                                        <span class="theme-preset-swatch" style="background:#111827"></span>
+                                    </span>
+                                    Classic Navy
+                                </button>
+                            </div>
+                            <p class="helper-text">Pick a ready-made palette and the three color fields will update automatically. You can still fine-tune each color after that.</p>
+                        </div>
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="compact-label" for="food-token-design-mode">Food token mode</label>
+                                <select id="food-token-design-mode" name="design_mode" class="workflow-select">
+                                    <option value="html" {% if design and design.design_mode == 'html' %}selected{% endif %}>HTML design</option>
+                                    <option value="overlay" {% if design and design.design_mode == 'overlay' %}selected{% endif %}>Preprinted overlay</option>
+                                </select>
+                                <p class="helper-text">Choose <strong>HTML design</strong> when the system should generate the full token. Choose <strong>Preprinted overlay</strong> when your paper already has the layout and we only place name and QR.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label">Badge title</label>
+                                <input type="text" name="badge_title" value="{{ design.badge_title|default:'Food Token' }}" class="workflow-input">
+                                <p class="helper-text">Short label shown near the top of the token in HTML mode.</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 grid gap-3 md:grid-cols-4">
+                            <div>
+                                <label class="compact-label">Width (mm)</label>
+                                <input type="number" step="0.01" name="width_mm" value="{{ design.width_mm|default:90 }}" class="workflow-input">
+                                <p class="helper-text">Final token width in millimeters.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label">Height (mm)</label>
+                                <input type="number" step="0.01" name="height_mm" value="{{ design.height_mm|default:55 }}" class="workflow-input">
+                                <p class="helper-text">Final token height in millimeters.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label">DPI</label>
+                                <input type="number" min="72" name="dpi" value="{{ design.dpi|default:300 }}" class="workflow-input">
+                                <p class="helper-text">Higher DPI helps when assets are rendered for print output and preview quality.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label">Text align</label>
+                                <select name="text_align" class="workflow-select">
+                                    <option value="left" {% if not design or design.text_align == 'left' %}selected{% endif %}>Left</option>
+                                    <option value="center" {% if design and design.text_align == 'center' %}selected{% endif %}>Center</option>
+                                    <option value="right" {% if design and design.text_align == 'right' %}selected{% endif %}>Right</option>
+                                </select>
+                                <p class="helper-text">Controls how the participant name sits inside the available text box.</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 grid gap-3 md:grid-cols-4">
+                            <div>
+                                <label class="compact-label" for="accent_color">Accent color</label>
+                                <div class="color-field">
+                                    <input id="accent_color_picker" type="color" value="{{ design.accent_color|default:'#1769c2' }}" class="color-swatch" data-color-target="accent_color">
+                                    <input id="accent_color" name="accent_color" class="workflow-input" value="{{ design.accent_color|default:'#1769c2' }}" data-color-input>
+                                </div>
+                                <p class="helper-text">Used by the built-in HTML token design.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label" for="background_color">Background color</label>
+                                <div class="color-field">
+                                    <input id="background_color_picker" type="color" value="{{ design.background_color|default:'#f8fbff' }}" class="color-swatch" data-color-target="background_color">
+                                    <input id="background_color" name="background_color" class="workflow-input" value="{{ design.background_color|default:'#f8fbff' }}" data-color-input>
+                                </div>
+                                <p class="helper-text">Main background color for the built-in HTML token.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label">Font size</label>
+                                <input type="number" min="10" name="font_size_pt" value="{{ design.font_size_pt|default:16 }}" class="workflow-input">
+                                <p class="helper-text">Starting font size for overlay name placement.</p>
+                            </div>
+                            <div>
+                                <label class="compact-label" for="font_color">Font color</label>
+                                <div class="color-field">
+                                    <input id="font_color_picker" type="color" value="{{ design.font_color|default:'#0f172a' }}" class="color-swatch" data-color-target="font_color">
+                                    <input id="font_color" name="font_color" class="workflow-input" value="{{ design.font_color|default:'#0f172a' }}" data-color-input>
+                                </div>
+                                <p class="helper-text">Used mainly for overlay text color.</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 grid gap-2 md:grid-cols-3">
+                            <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                                <input type="checkbox" name="show_event_name" class="h-4 w-4 rounded border-line" value="1" {% if not design or design.show_event_name %}checked{% endif %}>
+                                Show event name
+                            </label>
+                            <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                                <input type="checkbox" name="show_organization" class="h-4 w-4 rounded border-line" value="1" {% if design and design.show_organization %}checked{% endif %}>
+                                Show organization logo
+                            </label>
+                            <label class="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                                <input type="checkbox" name="show_invoice_number" class="h-4 w-4 rounded border-line" value="1" {% if not design or design.show_invoice_number %}checked{% endif %}>
+                                Show invoice number
+                            </label>
+                        </div>
+
+                        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                            <div class="rounded-2xl border border-sky-100 bg-sky-50/50 p-4 design-mode-panel" data-mode-panel="html">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-blue">HTML mode</div>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this when the system should render the complete food token design.</p>
+                                <div class="mt-4">
+                                    <label class="compact-label">HTML background image</label>
+                                    <p class="helper-text">Optional background image for the built-in HTML token layout.</p>
+                                    <input type="file" name="html_background_image" class="workflow-input">
+                                </div>
+                            </div>
+                            <div class="rounded-2xl border border-amber-100 bg-amber-50/50 p-4 design-mode-panel" data-mode-panel="overlay">
+                                <div class="text-xs font-black uppercase tracking-[0.12em] text-bsbcs-amber">Overlay mode</div>
+                                <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Use this when the paper is already preprinted and the system only places the participant name and QR in exact boxes.</p>
+                                <div class="mt-4">
+                                    <label class="compact-label">Overlay reference image</label>
+                                    <p class="helper-text">Optional preview image of your preprinted paper so you can align the live text and QR boxes on screen.</p>
+                                    <input type="file" name="overlay_reference_image" class="workflow-input">
+                                </div>
+                                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                                    <div><label class="compact-label">Name X (mm)</label><input type="number" step="0.01" name="name_x_mm" value="{{ design.name_x_mm|default:10 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">Name Y (mm)</label><input type="number" step="0.01" name="name_y_mm" value="{{ design.name_y_mm|default:18 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">Name width (mm)</label><input type="number" step="0.01" name="name_width_mm" value="{{ design.name_width_mm|default:46 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">Name height (mm)</label><input type="number" step="0.01" name="name_height_mm" value="{{ design.name_height_mm|default:14 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">QR X (mm)</label><input type="number" step="0.01" name="qr_x_mm" value="{{ design.qr_x_mm|default:60 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">QR Y (mm)</label><input type="number" step="0.01" name="qr_y_mm" value="{{ design.qr_y_mm|default:11 }}" class="workflow-input"></div>
+                                    <div><label class="compact-label">QR size (mm)</label><input type="number" step="0.01" name="qr_size_mm" value="{{ design.qr_size_mm|default:22 }}" class="workflow-input"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </form>
+
+            <div class="space-y-3">
+                <form method="post" id="food-token-scan-form" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                    {% csrf_token %}
+                    <input type="hidden" name="event" value="{{ current_filters.event }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="mb-4"><div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Redeem</div><h2 class="mt-1 text-2xl font-black text-ink">Scan and consume food coupons</h2><p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Same QR as chest card and registration kit. Each scan consumes one redemption until the participant reaches the allowed limit.</p></div>
+                    <label class="compact-label" for="scan_code">Scan / code</label>
+                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        <input id="scan_code" name="scan_code" class="workflow-input" placeholder="Focus here before scanning" autocomplete="off">
+                        <button type="button" id="open-qr-scanner" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Scan QR</button>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between gap-3"><div class="scanner-status"><span class="scanner-status-dot"></span>Food token uses event QR identity</div><button type="submit" name="food_token_action" value="scan_redeem" class="rounded-xl bg-bsbcs-green px-5 py-2.5 text-sm font-black text-white hover:bg-emerald-700">Redeem scan</button></div>
+                </form>
+
+                <div class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                    <div class="mb-4 flex items-center justify-between gap-3"><div><div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Bulk files</div><h2 class="mt-1 text-xl font-black text-ink">Print many tokens</h2></div><span class="status-pill bg-blue-50 text-bsbcs-blue">{{ totals.qr_ready }} QR ready</span></div>
+                    <form method="post">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><button type="submit" name="food_token_action" value="download_bulk_food_token_pdf" class="w-full rounded-xl border border-line px-4 py-3 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Download bulk food token PDF</button></form>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Eligible participants</div><h2 class="mt-1 text-xl font-black text-ink">Food token queue</h2></div><span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ page_obj.paginator.count }} total</span></div>
+            <div class="overflow-x-auto">
+                <table class="token-table">
+                    <thead><tr><th>Participant</th><th>Status</th><th>Redemption</th><th>Actions</th></tr></thead>
+                    <tbody>
+                    {% for row in page_obj %}
+                        <tr>
+                            <td><div class="text-sm font-black text-ink">{{ row.participant.name }}</div><div class="text-xs font-semibold text-slate-500">{{ row.payment.merchant_invoice_number }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.participant.email }}{% if row.participant.phone %} - {{ row.participant.phone }}{% endif %}</div></td>
+                            <td><div class="text-xs font-black uppercase tracking-wide text-slate-500">QR</div><div class="mt-1 text-sm font-black {% if row.qr_ready %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.qr_ready %}Ready{% else %}Pending{% endif %}</div><div class="mt-2 text-xs font-black uppercase tracking-wide text-slate-500">File</div><div class="mt-1 text-sm font-black {% if row.generated %}text-bsbcs-blue{% else %}text-slate-500{% endif %}">{% if row.generated %}Generated{% else %}Not generated{% endif %}</div></td>
+                            <td><div class="text-sm font-black text-ink">{{ row.redeemed_count }}/{{ row.allowed_redemptions }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.remaining_redemptions }} remaining</div>{% if row.latest_redemption %}<div class="mt-2 text-xs font-semibold text-slate-500">Last: {{ row.latest_redemption.redeemed_at|date:"M d, Y h:i A" }}</div>{% endif %}</td>
+                            <td><div class="flex flex-wrap gap-2"><form method="post">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="payment_id" value="{{ row.payment.id }}"><button type="submit" name="food_token_action" value="download_food_token_pdf" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Download</button></form><form method="post">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="payment_id" value="{{ row.payment.id }}"><button type="submit" name="food_token_action" value="print_food_token_pdf" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Print</button></form><form method="post">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="payment_id" value="{{ row.payment.id }}"><button type="submit" name="food_token_action" value="redeem_token" class="rounded-lg bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Redeem</button></form><form method="post" class="flex items-center gap-2">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="payment_id" value="{{ row.payment.id }}"><input type="number" min="1" name="allowed_redemptions" value="{{ row.allowed_redemptions }}" class="workflow-input !w-20 !py-2 text-xs"><button type="submit" name="food_token_action" value="update_redemption_limit" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Set</button></form>{% if row.redeemed_count %}<form method="post" onsubmit="return confirm('Undo latest redemption?');">{% csrf_token %}<input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="payment_id" value="{{ row.payment.id }}"><button type="submit" name="food_token_action" value="undo_redemption" class="rounded-lg bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Undo</button></form>{% endif %}</div></td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="text-center text-sm font-semibold text-slate-500">No approved paid participants matched this event filter yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-4"><div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">History</div><h2 class="mt-1 text-xl font-black text-ink">Recent redemptions</h2></div>
+            <div class="space-y-2">{% for log in recent_logs %}<div class="rounded-xl border border-line bg-slate-50/70 px-4 py-3"><div class="text-sm font-black text-ink">{{ log.food_token.participant.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ log.payment_status.merchant_invoice_number }} - {{ log.redeemed_at|date:"M d, Y h:i A" }}{% if log.redeemed_by %} - {{ log.redeemed_by.get_username }}{% endif %}</div></div>{% empty %}<div class="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm font-semibold text-slate-500">No redemption has been recorded yet.</div>{% endfor %}</div>
+        </section>
+    </main>
+</div>
+
+<div id="qr-scanner-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div class="scanner-panel w-full max-w-2xl bg-white p-4 shadow-lift">
+        <div class="mb-3 flex items-center justify-between gap-3"><h2 class="text-lg font-black text-ink">Scan participant QR code</h2><button type="button" id="close-qr-scanner" class="grid h-10 w-10 place-items-center rounded-full border border-line text-xl font-black text-slate-600 hover:bg-slate-50">&times;</button></div>
+        <div id="qr-scanner-status" class="scanner-status"><span class="scanner-status-dot"></span>Preparing camera...</div>
+        <div class="scanner-shell mt-4"><div class="scanner-preview"><div id="kit-qr-reader" class="h-full min-h-[220px]"></div><div class="scanner-frame"></div></div><div class="flex flex-wrap gap-2"><select id="camera-select" class="workflow-select"></select><button type="button" id="restart-camera" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Restart</button><button type="button" id="cancel-qr-scanner" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-700 hover:border-bsbcs-blue hover:text-bsbcs-blue">Cancel</button></div></div>
+    </div>
+</div>
+<script src="{% static 'js/vendor/html5-qrcode.min.js' %}"></script>
+<script>
+(function(){
+    const modeSelect=document.getElementById('food-token-design-mode');
+    const modePanels=document.querySelectorAll('[data-mode-panel]');
+    const colorPickers=Array.from(document.querySelectorAll('[data-color-target]'));
+    const themePresets=Array.from(document.querySelectorAll('[data-theme-preset]'));
+    function syncModePanels(){
+        const mode=(modeSelect&&modeSelect.value)||'html';
+        modePanels.forEach((panel)=>{panel.hidden=panel.dataset.modePanel!==mode;});
+    }
+    const normalizeHex=(value)=>{
+        const raw=(value||'').trim();
+        return /^#[0-9a-fA-F]{6}$/.test(raw)?raw.toLowerCase():null;
+    };
+    colorPickers.forEach((picker)=>{
+        const target=document.getElementById(picker.dataset.colorTarget);
+        if(!target)return;
+        picker.addEventListener('input',()=>{target.value=picker.value.toLowerCase();});
+        target.addEventListener('input',()=>{const normalized=normalizeHex(target.value); if(normalized){picker.value=normalized;}});
+    });
+    const applyThemeValue=(fieldId,value)=>{
+        const input=document.getElementById(fieldId);
+        const normalized=normalizeHex(value);
+        if(!input||!normalized)return;
+        input.value=normalized;
+        const picker=document.querySelector('[data-color-target="'+fieldId+'"]');
+        if(picker){picker.value=normalized;}
+    };
+    themePresets.forEach((preset)=>{
+        preset.addEventListener('click',()=>{
+            applyThemeValue('accent_color',preset.dataset.accent);
+            applyThemeValue('background_color',preset.dataset.background);
+            applyThemeValue('font_color',preset.dataset.font);
+        });
+    });
+    if(modeSelect){modeSelect.addEventListener('change',syncModePanels);syncModePanels();}
+
+    const modal=document.getElementById('qr-scanner-modal');
+    const openButton=document.getElementById('open-qr-scanner');
+    const closeButtons=[document.getElementById('close-qr-scanner'),document.getElementById('cancel-qr-scanner')];
+    const status=document.getElementById('qr-scanner-status');
+    const scanInput=document.getElementById('scan_code');
+    const scanForm=document.getElementById('food-token-scan-form');
+    const cameraSelect=document.getElementById('camera-select');
+    const restartCameraButton=document.getElementById('restart-camera');
+    if(!modal||!openButton||!status||!scanInput||!scanForm||!cameraSelect||!restartCameraButton){return;}
+    let scanner=null; let scannerRunning=false; let scannerStarting=false; const ENV='__environment__';
+    function setStatus(message){status.innerHTML='<span class="scanner-status-dot"></span>'+message;}
+    async function stopScanner(hide=true){if(scannerRunning&&scanner){try{await scanner.stop();}catch(e){}} if(scanner){try{await scanner.clear();}catch(e){}} scanner=null; scannerRunning=false; scannerStarting=false; if(hide){modal.classList.add('hidden');modal.classList.remove('flex');}}
+    async function loadCameras(){const cameraDevices=await Html5Qrcode.getCameras(); cameraSelect.innerHTML=''; const env=document.createElement('option'); env.value=ENV; env.textContent='Back camera auto'; cameraSelect.appendChild(env); cameraDevices.forEach((c,i)=>{const o=document.createElement('option'); o.value=c.id; o.textContent=c.label||`Camera ${i+1}`; cameraSelect.appendChild(o);}); return cameraSelect.value||ENV;}
+    async function submitDecodedCode(value){if(!value)return; scanInput.value=value.trim(); setStatus('QR matched. Redeeming token...'); await stopScanner(); const hidden=document.createElement('input'); hidden.type='hidden'; hidden.name='food_token_action'; hidden.value='scan_redeem'; scanForm.appendChild(hidden); scanForm.submit();}
+    async function startScanner(){if(scannerStarting)return; if(!window.Html5Qrcode){setStatus('QR scanner library could not load.'); return;} if(!window.isSecureContext){setStatus('Camera scanning requires HTTPS or localhost.'); return;} scannerStarting=true; await stopScanner(false); scanner=new Html5Qrcode('kit-qr-reader',{formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE],experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false}); setStatus('Detecting available cameras...'); try{const selectedId=cameraSelect.value||await loadCameras(); await scanner.start(selectedId===ENV?{facingMode:'environment'}:selectedId,{fps:12,qrbox:{width:260,height:260},disableFlip:false},submitDecodedCode,()=>{}); scannerRunning=true; scannerStarting=false; setStatus('Live camera ready. Hold the QR steady inside the square.');}catch(e){scannerRunning=false; scannerStarting=false; setStatus(`Camera could not start. ${(e&&e.message)||e}`); console.error(e);}}
+    openButton.addEventListener('click',async()=>{modal.classList.remove('hidden'); modal.classList.add('flex'); await startScanner();});
+    restartCameraButton.addEventListener('click',startScanner);
+    cameraSelect.addEventListener('change',startScanner);
+    closeButtons.forEach((button)=>button&&button.addEventListener('click',()=>stopScanner()));
+    modal.addEventListener('click',(event)=>{if(event.target===modal) stopScanner();});
+    document.addEventListener('keydown',(event)=>{if(event.key==='Escape'&&!modal.classList.contains('hidden')) stopScanner();});
+}());
+</script>
+</body>
+</html>
+
+
+
+
+

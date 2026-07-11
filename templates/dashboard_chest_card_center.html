@@ -803,6 +803,8 @@
         const colorPickers = Array.from(document.querySelectorAll('[data-color-target]'));
         const themePresets = Array.from(document.querySelectorAll('[data-theme-preset]'));
         const printFrame = document.getElementById('print-frame');
+        const printForms = Array.from(document.querySelectorAll("form[target='print-frame']"));
+        let pendingPrint = false;
 
         const syncModePanels = () => {
             if (!modeSelect || !panels.length) return;
@@ -854,8 +856,21 @@
         if (modeSelect) {
             modeSelect.addEventListener('change', syncModePanels);
         }
+        printForms.forEach((form) => {
+            form.addEventListener('submit', () => {
+                pendingPrint = true;
+            });
+        });
         if (printFrame) {
             printFrame.addEventListener('load', () => {
+                if (!pendingPrint) {
+                    return;
+                }
+                const frameLocation = printFrame.contentWindow && printFrame.contentWindow.location ? printFrame.contentWindow.location.href : '';
+                if (!frameLocation || frameLocation === 'about:blank') {
+                    return;
+                }
+                pendingPrint = false;
                 window.setTimeout(() => {
                     try {
                         printFrame.contentWindow.focus();
@@ -871,3 +886,5 @@
 </script>
 </body>
 </html>
+
+

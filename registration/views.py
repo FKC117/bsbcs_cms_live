@@ -9594,6 +9594,606 @@ def dashboard_chest_card_center(request):
     return render(request, 'dashboard_chest_card_center.html', context)
 
 
+
+def _food_token_output_filename(participant_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in participant_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Participant'
+    return f"BSBCS_Food_Token_{safe_name}.png"
+
+
+def _food_token_pdf_output_filename(participant_name):
+    safe_name = "".join(ch if ch.isalnum() or ch in (' ', '-', '_') else '' for ch in participant_name).strip()
+    safe_name = safe_name.replace(' ', '_') or 'Participant'
+    return f"BSBCS_Food_Token_{safe_name}.pdf"
+
+
+def _food_token_bulk_pdf_output_filename(event):
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    return f"BSBCS_Food_Tokens_{event_slug}.pdf"
+
+
+def _render_food_token_html_to_png(request, participant, event, design, payment_status, output_path):
+    base_url = _chest_card_base_url(request)
+    capture_width = _mm_to_px(design.width_mm, design.dpi)
+    capture_height = _mm_to_px(design.height_mm, design.dpi)
+    from website.models import SiteSettings
+
+    context = {
+        'participant_name': participant.name,
+        'participant_organization': participant.organization or '',
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Food Token',
+        'invoice_number': payment_status.merchant_invoice_number if payment_status else '',
+        'qr_code_url': payment_status.qr_code.url if payment_status and payment_status.qr_code else '',
+        'capture_mode': True,
+        'base_url': base_url,
+    }
+    _render_html_template_to_image('food_token_design/food_token.html', context, output_path, capture_width=capture_width, capture_height=capture_height, image_format='PNG')
+
+
+def _render_bulk_food_token_html_to_pdf(request, event, design, payments, output_path):
+    from website.models import SiteSettings
+
+    base_url = _chest_card_base_url(request)
+    items = []
+    for payment_status in payments:
+        participant = payment_status.participant
+        items.append({
+            'participant_name': participant.name,
+            'participant_organization': participant.organization or '',
+            'invoice_number': payment_status.merchant_invoice_number or '',
+            'qr_code_url': payment_status.qr_code.url if payment_status.qr_code else '',
+        })
+
+    context = {
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Food Token',
+        'capture_mode': False,
+        'pdf_mode': True,
+        'base_url': base_url,
+        'items': items,
+    }
+    _render_html_template_to_pdf('food_token_design/food_token_bulk.html', context, output_path)
+
+
+def _render_food_token_html_to_pdf(request, participant, event, design, payment_status, output_path):
+    from website.models import SiteSettings
+
+    base_url = _chest_card_base_url(request)
+    context = {
+        'participant_name': participant.name,
+        'participant_organization': participant.organization or '',
+        'event': event,
+        'design': design,
+        'site_settings': SiteSettings.objects.first(),
+        'badge_title': (design.badge_title or '').strip() or 'Food Token',
+        'invoice_number': payment_status.merchant_invoice_number if payment_status else '',
+        'qr_code_url': payment_status.qr_code.url if payment_status and payment_status.qr_code else '',
+        'capture_mode': False,
+        'pdf_mode': True,
+        'base_url': base_url,
+    }
+    _render_html_template_to_pdf('food_token_design/food_token.html', context, output_path)
+
+
+def _render_overlay_food_token_to_png(participant, design, payment_status, output_path):
+    if not payment_status or not payment_status.qr_code:
+        raise ValueError('QR code is required before generating a food token.')
+
+    width_px = _mm_to_px(design.width_mm, design.dpi)
+    height_px = _mm_to_px(design.height_mm, design.dpi)
+    if design.overlay_reference_image:
+        canvas = Image.open(design.overlay_reference_image.path).convert('RGBA').resize((width_px, height_px))
+    else:
+        canvas = Image.new('RGBA', (width_px, height_px), (255, 255, 255, 0))
+
+    qr_size_px = _mm_to_px(design.qr_size_mm, design.dpi)
+    qr_x_px = _mm_to_px(design.qr_x_mm, design.dpi)
+    qr_y_px = _mm_to_px(design.qr_y_mm, design.dpi)
+    qr_image = Image.open(payment_status.qr_code.path).convert('RGBA').resize((qr_size_px, qr_size_px))
+    canvas.paste(qr_image, (qr_x_px, qr_y_px), qr_image)
+
+    draw = ImageDraw.Draw(canvas)
+    box_x = _mm_to_px(design.name_x_mm, design.dpi)
+    box_y = _mm_to_px(design.name_y_mm, design.dpi)
+    box_width = _mm_to_px(design.name_width_mm, design.dpi)
+    box_height = _mm_to_px(design.name_height_mm, design.dpi)
+    font, lines, line_height = _fit_text_to_box(draw, participant.name, box_width, box_height, design.font_size_pt)
+    total_height = (line_height * len(lines)) + max(len(lines) - 1, 0) * 4
+    current_y = box_y + max((box_height - total_height) // 2, 0)
+    fill = _hex_to_rgb(design.font_color)
+
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line or ' ', font=font)
+        line_width = bbox[2] - bbox[0]
+        if design.text_align == FoodTokenDesign.TEXT_ALIGN_LEFT:
+            current_x = box_x
+        elif design.text_align == FoodTokenDesign.TEXT_ALIGN_RIGHT:
+            current_x = box_x + max(box_width - line_width, 0)
+        else:
+            current_x = box_x + max((box_width - line_width) // 2, 0)
+        draw.text((current_x, current_y), line, font=font, fill=fill)
+        current_y += line_height + 4
+
+    canvas.save(output_path, 'PNG')
+
+
+def _get_or_create_food_token(participant, payment_status=None):
+    if not participant:
+        return None
+    event = participant.event
+    default_redemptions = max(getattr(event, 'food_token_max_redemptions', 1) or 1, 1)
+    food_token, _ = FoodToken.objects.get_or_create(
+        participant=participant,
+        defaults={
+            'event': event,
+            'payment_status': payment_status,
+            'allowed_redemptions': default_redemptions,
+        },
+    )
+    updates = []
+    if food_token.event_id != participant.event_id:
+        food_token.event = event
+        updates.append('event')
+    if payment_status and food_token.payment_status_id != payment_status.id:
+        food_token.payment_status = payment_status
+        updates.append('payment_status')
+    if not food_token.allowed_redemptions:
+        food_token.allowed_redemptions = default_redemptions
+        updates.append('allowed_redemptions')
+    if updates:
+        food_token.save(update_fields=updates + ['updated_at'])
+    return food_token
+
+def _mark_event_food_tokens_outdated(event):
+    if not event:
+        return
+    FoodToken.objects.filter(event=event).exclude(status=FoodToken.STATUS_PENDING).update(status=FoodToken.STATUS_OUTDATED)
+
+
+def ensure_participant_food_token_generated(participant, request=None):
+    if not participant:
+        return None
+
+    event = participant.event
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+    food_token = _get_or_create_food_token(participant, payment_status=payment_status)
+    if not food_token:
+        return None
+
+    if not getattr(event, 'enable_food_tokens', False):
+        food_token.status = FoodToken.STATUS_PENDING
+        food_token.last_error = 'Food tokens are not enabled for this event.'
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    if not participant.approved or participant.denied:
+        food_token.status = FoodToken.STATUS_PENDING
+        food_token.last_error = None
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    if not payment_status or payment_status.status not in ['paid', 'completed']:
+        food_token.status = FoodToken.STATUS_PENDING
+        food_token.last_error = None
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    if not payment_status.qr_code:
+        food_token.status = FoodToken.STATUS_PENDING
+        food_token.last_error = 'QR code is not ready yet.'
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    design = FoodTokenDesign.objects.filter(event=event).first()
+    if not design:
+        food_token.status = FoodToken.STATUS_PENDING
+        food_token.last_error = 'Food token design is not configured for this event.'
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        return None
+
+    try:
+        output_paths = {
+            'pdf': _generate_food_token_file(request, participant, event, design, output_format='pdf'),
+        }
+        if design.design_mode == FoodTokenDesign.MODE_OVERLAY:
+            output_paths['png'] = _generate_food_token_file(request, participant, event, design, output_format='png')
+
+        food_token.payment_status = payment_status
+        food_token.generated_pdf = _media_relative_path(output_paths['pdf'])
+        if output_paths.get('png'):
+            food_token.generated_png = _media_relative_path(output_paths['png'])
+        food_token.generated_at = timezone.now()
+        food_token.design_updated_at = design.updated_at
+        food_token.status = FoodToken.STATUS_GENERATED
+        food_token.last_error = None
+        food_token.save()
+        return output_paths
+    except Exception as exc:
+        food_token.status = FoodToken.STATUS_FAILED
+        food_token.last_error = str(exc)
+        food_token.save(update_fields=['status', 'last_error', 'updated_at'])
+        raise
+
+
+def _is_cached_food_token_current(output_path, design, payment_status):
+    if not os.path.exists(output_path):
+        return False
+    required_ts = _chest_card_cache_timestamp(
+        getattr(design, 'updated_at', None),
+        getattr(payment_status, 'updated_at', None),
+    )
+    if not required_ts:
+        return True
+    return os.path.getmtime(output_path) >= required_ts
+
+
+def _sync_food_token_file_record(participant, event, payment_status, design, output_path, output_format):
+    food_token = _get_or_create_food_token(participant, payment_status=payment_status)
+    if not food_token:
+        return
+
+    file_timestamp = datetime.fromtimestamp(os.path.getmtime(output_path), tz=timezone.get_current_timezone()) if os.path.exists(output_path) else timezone.now()
+    food_token.event = event
+    food_token.payment_status = payment_status
+    if (output_format or 'pdf').lower() == 'png':
+        food_token.generated_png = _media_relative_path(output_path)
+    else:
+        food_token.generated_pdf = _media_relative_path(output_path)
+        if design.design_mode == FoodTokenDesign.MODE_HTML:
+            food_token.generated_png = None
+    food_token.design_updated_at = getattr(design, 'updated_at', None)
+    food_token.generated_at = file_timestamp
+    food_token.status = FoodToken.STATUS_GENERATED
+    food_token.last_error = None
+    food_token.save()
+
+
+def _generate_food_token_file(request, participant, event, design, output_format='pdf'):
+    payment_status = PaymentStatus.objects.filter(participant=participant, event=event).first()
+    if not payment_status:
+        raise ValueError('No payment row was found for this participant and event.')
+    if not payment_status.qr_code:
+        raise ValueError('Generate the participant QR code first from Payment Center before creating the food token.')
+
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    output_dir = os.path.join(settings.MEDIA_ROOT, 'food_tokens', 'generated', event_slug)
+    os.makedirs(output_dir, exist_ok=True)
+
+    if (output_format or 'pdf').lower() == 'png':
+        output_filename = _food_token_output_filename(participant.name)
+        output_path = os.path.join(output_dir, output_filename)
+        if _is_cached_food_token_current(output_path, design, payment_status):
+            _sync_food_token_file_record(participant, event, payment_status, design, output_path, 'png')
+            return output_path
+        if design.design_mode == FoodTokenDesign.MODE_HTML:
+            _render_food_token_html_to_png(request, participant, event, design, payment_status, output_path)
+        else:
+            _render_overlay_food_token_to_png(participant, design, payment_status, output_path)
+        _sync_food_token_file_record(participant, event, payment_status, design, output_path, 'png')
+        return output_path
+
+    output_filename = _food_token_pdf_output_filename(participant.name)
+    output_path = os.path.join(output_dir, output_filename)
+    if _is_cached_food_token_current(output_path, design, payment_status):
+        _sync_food_token_file_record(participant, event, payment_status, design, output_path, 'pdf')
+        return output_path
+    if design.design_mode == FoodTokenDesign.MODE_HTML:
+        _render_food_token_html_to_pdf(request, participant, event, design, payment_status, output_path)
+    else:
+        temp_png_path = os.path.join(output_dir, _food_token_output_filename(participant.name))
+        if not _is_cached_food_token_current(temp_png_path, design, payment_status):
+            _render_overlay_food_token_to_png(participant, design, payment_status, temp_png_path)
+            _sync_food_token_file_record(participant, event, payment_status, design, temp_png_path, 'png')
+        _render_png_badge_to_pdf(temp_png_path, output_path, design.width_mm, design.height_mm)
+    _sync_food_token_file_record(participant, event, payment_status, design, output_path, 'pdf')
+    return output_path
+
+def _render_food_token_png_to_bulk_pdf(output_path, png_paths, width_mm, height_mm):
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    canvas = pdf_canvas.Canvas(output_path, pagesize=(float(width_mm) * mm, float(height_mm) * mm))
+    for png_path in png_paths:
+        canvas.setPageSize((float(width_mm) * mm, float(height_mm) * mm))
+        canvas.drawImage(str(png_path), 0, 0, width=float(width_mm) * mm, height=float(height_mm) * mm, preserveAspectRatio=False, mask='auto')
+        canvas.showPage()
+    canvas.save()
+    return output_path
+
+
+def _build_food_token_bulk_pdf(request, event, design, payments):
+    if not payments:
+        raise ValueError('No QR-ready participants are available for bulk food token generation.')
+
+    event_slug = slugify(f'{event.name}-{event.year}') or f'event-{event.id}'
+    output_dir = os.path.join(settings.MEDIA_ROOT, 'food_tokens', 'generated', event_slug, 'bulk')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, _food_token_bulk_pdf_output_filename(event))
+
+    if design.design_mode == FoodTokenDesign.MODE_HTML:
+        _render_bulk_food_token_html_to_pdf(request, event, design, payments, output_path)
+        return output_path, len(payments)
+
+    png_paths = []
+    for payment in payments:
+        png_paths.append(_generate_food_token_file(request, payment.participant, event, design, output_format='png'))
+    return _render_food_token_png_to_bulk_pdf(output_path, png_paths, design.width_mm, design.height_mm), len(png_paths)
+
+
+def _food_token_rows(event, query=''):
+    if not event:
+        return []
+    query_text = (query or '').strip()
+    payments = PaymentStatus.objects.select_related('participant', 'event').filter(
+        event=event,
+        participant__approved=True,
+        participant__denied=False,
+        status__in=['paid', 'completed'],
+    )
+    if query_text:
+        payments = payments.filter(
+            Q(participant__name__icontains=query_text)
+            | Q(participant__email__icontains=query_text)
+            | Q(participant__phone__icontains=query_text)
+            | Q(participant__organization__icontains=query_text)
+            | Q(merchant_invoice_number__icontains=query_text)
+        )
+
+    token_map = {
+        token.participant_id: token
+        for token in FoodToken.objects.filter(event=event).select_related('payment_status')
+    }
+    latest_log_map = {}
+    for log in FoodTokenRedemptionLog.objects.filter(event=event).select_related('redeemed_by', 'food_token').order_by('food_token_id', '-redeemed_at'):
+        latest_log_map.setdefault(log.food_token_id, log)
+
+    rows = []
+    default_redemptions = max(getattr(event, 'food_token_max_redemptions', 1) or 1, 1)
+    for payment in payments.order_by('participant__name', 'participant__email'):
+        token = token_map.get(payment.participant_id)
+        allowed_redemptions = max((token.allowed_redemptions if token else default_redemptions) or default_redemptions, 1)
+        redeemed_count = token.redeemed_count if token else 0
+        rows.append({
+            'payment': payment,
+            'participant': payment.participant,
+            'token': token,
+            'qr_ready': bool(payment.qr_code),
+            'generated': bool(token and token.generated_pdf and token.status == FoodToken.STATUS_GENERATED),
+            'allowed_redemptions': allowed_redemptions,
+            'redeemed_count': redeemed_count,
+            'remaining_redemptions': max(allowed_redemptions - redeemed_count, 0),
+            'latest_redemption': latest_log_map.get(token.id) if token else None,
+        })
+    return rows
+
+
+def _redeem_food_token(payment_status, redeemed_by=None, note=''):
+    if not payment_status:
+        raise ValueError('A valid participant payment is required for food token redemption.')
+    event = payment_status.event
+    participant = payment_status.participant
+    if not getattr(event, 'enable_food_tokens', False):
+        raise ValueError('Food tokens are not enabled for this event.')
+    if not participant.approved or participant.denied:
+        raise ValueError('Only approved participants can redeem food tokens.')
+    if payment_status.status not in ['paid', 'completed']:
+        raise ValueError('Only paid participants can redeem food tokens.')
+
+    food_token = _get_or_create_food_token(participant, payment_status=payment_status)
+    if not food_token:
+        raise ValueError('Food token record could not be created for this participant.')
+    if food_token.allowed_redemptions < 1:
+        food_token.allowed_redemptions = max(getattr(event, 'food_token_max_redemptions', 1) or 1, 1)
+        food_token.save(update_fields=['allowed_redemptions', 'updated_at'])
+    if food_token.redeemed_count >= food_token.allowed_redemptions:
+        return food_token, None, False
+
+    redemption_log = FoodTokenRedemptionLog.objects.create(
+        food_token=food_token,
+        event=event,
+        payment_status=payment_status,
+        redeemed_by=redeemed_by if getattr(redeemed_by, 'is_authenticated', False) else None,
+        note=(note or '').strip() or None,
+    )
+    food_token.redeemed_count += 1
+    food_token.last_redeemed_at = redemption_log.redeemed_at
+    food_token.save(update_fields=['redeemed_count', 'last_redeemed_at', 'updated_at'])
+    return food_token, redemption_log, True
+
+
+def _undo_food_token_redemption(food_token):
+    if not food_token:
+        raise ValueError('Food token record was not found.')
+    latest_log = food_token.redemption_logs.order_by('-redeemed_at', '-id').first()
+    if not latest_log:
+        raise ValueError('No redemption history exists for this participant yet.')
+    latest_log.delete()
+    latest_remaining = food_token.redemption_logs.order_by('-redeemed_at', '-id').first()
+    food_token.redeemed_count = max(food_token.redeemed_count - 1, 0)
+    food_token.last_redeemed_at = latest_remaining.redeemed_at if latest_remaining else None
+    food_token.save(update_fields=['redeemed_count', 'last_redeemed_at', 'updated_at'])
+    return latest_remaining
+
+@dashboard_permission_required('food_tokens')
+def dashboard_food_token_center(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    default_event = events.filter(event_status='active').first() or events.first()
+    event_filter = request.POST.get('event') if request.method == 'POST' else request.GET.get('event')
+    if not event_filter and default_event:
+        event_filter = str(default_event.id)
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    selected_event = events.filter(pk=event_filter).first() if event_filter else None
+
+    query_params = {}
+    if selected_event:
+        query_params['event'] = selected_event.id
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('dashboard_food_token_center')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    if request.method == 'POST':
+        action = (request.POST.get('food_token_action') or '').strip()
+        try:
+            if not selected_event:
+                raise ValueError('Choose an event before updating food tokens.')
+
+            design, created = FoodTokenDesign.objects.get_or_create(event=selected_event)
+
+            if action == 'save_design':
+                design_mode = request.POST.get('design_mode') or FoodTokenDesign.MODE_HTML
+                if design_mode not in dict(FoodTokenDesign.MODE_CHOICES):
+                    design_mode = FoodTokenDesign.MODE_HTML
+                design.design_mode = design_mode
+                design.width_mm = _parse_chest_card_decimal(request, 'width_mm', design.width_mm)
+                design.height_mm = _parse_chest_card_decimal(request, 'height_mm', design.height_mm)
+                design.dpi = max(_parse_chest_card_int(request, 'dpi', design.dpi), 72)
+                design.badge_title = (request.POST.get('badge_title') or '').strip() or None
+                design.accent_color = (request.POST.get('accent_color') or '').strip() or '#1769c2'
+                design.background_color = (request.POST.get('background_color') or '').strip() or '#f8fbff'
+                design.name_x_mm = _parse_chest_card_decimal(request, 'name_x_mm', design.name_x_mm)
+                design.name_y_mm = _parse_chest_card_decimal(request, 'name_y_mm', design.name_y_mm)
+                design.name_width_mm = _parse_chest_card_decimal(request, 'name_width_mm', design.name_width_mm)
+                design.name_height_mm = _parse_chest_card_decimal(request, 'name_height_mm', design.name_height_mm)
+                design.qr_x_mm = _parse_chest_card_decimal(request, 'qr_x_mm', design.qr_x_mm)
+                design.qr_y_mm = _parse_chest_card_decimal(request, 'qr_y_mm', design.qr_y_mm)
+                design.qr_size_mm = _parse_chest_card_decimal(request, 'qr_size_mm', design.qr_size_mm)
+                design.font_size_pt = max(_parse_chest_card_int(request, 'font_size_pt', design.font_size_pt), 10)
+                design.font_color = (request.POST.get('font_color') or '').strip() or '#0f172a'
+                text_align = request.POST.get('text_align') or FoodTokenDesign.TEXT_ALIGN_LEFT
+                if text_align not in dict(FoodTokenDesign.TEXT_ALIGN_CHOICES):
+                    text_align = FoodTokenDesign.TEXT_ALIGN_LEFT
+                design.text_align = text_align
+                design.show_event_name = bool(request.POST.get('show_event_name'))
+                design.show_organization = bool(request.POST.get('show_organization'))
+                design.show_invoice_number = bool(request.POST.get('show_invoice_number'))
+                for field_name in ('overlay_reference_image', 'html_background_image'):
+                    if request.POST.get(f'clear_{field_name}'):
+                        setattr(design, field_name, None)
+                    elif request.FILES.get(field_name):
+                        setattr(design, field_name, request.FILES[field_name])
+                selected_event.enable_food_tokens = bool(request.POST.get('enable_food_tokens'))
+                selected_event.food_token_max_redemptions = max(_parse_chest_card_int(request, 'food_token_max_redemptions', selected_event.food_token_max_redemptions or 1), 1)
+                selected_event.save(update_fields=['enable_food_tokens', 'food_token_max_redemptions', 'updated_at'])
+                design.save()
+                _mark_event_food_tokens_outdated(selected_event)
+                dashboard_log_action(request, design, ADDITION if created else CHANGE, 'Updated food token design from Food Token Center dashboard.')
+                messages.success(request, f'Food token setup updated for {selected_event.name}.')
+            elif action in ['download_food_token_pdf', 'print_food_token_pdf']:
+                if not selected_event.enable_food_tokens:
+                    raise ValueError('Enable food tokens on the event before generating files.')
+                payment = get_object_or_404(PaymentStatus.objects.select_related('participant', 'event'), pk=request.POST.get('payment_id'), event=selected_event)
+                output_path = _generate_food_token_file(request, payment.participant, selected_event, design, output_format='pdf')
+                dashboard_log_action(request, payment, CHANGE, f'Generated food token PDF for {payment.participant.name}.')
+                as_attachment = action != 'print_food_token_pdf'
+                response = FileResponse(open(output_path, 'rb'), as_attachment=as_attachment, filename=os.path.basename(output_path))
+                response['Content-Type'] = 'application/pdf'
+                if not as_attachment:
+                    response['Content-Disposition'] = f'inline; filename="{os.path.basename(output_path)}"'
+                return response
+            elif action == 'download_bulk_food_token_pdf':
+                if not selected_event.enable_food_tokens:
+                    raise ValueError('Enable food tokens on the event before generating the bulk PDF.')
+                rows = _food_token_rows(selected_event, search_query)
+                ready_payments = [row['payment'] for row in rows if row['qr_ready']]
+                output_path, generated_count = _build_food_token_bulk_pdf(request, selected_event, design, ready_payments)
+                dashboard_log_action(request, selected_event, CHANGE, f'Generated bulk food token PDF ({generated_count} participants).')
+                response = FileResponse(open(output_path, 'rb'), as_attachment=True, filename=os.path.basename(output_path))
+                response['Content-Type'] = 'application/pdf'
+                return response
+            elif action == 'scan_redeem':
+                scan_code = (request.POST.get('scan_code') or '').strip()
+                if not selected_event.enable_food_tokens:
+                    raise ValueError('Food tokens are not enabled for this event.')
+                if not scan_code:
+                    raise ValueError('Enter or scan a code first.')
+                eligible_payments = PaymentStatus.objects.select_related('participant', 'event').filter(event=selected_event, participant__approved=True, participant__denied=False, status__in=['paid', 'completed'])
+                token_candidate = scan_code.rstrip('/').rsplit('/', 1)[-1]
+                scan_filter = Q(merchant_invoice_number__iexact=scan_code) | Q(participant__email__iexact=scan_code) | Q(participant__phone__iexact=scan_code)
+                try:
+                    from uuid import UUID
+                    scan_filter |= Q(qr_token=UUID(token_candidate))
+                except (TypeError, ValueError, AttributeError):
+                    pass
+                if scan_code.isdigit():
+                    scan_filter |= Q(pk=int(scan_code)) | Q(participant_id=int(scan_code))
+                matches = list(eligible_payments.filter(scan_filter)[:2])
+                if not matches:
+                    raise ValueError('No completed approved participant matched this scan for the selected event.')
+                if len(matches) > 1:
+                    raise ValueError('More than one participant matched this scan. Search manually and redeem from the exact row.')
+                payment = matches[0]
+                food_token, redemption_log, redeemed_now = _redeem_food_token(payment, redeemed_by=request.user)
+                if redeemed_now:
+                    dashboard_log_action(request, food_token, CHANGE, f'Redeemed food token by QR scan for {payment.participant.name}.')
+                    messages.success(request, f'{payment.participant.name} redeemed food token {food_token.redeemed_count}/{food_token.allowed_redemptions} at {redemption_log.redeemed_at:%b %d, %Y %I:%M %p}.')
+                else:
+                    messages.info(request, f'{payment.participant.name} already used all {food_token.allowed_redemptions} food-token scans.')
+            elif action == 'redeem_token':
+                payment = get_object_or_404(PaymentStatus.objects.select_related('participant', 'event'), pk=request.POST.get('payment_id'), event=selected_event)
+                food_token, redemption_log, redeemed_now = _redeem_food_token(payment, redeemed_by=request.user)
+                if redeemed_now:
+                    dashboard_log_action(request, food_token, CHANGE, f'Redeemed food token from Food Token Center for {payment.participant.name}.')
+                    messages.success(request, f'{payment.participant.name} redeemed food token {food_token.redeemed_count}/{food_token.allowed_redemptions}.')
+                else:
+                    messages.info(request, f'{payment.participant.name} already used all {food_token.allowed_redemptions} food-token scans.')
+            elif action == 'update_redemption_limit':
+                payment = get_object_or_404(PaymentStatus.objects.select_related('participant', 'event'), pk=request.POST.get('payment_id'), event=selected_event)
+                food_token = _get_or_create_food_token(payment.participant, payment_status=payment)
+                new_limit = max(_parse_chest_card_int(request, 'allowed_redemptions', food_token.allowed_redemptions or selected_event.food_token_max_redemptions or 1), 1)
+                food_token.allowed_redemptions = new_limit
+                food_token.save(update_fields=['allowed_redemptions', 'updated_at'])
+                dashboard_log_action(request, food_token, CHANGE, f'Updated food token redemption limit to {new_limit} for {payment.participant.name}.')
+                messages.success(request, f'Allowed redemptions updated to {new_limit} for {payment.participant.name}.')
+            elif action == 'undo_redemption':
+                payment = get_object_or_404(PaymentStatus.objects.select_related('participant', 'event'), pk=request.POST.get('payment_id'), event=selected_event)
+                food_token = _get_or_create_food_token(payment.participant, payment_status=payment)
+                _undo_food_token_redemption(food_token)
+                dashboard_log_action(request, food_token, CHANGE, f'Undid the latest food token redemption for {payment.participant.name}.')
+                messages.success(request, f'Latest food token redemption removed for {payment.participant.name}.')
+            else:
+                messages.error(request, 'Choose a valid food token action.')
+        except Exception as exc:
+            logger.exception('Food token center action failed: %s', exc)
+            messages.error(request, str(exc))
+        return redirect(redirect_url)
+
+    design = FoodTokenDesign.objects.filter(event=selected_event).first() if selected_event else None
+    rows = _food_token_rows(selected_event, search_query) if selected_event else []
+    page_obj = Paginator(rows, 15).get_page(request.GET.get('page'))
+    recent_logs = FoodTokenRedemptionLog.objects.filter(event=selected_event).select_related('food_token__participant', 'redeemed_by').order_by('-redeemed_at', '-id')[:10] if selected_event else []
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'design': design,
+        'page_obj': page_obj,
+        'recent_logs': recent_logs,
+        'current_filters': {'event': str(selected_event.id) if selected_event else '', 'q': search_query},
+        'totals': {
+            'enabled': bool(selected_event and selected_event.enable_food_tokens),
+            'design_ready': bool(design),
+            'participants': len(rows),
+            'qr_ready': sum(1 for row in rows if row['qr_ready']),
+            'redeemed': sum(1 for row in rows if row['redeemed_count'] > 0),
+            'remaining': sum(row['remaining_redemptions'] for row in rows),
+            'mode': design.get_design_mode_display() if design else 'Not set',
+        },
+    }
+    return render(request, 'dashboard_food_token_center.html', context)
+
+
+
 def _presentation_file_exists(file_field):
     return bool(file_field and getattr(file_field, 'name', '') and file_field.storage.exists(file_field.name))
 

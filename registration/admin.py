@@ -465,10 +465,10 @@ class ModeratorAdmin(admin.ModelAdmin):
 admin.site.register(Moderator, ModeratorAdmin)
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
-    list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled', 'company_person_registration_enabled')
+    list_display = ('name', 'id','year', 'location', 'start_date', 'event_status', 'registration', 'registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee', 'enable_food_tokens', 'food_token_max_redemptions')
+    list_filter = ('year', 'event_status', 'registration_audience', 'payment_required', 'member_registration_enabled', 'company_person_registration_enabled', 'enable_food_tokens')
     search_fields = ('name',)
-    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee')
+    list_editable = ('registration_audience', 'show_publication_tab', 'payment_required', 'member_registration_enabled', 'member_registration_fee', 'executive_member_registration_fee', 'company_person_registration_enabled', 'company_person_registration_fee', 'enable_food_tokens', 'food_token_max_redemptions')
 admin.site.register(Event, EventAdmin)
 
 import os
@@ -1797,7 +1797,7 @@ class ThankYouEmailLogAdmin(admin.ModelAdmin):
 
 # Certificate admin starts ----------------------------------------------------#
 
-from .models import Certificate, ChestCard, ChestCardDesign, CertificateSignatory, SpeakerCertificate, SpeakerCertificateEmailLog
+from .models import Certificate, ChestCard, ChestCardDesign, CertificateSignatory, FoodToken, FoodTokenDesign, FoodTokenRedemptionLog, SpeakerCertificate, SpeakerCertificateEmailLog
 
 
 @admin.register(ChestCardDesign)
@@ -1822,6 +1822,37 @@ class ChestCardAdmin(admin.ModelAdmin):
     readonly_fields = ('generated_at', 'design_updated_at', 'updated_at')
 
 
+@admin.register(FoodTokenDesign)
+class FoodTokenDesignAdmin(admin.ModelAdmin):
+    list_display = ('event', 'design_mode', 'width_mm', 'height_mm', 'dpi', 'updated_at')
+    list_filter = ('design_mode', 'event')
+    search_fields = ('event__name',)
+    readonly_fields = ('updated_at',)
+    fieldsets = (
+        (None, {'fields': ('event', 'design_mode', 'width_mm', 'height_mm', 'dpi', 'updated_at')}),
+        ('Shared styling', {'fields': ('badge_title', 'accent_color', 'background_color', 'show_event_name', 'show_organization', 'show_invoice_number')}),
+        ('Overlay mode', {'fields': ('overlay_reference_image', 'name_x_mm', 'name_y_mm', 'name_width_mm', 'name_height_mm', 'qr_x_mm', 'qr_y_mm', 'qr_size_mm', 'font_size_pt', 'font_color', 'text_align')}),
+        ('HTML mode', {'fields': ('html_background_image',)}),
+    )
+
+
+@admin.register(FoodToken)
+class FoodTokenAdmin(admin.ModelAdmin):
+    list_display = ('participant', 'event', 'payment_status', 'allowed_redemptions', 'redeemed_count', 'last_redeemed_at', 'status', 'generated_at')
+    list_filter = ('status', 'event', 'generated_at', 'last_redeemed_at')
+    search_fields = ('participant__name', 'participant__email', 'participant__phone', 'payment_status__merchant_invoice_number', 'event__name')
+    readonly_fields = ('generated_at', 'design_updated_at', 'last_redeemed_at', 'updated_at')
+
+
+@admin.register(FoodTokenRedemptionLog)
+class FoodTokenRedemptionLogAdmin(admin.ModelAdmin):
+    list_display = ('food_token', 'event', 'payment_status', 'redeemed_by', 'redeemed_at', 'note')
+    list_filter = ('event', 'redeemed_at')
+    search_fields = ('food_token__participant__name', 'food_token__participant__email', 'payment_status__merchant_invoice_number', 'note')
+    readonly_fields = ('food_token', 'event', 'payment_status', 'redeemed_by', 'redeemed_at', 'note')
+
+    def has_add_permission(self, request):
+        return False
 
 
 class CertificateSignatoryInline(admin.TabularInline):

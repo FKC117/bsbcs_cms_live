@@ -1,0 +1,50 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Food Token</title>
+  {% if base_url %}<base href="{{ base_url }}">{% endif %}
+  <style>
+    :root { --accent: {{ design.accent_color|default:'#1769c2' }}; --bg: {{ design.background_color|default:'#f8fbff' }}; --ink: {{ design.font_color|default:'#0f172a' }}; }
+    * { box-sizing: border-box; }
+    @page { size: {{ design.width_mm }}mm {{ design.height_mm }}mm; margin: 0; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+    body { font-family: Arial, Helvetica, sans-serif; background: transparent; }
+    .card { position: relative; width: {% if capture_mode and not pdf_mode %}100vw{% else %}{{ design.width_mm }}mm{% endif %}; height: {% if capture_mode and not pdf_mode %}100vh{% else %}{{ design.height_mm }}mm{% endif %}; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, white 82%, var(--bg)), var(--bg)); color: var(--ink); border: 1px solid color-mix(in srgb, var(--accent) 20%, white); }
+    .bg-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.12; }
+    .top { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; padding: 7% 7% 3%; }
+    .title { font-size: clamp(0.8rem, 2.2vw, 1rem); font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+    .event { margin-top: 0.35rem; font-size: clamp(0.7rem, 1.8vw, 0.95rem); font-weight: 800; max-width: 100%; line-height: 1.3; }
+    .logo { width: 16%; max-width: 52px; aspect-ratio: 1; flex: 0 0 auto; border-radius: 14px; background: #fff; display: grid; place-items: center; overflow: hidden; padding: 6px; border: 1px solid color-mix(in srgb, var(--accent) 14%, white); }
+    .logo img { width: 100%; height: 100%; object-fit: contain; }
+    .body { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 1rem; align-items: center; padding: 0 7% 7%; }
+    .name { font-size: clamp(1.05rem, 3.6vw, 1.7rem); font-weight: 900; line-height: 1.02; }
+    .invoice { margin-top: 0.8rem; font-size: clamp(0.7rem, 1.8vw, 0.92rem); font-weight: 800; color: var(--accent); }
+    .qr-shell { border-radius: 18px; background: #fff; padding: 0.5rem; border: 1px solid color-mix(in srgb, var(--accent) 16%, white); box-shadow: 0 14px 26px rgba(15, 23, 42, 0.12); }
+    .qr-shell img { display: block; width: clamp(76px, 22vw, 120px); aspect-ratio: 1; object-fit: contain; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if design.html_background_image %}<img class="bg-image" src="{{ design.html_background_image.url }}" alt="">{% endif %}
+    <div class="top">
+      <div>
+        <div class="title">{{ badge_title }}</div>
+        {% if design.show_event_name %}<div class="event">{{ event.name }} {{ event.year }}</div>{% endif %}
+      </div>
+      {% if design.show_organization and site_settings and site_settings.logo %}
+        <div class="logo"><img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}"></div>
+      {% endif %}
+    </div>
+    <div class="body">
+      <div>
+        <div class="name">{{ participant_name }}</div>
+        {% if design.show_invoice_number and invoice_number %}<div class="invoice">{{ invoice_number }}</div>{% endif %}
+      </div>
+      <div class="qr-shell">{% if qr_code_url %}<img src="{{ qr_code_url }}" alt="QR code">{% endif %}</div>
+    </div>
+  </div>
+</body>
+</html>

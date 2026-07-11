@@ -59,25 +59,6 @@
             height: 100%;
             object-fit: cover;
         }
-        .media-filter-top,
-        .media-filter-bottom {
-            display: grid;
-            gap: 0.5rem;
-        }
-        .media-filter-action {
-            display: grid;
-            align-content: end;
-        }
-        @media (min-width: 768px) {
-            .media-filter-top {
-                grid-template-columns: 150px 180px minmax(0, 1fr) auto;
-                align-items: end;
-            }
-            .media-filter-bottom {
-                grid-template-columns: minmax(0, 1fr) auto;
-                align-items: center;
-            }
-        }
         @media (min-width: 900px) {
             .upload-row {
                 grid-template-columns: 260px minmax(0, 1fr);
@@ -107,14 +88,14 @@
                 {% include "partials/dashboard_nav.html" %}
             </div>
         </div>
-        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 xl:grid-cols-[minmax(0,1fr)_620px] xl:items-end">
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
             <div>
                 <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Event media center</div>
                 <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Upload galleries and YouTube links without going row by row.</h1>
                 <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Bulk upload event photos with editable titles, add event videos, review what is already attached to each event, and clean up mistakes before visitors see the gallery.</p>
             </div>
-            <form method="get" class="rounded-[1.35rem] border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
-                <div class="media-filter-top">
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_auto] md:items-end">
                     <div>
                         <label class="compact-label" for="media_type">Source</label>
                         <select id="media_type" name="media_type" class="workflow-select">
@@ -138,11 +119,11 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="media-filter-action">
+                    <div class="grid content-end">
                         <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
                     </div>
                 </div>
-                <div class="media-filter-bottom mt-2">
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
                     <div>
                         <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search title, filename, or YouTube URL">
                     </div>
@@ -452,5 +433,6 @@
 </script>
 </body>
 </html>
+
 
 

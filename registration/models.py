@@ -327,6 +327,8 @@ class Event(models.Model):
     email_body = models.TextField(blank=True, null=True, help_text='Thank You email body text')
     email_button_text = models.CharField(max_length=120, blank=True, null=True, help_text='Optional thank-you email button text')
     email_button_url = models.URLField(max_length=500, blank=True, null=True, help_text='Optional thank-you email button URL')
+    enable_food_tokens = models.BooleanField(default=False, help_text='Enable dashboard generation and QR redemption of food tokens for this event.')
+    food_token_max_redemptions = models.PositiveIntegerField(default=1, help_text='Default allowed food-token scans per approved paid participant.')
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -1780,6 +1782,117 @@ class ChestCard(models.Model):
 
     def __str__(self):
         return f"{self.participant.name} - {self.event.name} {self.event.year} chest card"
+
+
+
+class FoodTokenDesign(models.Model):
+    MODE_OVERLAY = 'overlay'
+    MODE_HTML = 'html'
+    MODE_CHOICES = [
+        (MODE_OVERLAY, 'Preprinted overlay'),
+        (MODE_HTML, 'HTML design'),
+    ]
+
+    TEXT_ALIGN_LEFT = 'left'
+    TEXT_ALIGN_CENTER = 'center'
+    TEXT_ALIGN_RIGHT = 'right'
+    TEXT_ALIGN_CHOICES = [
+        (TEXT_ALIGN_LEFT, 'Left'),
+        (TEXT_ALIGN_CENTER, 'Center'),
+        (TEXT_ALIGN_RIGHT, 'Right'),
+    ]
+
+    event = models.OneToOneField('Event', on_delete=models.CASCADE, related_name='food_token_design')
+    design_mode = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_HTML)
+    width_mm = models.DecimalField(max_digits=6, decimal_places=2, default=90)
+    height_mm = models.DecimalField(max_digits=6, decimal_places=2, default=55)
+    dpi = models.PositiveIntegerField(default=300)
+    badge_title = models.CharField(max_length=120, blank=True, null=True, help_text='Optional heading like FOOD TOKEN or LUNCH TOKEN.')
+    accent_color = models.CharField(max_length=20, default='#1769c2')
+    background_color = models.CharField(max_length=20, default='#f8fbff')
+    overlay_reference_image = models.ImageField(
+        upload_to='food_tokens/overlay_reference/',
+        blank=True,
+        null=True,
+        help_text='Optional on-screen reference image for preprinted coupon alignment.',
+    )
+    html_background_image = models.ImageField(upload_to='food_tokens/html_backgrounds/', blank=True, null=True)
+    name_x_mm = models.DecimalField(max_digits=6, decimal_places=2, default=10)
+    name_y_mm = models.DecimalField(max_digits=6, decimal_places=2, default=18)
+    name_width_mm = models.DecimalField(max_digits=6, decimal_places=2, default=46)
+    name_height_mm = models.DecimalField(max_digits=6, decimal_places=2, default=14)
+    qr_x_mm = models.DecimalField(max_digits=6, decimal_places=2, default=60)
+    qr_y_mm = models.DecimalField(max_digits=6, decimal_places=2, default=11)
+    qr_size_mm = models.DecimalField(max_digits=6, decimal_places=2, default=22)
+    font_size_pt = models.PositiveIntegerField(default=16)
+    font_color = models.CharField(max_length=20, default='#0f172a')
+    text_align = models.CharField(max_length=10, choices=TEXT_ALIGN_CHOICES, default=TEXT_ALIGN_LEFT)
+    show_event_name = models.BooleanField(default=True)
+    show_organization = models.BooleanField(default=False)
+    show_invoice_number = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Food token design'
+        verbose_name_plural = 'Food token designs'
+
+    def __str__(self):
+        return f"{self.event.name} {self.event.year} Food Token"
+
+
+class FoodToken(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_GENERATED = 'generated'
+    STATUS_OUTDATED = 'outdated'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_GENERATED, 'Generated'),
+        (STATUS_OUTDATED, 'Outdated'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='food_tokens')
+    participant = models.OneToOneField('Participant', on_delete=models.CASCADE, related_name='food_token')
+    payment_status = models.OneToOneField('PaymentStatus', on_delete=models.CASCADE, related_name='food_token', blank=True, null=True)
+    generated_pdf = models.FileField(upload_to='food_tokens/generated_pdfs/', max_length=255, blank=True, null=True)
+    generated_png = models.ImageField(upload_to='food_tokens/generated_png/', max_length=255, blank=True, null=True)
+    generated_at = models.DateTimeField(blank=True, null=True)
+    design_updated_at = models.DateTimeField(blank=True, null=True)
+    allowed_redemptions = models.PositiveIntegerField(default=1)
+    redeemed_count = models.PositiveIntegerField(default=0)
+    last_redeemed_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    last_error = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Food token'
+        verbose_name_plural = 'Food tokens'
+
+    def __str__(self):
+        return f"{self.participant.name} - {self.event.name} {self.event.year} food token"
+
+    @property
+    def remaining_redemptions(self):
+        return max((self.allowed_redemptions or 0) - (self.redeemed_count or 0), 0)
+
+
+class FoodTokenRedemptionLog(models.Model):
+    food_token = models.ForeignKey('FoodToken', on_delete=models.CASCADE, related_name='redemption_logs')
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='food_token_redemption_logs')
+    payment_status = models.ForeignKey('PaymentStatus', on_delete=models.CASCADE, related_name='food_token_redemption_logs')
+    redeemed_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='food_token_redemptions')
+    redeemed_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        ordering = ['-redeemed_at', '-id']
+        verbose_name = 'Food token redemption log'
+        verbose_name_plural = 'Food token redemption logs'
+
+    def __str__(self):
+        return f"{self.food_token.participant.name} - redemption at {self.redeemed_at:%Y-%m-%d %H:%M}"
 
 
 class CertificateSignatory(models.Model):
