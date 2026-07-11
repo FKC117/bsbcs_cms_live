@@ -1,11 +1,64 @@
 {% extends "gene_base.html" %}
 
-
-
 {% load registration_filters %}
 {% block title %} Gallery{% endblock %}
 
-{%block content %}
+{% block content %}
+<style>
+    .gallery-image-button {
+        width: 100%;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        cursor: zoom-in;
+        text-align: left;
+    }
+    .gallery-image-frame {
+        overflow: hidden;
+        border-radius: 0.75rem;
+        background: #e5e7eb;
+    }
+    .gallery-image-frame img {
+        width: 100%;
+        height: 16rem;
+        object-fit: cover;
+        transition: transform 0.25s ease;
+    }
+    .gallery-image-button:hover .gallery-image-frame img {
+        transform: scale(1.03);
+    }
+    .gallery-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.82);
+        padding: 1.5rem;
+    }
+    .gallery-lightbox.is-open {
+        display: flex;
+    }
+    .gallery-lightbox-panel {
+        width: min(1100px, 100%);
+        max-height: 100%;
+        overflow: auto;
+        border-radius: 1rem;
+        background: #ffffff;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.35);
+    }
+    .gallery-lightbox-image-wrap {
+        background: #0f172a;
+    }
+    .gallery-lightbox-image {
+        display: block;
+        width: 100%;
+        max-height: 78vh;
+        object-fit: contain;
+        margin: 0 auto;
+    }
+</style>
 
 <div class="bg-gray-100 pt-16">
     <header class="bg-white shadow p-4">
@@ -13,31 +66,37 @@
     </header>
 
     <div class="container mx-auto my-8">
-        <div class="bg-white shadow-lg rounded-lg p-6">
-            <!-- Images Section -->
+        <div class="rounded-lg bg-white p-6 shadow-lg">
             <section id="images">
-                <h2 class="text-2xl font-bold mb-4">Images</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <h2 class="mb-4 text-2xl font-bold">Images</h2>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                     {% for image in images %}
-                        <div class="bg-gray-200 p-4 rounded-lg shadow">
-                            <img src="{{ image.image.url }}" alt="{{ image.caption }}" class="image w-full h-auto">
+                        <article class="rounded-lg bg-gray-100 p-4 shadow">
+                            <button
+                                type="button"
+                                class="gallery-image-button"
+                                data-gallery-image="{{ image.image.url }}"
+                                data-gallery-title="{{ image.caption|default:event.name|escape }}"
+                            >
+                                <div class="gallery-image-frame">
+                                    <img src="{{ image.image.url }}" alt="{{ image.caption|default:event.name }}">
+                                </div>
+                            </button>
                             {% if image.caption %}
-                                <p class="mt-2 text-center text-gray-700">{{ image.caption }}</p>
+                                <p class="mt-3 text-center text-gray-700">{{ image.caption }}</p>
                             {% endif %}
-                        </div>
+                        </article>
                     {% empty %}
                         <p>No images available.</p>
                     {% endfor %}
                 </div>
             </section>
-            
-            
-            <!-- Videos Section -->
+
             <section id="videos" class="mt-8">
-                <h2 class="text-2xl font-bold mb-4">Videos</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <h2 class="mb-4 text-2xl font-bold">Videos</h2>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                     {% for video in videos %}
-                        <div class="bg-gray-200 p-4 rounded-lg shadow">
+                        <div class="rounded-lg bg-gray-100 p-4 shadow">
                             <iframe width="100%" height="215" src="{{ video.youtube_url|youtube_embed }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
                             {% if video.caption %}
                                 <p class="mt-2 text-center text-gray-700">{{ video.caption }}</p>
@@ -51,21 +110,66 @@
         </div>
     </div>
 </div>
-{% comment %} <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        let images = document.querySelectorAll('.image');
-        
-        images.forEach(function(image) {
-            image.addEventListener('click', function() {
-                if (this.style.transform === "scale(2)") {
-                    this.style.transform = "scale(1)";
-                } else {
-                    this.style.transform = "scale(2)";
-                }
-                this.style.transition = "transform 0.25s ease";
+
+<div id="gallery-lightbox" class="gallery-lightbox" aria-hidden="true">
+    <div class="gallery-lightbox-panel">
+        <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+            <div id="gallery-lightbox-title" class="text-sm font-semibold text-gray-700"></div>
+            <button type="button" id="gallery-lightbox-close" class="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Close</button>
+        </div>
+        <div class="gallery-lightbox-image-wrap p-3 sm:p-4">
+            <img id="gallery-lightbox-image" class="gallery-lightbox-image" src="" alt="">
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const lightbox = document.getElementById('gallery-lightbox');
+        const lightboxImage = document.getElementById('gallery-lightbox-image');
+        const lightboxTitle = document.getElementById('gallery-lightbox-title');
+        const closeButton = document.getElementById('gallery-lightbox-close');
+        const triggers = document.querySelectorAll('[data-gallery-image]');
+
+        if (!lightbox || !lightboxImage || !lightboxTitle || !closeButton || !triggers.length) {
+            return;
+        }
+
+        function closeLightbox() {
+            lightbox.classList.remove('is-open');
+            lightbox.setAttribute('aria-hidden', 'true');
+            lightboxImage.src = '';
+            lightboxImage.alt = '';
+            lightboxTitle.textContent = '';
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        function openLightbox(src, title) {
+            lightboxImage.src = src;
+            lightboxImage.alt = title || 'Gallery image';
+            lightboxTitle.textContent = title || 'Gallery image';
+            lightbox.classList.add('is-open');
+            lightbox.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        triggers.forEach((trigger) => {
+            trigger.addEventListener('click', function () {
+                openLightbox(this.dataset.galleryImage, this.dataset.galleryTitle || 'Gallery image');
             });
         });
-    });
-</script> {% endcomment %}
 
+        closeButton.addEventListener('click', closeLightbox);
+        lightbox.addEventListener('click', function (event) {
+            if (event.target === lightbox) {
+                closeLightbox();
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && lightbox.classList.contains('is-open')) {
+                closeLightbox();
+            }
+        });
+    }());
+</script>
 {% endblock %}
