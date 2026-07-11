@@ -110,7 +110,7 @@
             </section>
         {% endif %}
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Campaigns</div>
                 <div class="mt-1 text-2xl font-black text-ink">{{ totals.campaigns }}</div>
@@ -122,6 +122,14 @@
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Ready</div>
                 <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.ready }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Masking</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.masking_campaigns }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Non-masking</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ totals.non_masking_campaigns }}</div>
             </div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Recipients</div>
@@ -298,6 +306,7 @@
                             <div class="mt-1 text-xs font-semibold text-slate-500">{{ campaign.get_audience_type_display }}</div>
                             <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-black uppercase">
                                 <span class="rounded-full bg-white px-2 py-1 text-bsbcs-blue ring-1 ring-line">{{ campaign.get_status_display }}</span>
+                                <span class="rounded-full {% if campaign.sms_type == 'masking' %}bg-teal-50 text-bsbcs-teal ring-teal-100{% else %}bg-amber-50 text-bsbcs-amber ring-amber-100{% endif %} px-2 py-1 ring-1">{{ campaign.get_sms_type_display }}</span>
                                 <span class="rounded-full bg-white px-2 py-1 text-slate-600 ring-1 ring-line">{{ campaign.recipient_count }} recipients</span>
                             </div>
                         </a>
@@ -684,6 +693,10 @@
 </script>
 </body>
 </html>
+
+
+
+
 
 
 

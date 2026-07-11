@@ -11566,6 +11566,8 @@ def dashboard_bulk_sms_center(request):
         'campaigns': BulkSMS.objects.count(),
         'drafts': BulkSMS.objects.filter(status=BulkSMS.STATUS_DRAFT).count(),
         'ready': BulkSMS.objects.filter(status=BulkSMS.STATUS_RECIPIENTS_READY).count(),
+        'masking_campaigns': BulkSMS.objects.filter(sms_type=BulkSMS.SMS_TYPE_MASKING).count(),
+        'non_masking_campaigns': BulkSMS.objects.filter(sms_type=BulkSMS.SMS_TYPE_NON_MASKING).count(),
         'recipients': BulkSMSRecipient.objects.count(),
         'pending': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_PENDING).count(),
         'sent': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_SENT).count(),
@@ -12836,6 +12838,7 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
 
 
 
