@@ -1,4 +1,4 @@
-from django.db import models
+﻿from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -1593,6 +1593,15 @@ class EventVideo(models.Model):
 
     def __str__(self):
         return self.caption or "Event Video"
+
+class EventDriveLink(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    drive_url = models.URLField()
+    thumbnail = models.ImageField(upload_to='media/event_drive_thumbnails/')
+    caption = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return self.caption or "Event Drive Link"
 # EventImage and EventVideo Models END------------------------------------------------------------------------------------#
 
 # Registration kit model START------------------------------------------------------------------------------------#
@@ -2556,3 +2565,4 @@ class PendingPaymentReminder(models.Model):
     class Meta:
         unique_together = ('participant', 'event')  # Prevent duplicate entries for the same participant/event
 # Pending Payment Reminder models ends here-------------------------------------------------------------#
+

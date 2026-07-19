@@ -1,4 +1,4 @@
-{% load static %}
+﻿{% load static %}
 {% load registration_filters %}
 <!doctype html>
 <html lang="en">
@@ -91,8 +91,8 @@
         <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
             <div>
                 <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Event media center</div>
-                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Upload galleries and YouTube links without going row by row.</h1>
-                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Bulk upload event photos with editable titles, add event videos, review what is already attached to each event, and clean up mistakes before visitors see the gallery.</p>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Upload galleries, YouTube links, and external link cards without going row by row.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Bulk upload event photos with editable titles, add event videos, attach external links with custom thumbnails, review what is already attached to each event, and clean up mistakes before visitors see the gallery.</p>
             </div>
             <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
                 <div class="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_auto] md:items-end">
@@ -102,6 +102,7 @@
                             <option value="all" {% if current_filters.media_type == 'all' %}selected{% endif %}>All sources</option>
                             <option value="images" {% if current_filters.media_type == 'images' %}selected{% endif %}>Images</option>
                             <option value="videos" {% if current_filters.media_type == 'videos' %}selected{% endif %}>Videos</option>
+                            <option value="drive_links" {% if current_filters.media_type == 'drive_links' %}selected{% endif %}>Drive links</option>
                         </select>
                     </div>
                     <div>
@@ -125,7 +126,7 @@
                 </div>
                 <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
                     <div>
-                        <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search title, filename, or YouTube URL">
+                        <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search title, filename, YouTube URL, or external link URL">
                     </div>
                     <a href="{% url 'dashboard_event_media_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
                 </div>
@@ -144,7 +145,7 @@
             </section>
         {% endif %}
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Filtered images</div>
                 <div class="mt-1 text-2xl font-black text-ink">{{ totals.images }}</div>
@@ -154,6 +155,10 @@
                 <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.videos }}</div>
             </div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Drive links</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.drive_links }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Events with media</div>
                 <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.events_with_media }}</div>
             </div>
@@ -161,7 +166,7 @@
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Selected event</div>
                 <div class="mt-1 text-sm font-black text-ink">{% if selected_event %}{{ selected_event.name }} {{ selected_event.year }}{% else %}All events{% endif %}</div>
                 {% if selected_event %}
-                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ totals.selected_event_images }} images, {{ totals.selected_event_videos }} videos</div>
+                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ totals.selected_event_images }} images, {{ totals.selected_event_videos }} videos, {{ totals.selected_event_drive_links }} drive links</div>
                 {% endif %}
             </div>
         </section>
@@ -243,6 +248,46 @@
                 </div>
                 <div class="mt-4 flex items-center justify-end">
                     <button type="submit" name="media_action" value="add_video" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save video</button>
+                </div>
+            </form>
+
+            <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-line bg-white p-5 shadow-quiet">
+                {% csrf_token %}
+                <input type="hidden" name="q" value="{{ current_filters.q }}">
+                <input type="hidden" name="media_type" value="{{ current_filters.media_type }}">
+                <div class="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">External link items</div>
+                        <h2 class="mt-1 text-2xl font-black text-ink">Attach a link with thumbnail</h2>
+                        <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Upload a thumbnail image, save any external URL, and we will show this as a clickable gallery card for visitors.</p>
+                    </div>
+                    <a href="{{ admin_links.drive_links }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2.5 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open link admin</a>
+                </div>
+                <div class="grid gap-4">
+                    <div>
+                        <label class="compact-label" for="drive-event">Event</label>
+                        <select id="drive-event" name="event" class="workflow-select" required>
+                            <option value="">Select event</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="drive_url">External URL</label>
+                        <input id="drive_url" type="url" name="drive_url" class="workflow-input" placeholder="https://example.com/resource" required>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="drive_thumbnail">Thumbnail image</label>
+                        <input id="drive_thumbnail" type="file" name="drive_thumbnail" class="workflow-file" accept="image/*" required>
+                    </div>
+                    <div>
+                        <label class="compact-label" for="drive_caption">Title</label>
+                        <input id="drive_caption" type="text" name="drive_caption" class="workflow-input" placeholder="Optional title for the link item">
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center justify-end">
+                    <button type="submit" name="media_action" value="add_drive_link" class="rounded-xl bg-bsbcs-blue px-5 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Save link item</button>
                 </div>
             </form>
         </section>
@@ -356,6 +401,54 @@
                     </div>
                 {% endif %}
             </div>
+
+            <div class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Drive library</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Saved External link items</h2>
+                    </div>
+                    <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ drive_link_page_obj.paginator.count }} total</span>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {% for drive_link in drive_link_page_obj %}
+                        <article class="overflow-hidden rounded-2xl border border-line bg-slate-50/70">
+                            <div class="aspect-video bg-slate-100">
+                                <img src="{{ drive_link.thumbnail.url }}" alt="{{ drive_link.caption|default:drive_link.event.name }}" class="h-full w-full object-cover">
+                            </div>
+                            <div class="p-3">
+                                <div class="line-clamp-2 text-sm font-black text-ink">{{ drive_link.caption|default:"Untitled link item" }}</div>
+                                <div class="mt-1 text-xs font-semibold text-slate-500">{{ drive_link.event.name }} {{ drive_link.event.year }}</div>
+                                <div class="mt-3 flex items-center justify-between gap-2">
+                                    <a href="{{ drive_link.drive_url }}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open link</a>
+                                    <form method="post" onsubmit="return confirm('Delete this link item?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="event" value="{{ current_filters.event }}">
+                                        <input type="hidden" name="q" value="{{ current_filters.q }}">
+                                        <input type="hidden" name="drive_link_id" value="{{ drive_link.id }}">
+                                        <button type="submit" name="media_action" value="delete_drive_link" class="rounded-lg bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm font-semibold text-slate-500 sm:col-span-2 xl:col-span-3">No External link items match this filter yet.</div>
+                    {% endfor %}
+                </div>
+                {% if drive_link_page_obj.paginator.num_pages > 1 %}
+                    <div class="mt-4 flex items-center justify-between gap-3 text-sm font-bold text-slate-600">
+                        <span>Page {{ drive_link_page_obj.number }} of {{ drive_link_page_obj.paginator.num_pages }}</span>
+                        <div class="flex gap-2">
+                            {% if drive_link_page_obj.has_previous %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.number }}&videos_page={{ video_page_obj.number }}&drive_links_page={{ drive_link_page_obj.previous_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Previous</a>
+                            {% endif %}
+                            {% if drive_link_page_obj.has_next %}
+                                <a href="?event={{ current_filters.event }}&q={{ current_filters.q }}&images_page={{ image_page_obj.number }}&videos_page={{ video_page_obj.number }}&drive_links_page={{ drive_link_page_obj.next_page_number }}" class="rounded-lg border border-line px-3 py-2 hover:border-bsbcs-blue hover:text-bsbcs-blue">Next</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
         </section>
     </main>
 </div>
@@ -433,6 +526,11 @@
 </script>
 </body>
 </html>
+
+
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-from django.db.models import Q
+﻿from django.db.models import Q
 from django.contrib import admin
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
@@ -1535,7 +1535,7 @@ admin.site.register(Sponsor, SponsorAdmin)
 
 # Event Gallery admin view START-------------------------------------------------------------------#
 
-from .models import EventImage, EventVideo
+from .models import EventDriveLink, EventImage, EventVideo
 
 class EventImageAdmin(admin.ModelAdmin):
     change_list_template = 'admin/registration/eventimage/change_list.html'
@@ -1618,8 +1618,28 @@ class EventVideoAdmin(admin.ModelAdmin):
         return 'No URL'
     youtube_link.short_description = 'YouTube'  # type: ignore
 
+class EventDriveLinkAdmin(admin.ModelAdmin):
+    list_display = ('thumbnail_preview', 'caption', 'event', 'drive_link')
+    list_filter = ('event',)
+    search_fields = ('caption', 'event__name', 'drive_url', 'thumbnail')
+    readonly_fields = ('thumbnail_preview',)
+    fields = ('event', 'caption', 'drive_url', 'thumbnail', 'thumbnail_preview')
+
+    def thumbnail_preview(self, obj):
+        if obj and obj.thumbnail:
+            return format_html('<img src="{}" style="height: 84px; width: 120px; object-fit: cover; border-radius: 10px;" />', obj.thumbnail.url)
+        return 'No thumbnail uploaded'
+    thumbnail_preview.short_description = 'Preview'  # type: ignore
+
+    def drive_link(self, obj):
+        if obj and obj.drive_url:
+            return format_html('<a href="{}" target="_blank">Open external link</a>', obj.drive_url)
+        return 'No URL'
+    drive_link.short_description = 'External URL'  # type: ignore
+
 admin.site.register(EventImage, EventImageAdmin)
 admin.site.register(EventVideo, EventVideoAdmin)
+admin.site.register(EventDriveLink, EventDriveLinkAdmin)
 
 # Event Gallery admin view END-------------------------------------------------------------------#
 # Registration Kit admin view START-------------------------------------------------------------------#
@@ -2650,5 +2670,8 @@ class LogEntryAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+
 
 

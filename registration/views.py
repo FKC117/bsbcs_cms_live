@@ -1,4 +1,4 @@
-# pyrefly: ignore [missing-import]
+﻿# pyrefly: ignore [missing-import]
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from .dashboard_permissions import (
@@ -734,8 +734,8 @@ def _build_user_presentation_assignments(user, user_profile, abstract_submission
                 'title': item.display_title,
                 'role': 'Program talk / activity',
                 'time_label': (
-                    f"{session.program_day.name if session.program_day else 'Day'} · "
-                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
+                    f"{session.program_day.name if session.program_day else 'Day'} Â· "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} Â· "
                     f"{item.start_time.strftime('%I:%M %p').lstrip('0') if item.start_time else 'Start'} - "
                     f"{item.end_time.strftime('%I:%M %p').lstrip('0') if item.end_time else 'End'}"
                 ),
@@ -763,8 +763,8 @@ def _build_user_presentation_assignments(user, user_profile, abstract_submission
                 'title': session.title,
                 'role': 'Session faculty',
                 'time_label': (
-                    f"{session.program_day.name if session.program_day else 'Day'} · "
-                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
+                    f"{session.program_day.name if session.program_day else 'Day'} Â· "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} Â· "
                     f"{session.start_time.strftime('%I:%M %p').lstrip('0') if session.start_time else 'Start'} - "
                     f"{session.end_time.strftime('%I:%M %p').lstrip('0') if session.end_time else 'End'}"
                 ),
@@ -2281,13 +2281,19 @@ def publication_detail(request, event_id, pub_id):
 # Event Gallery View START------------------------------------------------------------------------------#
 
 from django.shortcuts import render, get_object_or_404
-from .models import Event, EventImage, EventVideo
+from .models import Event, EventDriveLink, EventImage, EventVideo
 
 def event_gallery(request, event_id):
     event = get_object_or_404(Event, id=event_id)
     images = EventImage.objects.filter(event=event)
     videos = EventVideo.objects.filter(event=event)
-    return render(request, 'event_gallery.html', {'event': event, 'images': images, 'videos': videos})
+    drive_links = EventDriveLink.objects.filter(event=event)
+    return render(request, 'event_gallery.html', {
+        'event': event,
+        'images': images,
+        'videos': videos,
+        'drive_links': drive_links,
+    })
 
 # Event Gallery View END--------------------------------------------------------------------------------#
 
@@ -10325,7 +10331,7 @@ def dashboard_event_media_center(request):
             else:
                 created_count = 0
                 for index, uploaded_file in enumerate(uploaded_files):
-                    title = image_titles[index].strip() if index < len(image_titles) else ''
+                    title = image_titles[index].strip() if index < len(image_titles) and image_titles[index] else ''
                     file_name = os.path.splitext(os.path.basename(uploaded_file.name))[0].replace('_', ' ').replace('-', ' ').strip()
                     fallback_title = f"{selected_event.name} {selected_event.year} - {file_name or ('Image ' + str(index + 1))}"
                     image = EventImage.objects.create(
@@ -10367,6 +10373,36 @@ def dashboard_event_media_center(request):
             messages.success(request, f'Video saved for {selected_event.name} {selected_event.year}.')
             return redirect(redirect_url)
 
+        if action == 'add_drive_link':
+            drive_url = (request.POST.get('drive_url') or '').strip()
+            caption = (request.POST.get('drive_caption') or '').strip()
+            thumbnail = request.FILES.get('drive_thumbnail')
+            if not selected_event:
+                messages.error(request, 'Choose an event before adding a link item.')
+                return redirect(redirect_url)
+            if not drive_url:
+                messages.error(request, 'Add the external link URL first.')
+                return redirect(redirect_url)
+            if not thumbnail:
+                messages.error(request, 'Upload a thumbnail image for the link item.')
+                return redirect(redirect_url)
+            try:
+                URLValidator()(drive_url)
+            except ValidationError:
+                messages.error(request, 'Enter a valid external link URL.')
+                return redirect(redirect_url)
+
+            drive_link = EventDriveLink.objects.create(
+                event=selected_event,
+                drive_url=drive_url,
+                thumbnail=thumbnail,
+                caption=caption,
+            )
+            dashboard_log_action(request, drive_link, ADDITION, 'Added external gallery link from Event Media Center dashboard.')
+            dashboard_log_action(request, selected_event, CHANGE, 'Added external gallery link from Event Media Center dashboard.')
+            messages.success(request, f'Link item saved for {selected_event.name} {selected_event.year}.')
+            return redirect(redirect_url)
+
         if action == 'delete_image':
             image = get_object_or_404(EventImage.objects.select_related('event'), pk=request.POST.get('image_id'))
             image_label = image.caption or image.image.name.rsplit('/', 1)[-1]
@@ -10384,12 +10420,22 @@ def dashboard_event_media_center(request):
             messages.success(request, f'Deleted video from {event_label}.')
             return redirect(redirect_url)
 
+        if action == 'delete_drive_link':
+            drive_link = get_object_or_404(EventDriveLink.objects.select_related('event'), pk=request.POST.get('drive_link_id'))
+            event_label = f'{drive_link.event.name} {drive_link.event.year}'
+            dashboard_log_action(request, drive_link, DELETION, 'Deleted external gallery link from Event Media Center dashboard.')
+            drive_link.delete()
+            messages.success(request, f'Deleted link item from {event_label}.')
+            return redirect(redirect_url)
+
     images = EventImage.objects.select_related('event').order_by('-id')
     videos = EventVideo.objects.select_related('event').order_by('-id')
+    drive_links = EventDriveLink.objects.select_related('event').order_by('-id')
 
     if event_filter:
         images = images.filter(event_id=event_filter)
         videos = videos.filter(event_id=event_filter)
+        drive_links = drive_links.filter(event_id=event_filter)
 
     if search_query:
         images = images.filter(
@@ -10402,24 +10448,38 @@ def dashboard_event_media_center(request):
             | Q(event__name__icontains=search_query)
             | Q(youtube_url__icontains=search_query)
         )
+        drive_links = drive_links.filter(
+            Q(caption__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(drive_url__icontains=search_query)
+            | Q(thumbnail__icontains=search_query)
+        )
 
     if media_filter == 'images':
         videos = EventVideo.objects.none()
+        drive_links = EventDriveLink.objects.none()
     elif media_filter == 'videos':
         images = EventImage.objects.none()
+        drive_links = EventDriveLink.objects.none()
+    elif media_filter == 'drive_links':
+        images = EventImage.objects.none()
+        videos = EventVideo.objects.none()
 
     selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
     image_page_obj = Paginator(images, 12).get_page(request.GET.get('images_page'))
     video_page_obj = Paginator(videos, 8).get_page(request.GET.get('videos_page'))
+    drive_link_page_obj = Paginator(drive_links, 8).get_page(request.GET.get('drive_links_page'))
 
     totals = {
         'images': images.count(),
         'videos': videos.count(),
+        'drive_links': drive_links.count(),
         'events_with_media': Event.objects.filter(
-            Q(eventimage__isnull=False) | Q(eventvideo__isnull=False)
+            Q(eventimage__isnull=False) | Q(eventvideo__isnull=False) | Q(eventdrivelink__isnull=False)
         ).distinct().count(),
         'selected_event_images': EventImage.objects.filter(event=selected_event).count() if selected_event else 0,
         'selected_event_videos': EventVideo.objects.filter(event=selected_event).count() if selected_event else 0,
+        'selected_event_drive_links': EventDriveLink.objects.filter(event=selected_event).count() if selected_event else 0,
     }
 
     return render(request, 'dashboard_event_media_center.html', {
@@ -10428,6 +10488,7 @@ def dashboard_event_media_center(request):
         'selected_event': selected_event,
         'image_page_obj': image_page_obj,
         'video_page_obj': video_page_obj,
+        'drive_link_page_obj': drive_link_page_obj,
         'totals': totals,
         'current_filters': {
             'event': event_filter,
@@ -10437,6 +10498,7 @@ def dashboard_event_media_center(request):
         'admin_links': {
             'images': reverse('admin:registration_eventimage_changelist'),
             'videos': reverse('admin:registration_eventvideo_changelist'),
+            'drive_links': reverse('admin:registration_eventdrivelink_changelist'),
         },
     })
 
@@ -12838,6 +12900,9 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
+
+
 
 
 

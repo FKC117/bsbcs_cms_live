@@ -1,4 +1,4 @@
-from functools import wraps
+﻿from functools import wraps
 
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
@@ -102,6 +102,7 @@ DASHBOARD_PERMISSION_GROUPS = {
         "read": (
             "registration.view_eventimage",
             "registration.view_eventvideo",
+            "registration.view_eventdrivelink",
         ),
         "write": (
             "registration.add_eventimage",
@@ -110,6 +111,9 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.add_eventvideo",
             "registration.change_eventvideo",
             "registration.delete_eventvideo",
+            "registration.add_eventdrivelink",
+            "registration.change_eventdrivelink",
+            "registration.delete_eventdrivelink",
         ),
     },
     "certificates": {
@@ -242,4 +246,5 @@ def dashboard_access_map(user):
         area: user_can_access_dashboard_area(user, area)
         for area in DASHBOARD_PERMISSION_GROUPS
     }
+
 
