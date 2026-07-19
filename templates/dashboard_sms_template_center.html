@@ -46,6 +46,33 @@
     </header>
 
     <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">System SMS</div>
+                <div class="mt-1 text-2xl font-black text-ink">{{ template_totals.all }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Registration</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ template_totals.registration }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Abstract</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ template_totals.abstract }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-amber">{{ template_totals.membership }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Payment</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-green">{{ template_totals.payment }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Other</div>
+                <div class="mt-1 text-2xl font-black text-slate-700">{{ template_totals.other }}</div>
+            </div>
+        </section>
+
         {% if messages %}
             <section class="mb-3 space-y-2">
                 {% for message in messages %}

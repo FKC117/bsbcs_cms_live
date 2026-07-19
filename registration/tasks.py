@@ -457,6 +457,7 @@ def send_participant_approval_email(
                 'participant_id': participant.id,
                 'event_id': event.id,
                 'email_type': email_type,
+                'system_sms_template_key': sms_template_key,
             },
             sms_type=sms_payload['sms_type'],
             fallback_sms_type=sms_payload.get('fallback_sms_type'),

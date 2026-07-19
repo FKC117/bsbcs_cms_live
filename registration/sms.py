@@ -84,6 +84,36 @@ def _mask_phone(phone):
     return f"{phone[:4]}***{phone[-3:]}"
 
 
+def _extract_provider_message_id(response_data):
+    if not isinstance(response_data, dict):
+        return ''
+    return str(response_data.get('Message_ID') or response_data.get('messageid') or response_data.get('messageId') or '').strip()
+
+
+def _record_system_sms_log(*, phone, country, message, context, result):
+    template_key = (context or {}).get('system_sms_template_key') or (context or {}).get('template_key')
+    if not template_key:
+        return
+
+    from .models import SystemSMSSendLog
+
+    SystemSMSSendLog.objects.create(
+        template_key=template_key,
+        source=(context or {}).get('source') or '',
+        phone=phone,
+        country=country or '',
+        sms_type=normalize_sms_type(result.get('sms_type')),
+        fallback_from_sms_type=normalize_sms_type(result.get('fallback_from_sms_type')) if result.get('fallback_from_sms_type') else None,
+        status=(result.get('status') or SystemSMSSendLog.STATUS_FAILED),
+        message=message,
+        provider_status='' if result.get('provider_status') is None else str(result.get('provider_status')),
+        provider_message_id=_extract_provider_message_id(result.get('response')),
+        event_id=(context or {}).get('event_id') or None,
+        participant_id=(context or {}).get('participant_id') or None,
+        user_profile_id=(context or {}).get('user_profile_id') or None,
+    )
+
+
 def _response_preview(value, *, limit=300):
     if value is None:
         return ''
@@ -343,11 +373,13 @@ def send_sms(phone, message, *, country=DEFAULT_COUNTRY, context=None, sms_type=
 
     result = _submit(attempted_sms_type)
     if result.get('status') == 'sent' or not attempted_fallback_sms_type or attempted_fallback_sms_type == attempted_sms_type:
+        _record_system_sms_log(phone=normalized_phone, country=country, message=message, context=context, result=result)
         return result
 
     logger.warning('SMS primary route failed; trying fallback sender. to=%s primary=%s fallback=%s context=%s', _mask_phone(normalized_phone), attempted_sms_type, attempted_fallback_sms_type, context)
     fallback_result = _submit(attempted_fallback_sms_type)
     fallback_result['fallback_from_sms_type'] = attempted_sms_type
+    _record_system_sms_log(phone=normalized_phone, country=country, message=message, context=context, result=fallback_result)
     return fallback_result
 
 
@@ -513,6 +545,7 @@ def queue_registration_payment_received_sms(payment_status, *, source='registrat
             'event_name': payment_status.event.name,
             'event_year': payment_status.event.year,
             'transaction_reference': _payment_transaction_reference(payment_status),
+            'system_sms_template_key': 'registration_payment_received',
         },
     )
     send_sms_task.delay(
@@ -541,6 +574,7 @@ def queue_membership_payment_received_sms(payment_record, *, source='membership_
             'member_name': profile.name,
             'membership_type': payment_record.membership_type.name if payment_record.membership_type else 'membership',
             'transaction_reference': _payment_transaction_reference(payment_record),
+            'system_sms_template_key': 'membership_payment_received',
         },
     )
     send_sms_task.delay(

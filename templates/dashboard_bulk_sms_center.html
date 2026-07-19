@@ -110,7 +110,7 @@
             </section>
         {% endif %}
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-11">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Campaigns</div>
                 <div class="mt-1 text-2xl font-black text-ink">{{ totals.campaigns }}</div>
@@ -150,6 +150,10 @@
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
                 <div class="text-xs font-black uppercase tracking-wide text-slate-500">Groups</div>
                 <div class="mt-1 text-2xl font-black text-bsbcs-teal">{{ totals.groups }}</div>
+            </div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-xs font-black uppercase tracking-wide text-slate-500">System SMS</div>
+                <div class="mt-1 text-2xl font-black text-bsbcs-blue">{{ totals.system_sms_sent }}</div>
             </div>
         </section>
 

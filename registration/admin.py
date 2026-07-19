@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup, SystemSMSTemplate
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup, SystemSMSTemplate, SystemSMSSendLog
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -623,6 +623,7 @@ def send_free_event_confirmation_email(participant, event, password=None, includ
             'source': 'admin_free_confirmation',
             'participant_id': participant.id,
             'event_id': event.id,
+            'system_sms_template_key': 'registration_confirmation',
         },
         sms_type=sms_payload['sms_type'],
         fallback_sms_type=sms_payload.get('fallback_sms_type'),
@@ -1228,6 +1229,7 @@ def send_approval_email(abstract, approval_type):
                 'source': 'abstract_approval',
                 'abstract_submission_id': abstract.id,
                 'approval_type': approval_type,
+                'system_sms_template_key': 'abstract_approval',
             },
             sms_type=sms_payload['sms_type'],
         )

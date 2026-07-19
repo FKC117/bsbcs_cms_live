@@ -1879,6 +1879,7 @@ def send_registration_form_submission_email(participant):
             'source': 'registration_submission',
             'participant_id': participant.id,
             'event_id': participant.event_id,
+            'system_sms_template_key': 'registration_submission',
         },
         sms_type=sms_payload['sms_type'],
         fallback_sms_type=sms_payload.get('fallback_sms_type'),
@@ -2106,6 +2107,7 @@ def send_abstract_submission_email(participant):
             'source': 'abstract_submission',
             'participant_id': participant.id,
             'event_id': participant.event_id,
+            'system_sms_template_key': 'abstract_submission',
         },
         sms_type=sms_payload['sms_type'],
         fallback_sms_type=sms_payload.get('fallback_sms_type'),
@@ -11635,6 +11637,7 @@ def dashboard_bulk_sms_center(request):
         'sent': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_SENT).count(),
         'failed': BulkSMSRecipient.objects.filter(status=BulkSMSRecipient.STATUS_FAILED).count(),
         'groups': PhoneGroup.objects.count(),
+        'system_sms_sent': SystemSMSSendLog.objects.filter(status=SystemSMSSendLog.STATUS_SENT).count(),
     }
     workflow_steps = [
         {
@@ -11755,6 +11758,15 @@ def dashboard_sms_template_center(request):
         if rows:
             grouped_template_rows.append({'label': label, 'rows': rows})
 
+    template_totals = {
+        'all': len(templates),
+        'registration': len(grouped_map.get('Registration SMS') or []),
+        'abstract': len(grouped_map.get('Abstract SMS') or []),
+        'membership': len(grouped_map.get('Membership SMS') or []),
+        'payment': len(grouped_map.get('Payment SMS') or []),
+        'other': len(grouped_map.get('Other SMS') or []),
+    }
+
     return render(request, 'dashboard_sms_template_center.html', {
         'site_settings': SiteSettings.objects.first(),
         'grouped_template_rows': grouped_template_rows,
@@ -11762,6 +11774,7 @@ def dashboard_sms_template_center(request):
         'default_template': defaults_map.get(selected_template.template_key, {}) if selected_template else {},
         'current_filters': {'event': ''},
         'template_seed_ok': True,
+        'template_totals': template_totals,
     })
 
 

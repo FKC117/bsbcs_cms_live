@@ -2548,6 +2548,42 @@ class SystemSMSTemplate(models.Model):
         return self.label
 
 
+class SystemSMSSendLog(models.Model):
+    STATUS_SENT = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_SKIPPED = 'skipped'
+
+    STATUS_CHOICES = [
+        (STATUS_SENT, 'Sent'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_SKIPPED, 'Skipped'),
+    ]
+
+    template_key = models.CharField(max_length=80, choices=SystemSMSTemplate.TEMPLATE_CHOICES, blank=True, null=True)
+    source = models.CharField(max_length=80, blank=True, null=True)
+    phone = models.CharField(max_length=20)
+    country = models.CharField(max_length=120, blank=True, null=True)
+    sms_type = models.CharField(max_length=20, choices=SystemSMSTemplate.SMS_TYPE_CHOICES, default=SystemSMSTemplate.SMS_TYPE_MASKING)
+    fallback_from_sms_type = models.CharField(max_length=20, choices=SystemSMSTemplate.SMS_TYPE_CHOICES, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    message = models.TextField(blank=True, null=True)
+    provider_status = models.CharField(max_length=50, blank=True, null=True)
+    provider_message_id = models.CharField(max_length=120, blank=True, null=True)
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='system_sms_logs')
+    participant = models.ForeignKey('Participant', on_delete=models.SET_NULL, blank=True, null=True, related_name='system_sms_logs')
+    user_profile = models.ForeignKey('UserProfile', on_delete=models.SET_NULL, blank=True, null=True, related_name='system_sms_logs')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'System SMS log'
+        verbose_name_plural = 'System SMS logs'
+
+    def __str__(self):
+        label = self.template_key or self.source or 'system-sms'
+        return f"{label} - {self.phone} - {self.status}"
+
+
 # Bulk SMS Model Ends here------------------------------------------------------------------------------#
 
 # Pending Payment Reminder models starts here-------------------------------------------------------------#
