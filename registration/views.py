@@ -8502,8 +8502,8 @@ def _finance_statement_pdf_response(context):
     story.extend(table_block('Expense Categories', ['Category', 'Rows', 'Recorded', 'Paid', 'Outstanding'], [[row['category'].name, row['count'], money(row['amount']), money(row['paid']), money(row['outstanding'])] for row in context['expense_category_export_rows']] or [['No category rows', '', '', '', '']], col_widths=[2.3 * inch, 0.7 * inch, 1.2 * inch, 1.1 * inch, 1.2 * inch]))
     story.append(PageBreak())
     story.extend(table_block('Vendor Payables', ['Vendor', 'Expense Rows', 'Recorded', 'Paid Out', 'Outstanding'], [[row['vendor'].name, row['expense_count'], money(row['expense_total']), money(row['paid_total']), money(row['outstanding_total'])] for row in context['vendor_payable_export_rows']] or [['No vendor rows', '', '', '', '']], col_widths=[2.3 * inch, 0.8 * inch, 1.15 * inch, 1.15 * inch, 1.2 * inch]))
-    story.extend(table_block('Event Profitability', ['Event', 'Realized Income', 'Expenses', 'Surplus', 'Outstanding'], [[f"{row['event'].name} {row['event'].year}", money(row['realized_income']), money(row['expense_recorded']), money(row['operating_surplus']), money(row['outstanding_payable'])] for row in context['event_profit_export_rows']] or [['No event rows', '', '', '', '']], col_widths=[2.7 * inch, 1.2 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch]))
-    story.extend(table_block('Monthly Trend', ['Month', 'Income', 'Expenses', 'Vendor Paid', 'Cash Position'], [[row['month'].strftime('%b %Y'), money(row['total_income']), money(row['expense_recorded']), money(row['vendor_paid']), money(row['cash_position'])] for row in context['monthly_trend_export_rows']] or [['No monthly rows', '', '', '', '']], col_widths=[1.5 * inch, 1.3 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch]))
+    story.extend(table_block('Event Profitability', ['Event', 'Realized Income', 'Recorded', 'Paid', 'Accrual', 'Cash Move'], [[f"{row['event'].name} {row['event'].year}", money(row['realized_income']), money(row['expense_recorded']), money(row['expense_paid']), money(row['operating_surplus']), money(row['cash_movement'])] for row in context['event_profit_export_rows']] or [['No event rows', '', '', '', '', '']], col_widths=[2.3 * inch, 1.0 * inch, 0.95 * inch, 0.9 * inch, 0.95 * inch, 0.95 * inch]))
+    story.extend(table_block('Monthly Trend', ['Month', 'Income', 'Recorded', 'Vendor Paid', 'Accrual'], [[row['month'].strftime('%b %Y'), money(row['total_income']), money(row['expense_recorded']), money(row['vendor_paid']), money(row['surplus'])] for row in context['monthly_trend_export_rows']] or [['No monthly rows', '', '', '', '']], col_widths=[1.4 * inch, 1.3 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch]))
     story.append(PageBreak())
     story.extend(table_block('Activity Ledger', ['Date', 'Type', 'Title', 'Context', 'Amount'], [[row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']), row['kind'], row['title'], row['context'], money(row['amount'])] for row in context['ledger_export_rows']] or [['No ledger rows', '', '', '', '']], col_widths=[0.95 * inch, 1.15 * inch, 1.5 * inch, 2.55 * inch, 0.95 * inch]))
     document.build(story)
@@ -8571,8 +8571,8 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         outstanding_payable += expense.outstanding_amount
 
     total_income = event_income + corporate_income + membership_income + sponsorship_received
-    net_cash_position = total_income - vendor_paid
     operating_surplus = total_income - expense_recorded
+    net_cash_movement = total_income - expense_paid
     income_pipeline = total_income + sponsorship_expected
 
     income_rows = [
@@ -8695,7 +8695,6 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             **row,
             'total_income': income_total,
             'surplus': income_total - row['expense_recorded'],
-            'cash_position': income_total - row['vendor_paid'],
         })
     monthly_trend_rows.sort(key=lambda row: row['month'], reverse=True)
 
@@ -8713,6 +8712,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 'sponsorship_received': Decimal('0.00'),
                 'sponsorship_expected': Decimal('0.00'),
                 'expense_recorded': Decimal('0.00'),
+                'expense_paid': Decimal('0.00'),
                 'vendor_paid': Decimal('0.00'),
                 'outstanding_payable': Decimal('0.00'),
             }
@@ -8738,6 +8738,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         row = ensure_event_row(expense.event)
         if row is not None:
             row['expense_recorded'] += expense.amount or Decimal('0.00')
+            row['expense_paid'] += expense.paid_amount or Decimal('0.00')
             row['outstanding_payable'] += expense.outstanding_amount
     for payment in vendor_payment_rows:
         row = ensure_event_row(payment.event)
@@ -8752,7 +8753,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'realized_income': realized_income,
             'pipeline_income': realized_income + row['sponsorship_expected'],
             'operating_surplus': realized_income - row['expense_recorded'],
-            'cash_position': realized_income - row['vendor_paid'],
+            'cash_movement': realized_income - row['expense_paid'],
         })
     event_profit_rows.sort(key=lambda row: row['realized_income'], reverse=True)
 
@@ -8760,14 +8761,15 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         {'label': 'Realized income', 'amount': total_income, 'tone': 'text-bsbcs-green'},
         {'label': 'Expected sponsorship pipeline', 'amount': sponsorship_expected, 'tone': 'text-bsbcs-amber'},
         {'label': 'Expenses recorded', 'amount': expense_recorded, 'tone': 'text-slate-900'},
-        {'label': 'Vendor payments sent', 'amount': vendor_paid, 'tone': 'text-rose-700'},
+        {'label': 'Recorded cash out', 'amount': expense_paid, 'tone': 'text-rose-700'},
+        {'label': 'Vendor payments sent', 'amount': vendor_paid, 'tone': 'text-bsbcs-blue'},
         {'label': 'Outstanding payable', 'amount': outstanding_payable, 'tone': 'text-bsbcs-amber'},
-        {'label': 'Operating surplus', 'amount': operating_surplus, 'tone': 'text-bsbcs-blue' if operating_surplus >= 0 else 'text-rose-700'},
-        {'label': 'Net cash position', 'amount': net_cash_position, 'tone': 'text-bsbcs-green' if net_cash_position >= 0 else 'text-rose-700'},
+        {'label': 'Accrual surplus', 'amount': operating_surplus, 'tone': 'text-bsbcs-blue' if operating_surplus >= 0 else 'text-rose-700'},
+        {'label': 'Net cash movement', 'amount': net_cash_movement, 'tone': 'text-bsbcs-green' if net_cash_movement >= 0 else 'text-rose-700'},
     ]
 
     ledger_rows = []
-    for payment in event_payments.order_by('-updated_at')[:20]:
+    for payment in event_payments.order_by('-updated_at'):
         ledger_rows.append({
             'date': payment.updated_at,
             'kind': 'Event income',
@@ -8776,7 +8778,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green',
         })
-    for payment in corporate_payments.order_by('-updated_at')[:20]:
+    for payment in corporate_payments.order_by('-updated_at'):
         ledger_rows.append({
             'date': payment.updated_at,
             'kind': 'Corporate income',
@@ -8785,7 +8787,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green',
         })
-    for payment in membership_payments.order_by('-updated_at')[:20]:
+    for payment in membership_payments.order_by('-updated_at'):
         ledger_rows.append({
             'date': payment.updated_at,
             'kind': 'Membership income',
@@ -8794,7 +8796,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green',
         })
-    for sponsorship in sponsorship_rows.order_by('-created_at')[:20]:
+    for sponsorship in sponsorship_rows.order_by('-received_on', '-created_at'):
         ledger_rows.append({
             'date': sponsorship.received_on or sponsorship.created_at.date(),
             'kind': 'Sponsorship',
@@ -8803,7 +8805,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': sponsorship.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green' if sponsorship.status == FinanceSponsorshipIncome.STATUS_RECEIVED else 'text-bsbcs-amber',
         })
-    for expense in expense_rows.order_by('-expense_date', '-created_at')[:20]:
+    for expense in expense_rows.order_by('-expense_date', '-created_at'):
         ledger_rows.append({
             'date': expense.expense_date,
             'kind': 'Expense',
@@ -8812,7 +8814,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': expense.amount or Decimal('0.00'),
             'tone': 'text-rose-700',
         })
-    for payment in vendor_payment_rows.order_by('-payment_date', '-created_at')[:20]:
+    for payment in vendor_payment_rows.order_by('-payment_date', '-created_at'):
         ledger_rows.append({
             'date': payment.payment_date,
             'kind': 'Vendor payment',
@@ -8825,6 +8827,18 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         key=lambda row: ((row['date'].date() if hasattr(row['date'], 'hour') else row['date']) or timezone.localdate()),
         reverse=True,
     )
+
+    def build_page_query(page_param):
+        params = request.GET.copy()
+        params.pop(page_param, None)
+        encoded = params.urlencode()
+        return f'{encoded}&' if encoded else ''
+
+    monthly_page_obj = Paginator(monthly_trend_rows, 10).get_page(request.GET.get('monthly_page'))
+    event_page_obj = Paginator(event_profit_rows, 10).get_page(request.GET.get('event_page'))
+    category_page_obj = Paginator(expense_category_rows, 10).get_page(request.GET.get('category_page'))
+    vendor_page_obj = Paginator(vendor_payable_rows, 10).get_page(request.GET.get('vendor_page'))
+    ledger_page_obj = Paginator(ledger_rows, 20).get_page(request.GET.get('ledger_page'))
 
     return {
         'site_settings': site_settings,
@@ -8846,23 +8860,35 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'expense_paid': expense_paid,
             'vendor_paid': vendor_paid,
             'outstanding_payable': outstanding_payable,
-            'net_cash_position': net_cash_position,
+            'net_cash_movement': net_cash_movement,
             'operating_surplus': operating_surplus,
             'income_pipeline': income_pipeline,
         },
-        'income_rows': income_rows[:5],
+        'income_rows': income_rows,
         'income_export_rows': income_rows,
-        'expense_category_rows': expense_category_rows[:12],
+        'expense_category_rows': category_page_obj.object_list,
         'expense_category_export_rows': expense_category_rows,
-        'vendor_payable_rows': vendor_payable_rows[:12],
+        'vendor_payable_rows': vendor_page_obj.object_list,
         'vendor_payable_export_rows': vendor_payable_rows,
-        'event_profit_rows': event_profit_rows[:12],
+        'event_profit_rows': event_page_obj.object_list,
         'event_profit_export_rows': event_profit_rows,
-        'monthly_trend_rows': monthly_trend_rows[:12],
+        'monthly_trend_rows': monthly_page_obj.object_list,
         'monthly_trend_export_rows': monthly_trend_rows,
         'statement_rows': statement_rows,
-        'ledger_rows': ledger_rows[:32],
+        'ledger_rows': ledger_page_obj.object_list,
         'ledger_export_rows': ledger_rows,
+        'monthly_page_obj': monthly_page_obj,
+        'event_page_obj': event_page_obj,
+        'category_page_obj': category_page_obj,
+        'vendor_page_obj': vendor_page_obj,
+        'ledger_page_obj': ledger_page_obj,
+        'page_queries': {
+            'monthly': build_page_query('monthly_page'),
+            'event': build_page_query('event_page'),
+            'category': build_page_query('category_page'),
+            'vendor': build_page_query('vendor_page'),
+            'ledger': build_page_query('ledger_page'),
+        },
         'report_meta': {
             'event_label': f'{selected_event.name} {selected_event.year}' if selected_event else 'All event-linked finance records',
             'range_label': (
@@ -8870,7 +8896,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 if date_from or date_to else
                 'All available dates'
             ),
-            'date_note': 'Payment income uses the payment record update date because the current models do not yet store a dedicated paid-at field.',
+            'date_note': 'Income uses payment record update dates. Cash movement uses recorded paid amounts on expense rows, while the monthly table shows dated vendor payouts only.',
         },
         'admin_links': {
             'dashboard': reverse('finance_dashboard'),
@@ -9605,11 +9631,11 @@ def finance_reports(request):
             },
             {
                 'name': 'Event Profitability',
-                'rows': [['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses', 'Operating Surplus', 'Vendor Paid', 'Cash Position', 'Outstanding Payable']] + [[f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['operating_surplus'], row['vendor_paid'], row['cash_position'], row['outstanding_payable']] for row in context['event_profit_export_rows']],
+                'rows': [['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses Recorded', 'Expenses Paid', 'Accrual Surplus', 'Vendor Paid', 'Cash Movement', 'Outstanding Payable']] + [[f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['expense_paid'], row['operating_surplus'], row['vendor_paid'], row['cash_movement'], row['outstanding_payable']] for row in context['event_profit_export_rows']],
             },
             {
                 'name': 'Monthly Trend',
-                'rows': [['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Operating Surplus', 'Cash Position']] + [[row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus'], row['cash_position']] for row in context['monthly_trend_export_rows']],
+                'rows': [['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Accrual Surplus']] + [[row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus']] for row in context['monthly_trend_export_rows']],
             },
             {
                 'name': 'Ledger',
@@ -9649,15 +9675,15 @@ def finance_reports(request):
             return response
 
         if export_type == 'events':
-            writer.writerow(['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses', 'Operating Surplus', 'Vendor Paid', 'Cash Position', 'Outstanding Payable'])
+            writer.writerow(['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses Recorded', 'Expenses Paid', 'Accrual Surplus', 'Vendor Paid', 'Cash Movement', 'Outstanding Payable'])
             for row in context['event_profit_export_rows']:
-                writer.writerow([f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['operating_surplus'], row['vendor_paid'], row['cash_position'], row['outstanding_payable']])
+                writer.writerow([f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['expense_paid'], row['operating_surplus'], row['vendor_paid'], row['cash_movement'], row['outstanding_payable']])
             return response
 
         if export_type == 'monthly':
-            writer.writerow(['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Operating Surplus', 'Cash Position'])
+            writer.writerow(['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Accrual Surplus'])
             for row in context['monthly_trend_export_rows']:
-                writer.writerow([row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus'], row['cash_position']])
+                writer.writerow([row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus']])
             return response
 
         if export_type == 'ledger':

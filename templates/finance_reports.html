@@ -11,6 +11,17 @@
         .finance-input, .finance-select { width: 100%; border: 1px solid #D9E4EF; border-radius: 0.75rem; background: #fff; padding: 0.65rem 0.8rem; font-size: 0.9rem; outline: none; }
         .finance-input:focus, .finance-select:focus { border-color: #1769C2; box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14); }
         .finance-label { display: block; margin-bottom: 0.3rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+        .finance-table-wrap { overflow-x: auto; }
+        .finance-table { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; }
+        .finance-table thead th { border-bottom: 1px solid #D9E4EF; padding: 0.8rem 0.9rem; text-align: left; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; background: #F8FBFF; }
+        .finance-table tbody td { border-bottom: 1px solid #E8F0F7; padding: 0.9rem; vertical-align: top; font-size: 0.92rem; color: #0F172A; }
+        .finance-table tbody tr:last-child td { border-bottom: none; }
+        .finance-table .num { text-align: right; white-space: nowrap; font-weight: 900; }
+        .finance-table .muted { display: block; margin-top: 0.2rem; font-size: 0.76rem; font-weight: 700; color: #64748b; }
+        .finance-pager a, .finance-pager span { border: 1px solid #D9E4EF; border-radius: 999px; padding: 0.5rem 0.9rem; font-size: 0.8rem; font-weight: 900; }
+        .finance-pager a { color: #1769C2; background: #fff; }
+        .finance-pager a:hover { border-color: #1769C2; background: #EEF6FF; }
+        .finance-pager .current { color: #475569; background: #F8FBFF; }
     </style>
 </head>
 <body class="min-h-screen font-sans text-ink antialiased">
@@ -97,13 +108,14 @@
             </div>
         </section>
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Realized income</div><div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.total_income }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsor pipeline</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.sponsorship_expected }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-1 text-2xl font-black text-ink">BDT {{ totals.expense_recorded }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid</div><div class="mt-1 text-2xl font-black text-rose-700">BDT {{ totals.vendor_paid }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Recorded cash out</div><div class="mt-1 text-2xl font-black text-rose-700">BDT {{ totals.expense_paid }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.vendor_paid }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.outstanding_payable }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash position</div><div class="mt-1 text-2xl font-black {% if totals.net_cash_position >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_position }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash movement</div><div class="mt-1 text-2xl font-black {% if totals.net_cash_movement >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_movement }}</div></div>
         </section>
 
         <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
@@ -113,27 +125,22 @@
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Income streams</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Where the money came from</h2>
                     </div>
-                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ income_rows|length }} sources</div>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ income_rows|length }} rows</div>
                 </div>
-                <div class="space-y-2">
-                    {% for row in income_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_170px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.label }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.meta }}</div>
-                                </div>
-                                <div class="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-line">
-                                    <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Records</div>
-                                    <div class="mt-0.5 text-base font-black text-ink">{{ row.count }}</div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Amount</div>
-                                    <div class="mt-0.5 text-lg font-black {{ row.tone }}">BDT {{ row.amount }}</div>
-                                </div>
-                            </div>
-                        </article>
-                    {% endfor %}
+                <div class="finance-table-wrap">
+                    <table class="finance-table min-w-0">
+                        <thead><tr><th>Source</th><th>Records</th><th>Notes</th><th class="num">Amount</th></tr></thead>
+                        <tbody>
+                            {% for row in income_rows %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td class="num">{{ row.count }}</td>
+                                    <td>{{ row.meta }}</td>
+                                    <td class="num {{ row.tone }}">BDT {{ row.amount }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </section>
 
@@ -141,7 +148,7 @@
                 <div class="mb-3 flex items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Statement snapshot</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Balance-style picture</h2>
+                        <h2 class="mt-1 text-xl font-black text-ink">Accrual and cash picture</h2>
                     </div>
                     <div class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 ring-1 ring-line">Reporting view</div>
                 </div>
@@ -163,52 +170,74 @@
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Monthly trend</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Month-wise finance performance</h2>
                     </div>
-                    <a href="?event={{ current_filters.event }}&date_from={{ current_filters.date_from }}&date_to={{ current_filters.date_to }}&export=monthly" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export monthly</a>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ monthly_page_obj.paginator.count }} total rows</div>
                 </div>
-                <div class="space-y-2">
-                    {% for row in monthly_trend_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[140px_150px_150px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.month|date:"M Y" }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">Income vs expense month snapshot</div>
-                                </div>
-                                <div class="text-sm font-black text-bsbcs-green">BDT {{ row.total_income }}</div>
-                                <div class="text-sm font-black text-slate-700">BDT {{ row.expense_recorded }}</div>
-                                <div class="text-right text-sm font-black {% if row.surplus >= 0 %}text-bsbcs-blue{% else %}text-rose-700{% endif %}">BDT {{ row.surplus }}</div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No monthly trend rows matched this reporting window.</div>
-                    {% endfor %}
+                <div class="finance-table-wrap">
+                    <table class="finance-table">
+                        <thead><tr><th>Month</th><th class="num">Income</th><th class="num">Recorded</th><th class="num">Vendor paid</th><th class="num">Accrual surplus</th></tr></thead>
+                        <tbody>
+                            {% for row in monthly_page_obj.object_list %}
+                                <tr>
+                                    <td>{{ row.month|date:"M Y" }}</td>
+                                    <td class="num text-bsbcs-green">BDT {{ row.total_income }}</td>
+                                    <td class="num">BDT {{ row.expense_recorded }}</td>
+                                    <td class="num text-bsbcs-blue">BDT {{ row.vendor_paid }}</td>
+                                    <td class="num {% if row.surplus >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ row.surplus }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-center text-slate-500">No monthly trend rows matched this reporting window.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% if monthly_page_obj.has_other_pages %}
+                    <div class="finance-pager mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span class="current">Page {{ monthly_page_obj.number }} of {{ monthly_page_obj.paginator.num_pages }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            {% if monthly_page_obj.has_previous %}<a href="?{{ page_queries.monthly }}monthly_page={{ monthly_page_obj.previous_page_number }}">Previous</a>{% endif %}
+                            {% if monthly_page_obj.has_next %}<a href="?{{ page_queries.monthly }}monthly_page={{ monthly_page_obj.next_page_number }}">Next</a>{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
             </section>
 
             <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                 <div class="mb-3 flex items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event profitability</div>
-                        <h2 class="mt-1 text-xl font-black text-ink">Event-wise profit and loss</h2>
+                        <h2 class="mt-1 text-xl font-black text-ink">Event-wise profit and cash view</h2>
                     </div>
-                    <a href="?event={{ current_filters.event }}&date_from={{ current_filters.date_from }}&date_to={{ current_filters.date_to }}&export=events" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Export event P&L</a>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ event_page_obj.paginator.count }} total rows</div>
                 </div>
-                <div class="space-y-2">
-                    {% for row in event_profit_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_150px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.event.name }} {{ row.event.year }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">Income: BDT {{ row.realized_income }} | Expense: BDT {{ row.expense_recorded }}</div>
-                                </div>
-                                <div class="text-sm font-black text-bsbcs-green">BDT {{ row.realized_income }}</div>
-                                <div class="text-sm font-black text-slate-700">BDT {{ row.expense_recorded }}</div>
-                                <div class="text-right text-sm font-black {% if row.operating_surplus >= 0 %}text-bsbcs-blue{% else %}text-rose-700{% endif %}">BDT {{ row.operating_surplus }}</div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No event-linked finance rows matched this reporting window.</div>
-                    {% endfor %}
+                <div class="finance-table-wrap">
+                    <table class="finance-table">
+                        <thead><tr><th>Event</th><th class="num">Income</th><th class="num">Recorded</th><th class="num">Paid</th><th class="num">Accrual</th><th class="num">Cash move</th><th class="num">Outstanding</th></tr></thead>
+                        <tbody>
+                            {% for row in event_page_obj.object_list %}
+                                <tr>
+                                    <td>{{ row.event.name }} {{ row.event.year }}</td>
+                                    <td class="num text-bsbcs-green">BDT {{ row.realized_income }}</td>
+                                    <td class="num">BDT {{ row.expense_recorded }}</td>
+                                    <td class="num text-rose-700">BDT {{ row.expense_paid }}</td>
+                                    <td class="num {% if row.operating_surplus >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ row.operating_surplus }}</td>
+                                    <td class="num {% if row.cash_movement >= 0 %}text-bsbcs-blue{% else %}text-rose-700{% endif %}">BDT {{ row.cash_movement }}</td>
+                                    <td class="num text-bsbcs-amber">BDT {{ row.outstanding_payable }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="7" class="text-center text-slate-500">No event-linked finance rows matched this reporting window.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% if event_page_obj.has_other_pages %}
+                    <div class="finance-pager mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span class="current">Page {{ event_page_obj.number }} of {{ event_page_obj.paginator.num_pages }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            {% if event_page_obj.has_previous %}<a href="?{{ page_queries.event }}event_page={{ event_page_obj.previous_page_number }}">Previous</a>{% endif %}
+                            {% if event_page_obj.has_next %}<a href="?{{ page_queries.event }}event_page={{ event_page_obj.next_page_number }}">Next</a>{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
             </section>
         </section>
 
@@ -219,25 +248,35 @@
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Expense structure</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Category-wise expense report</h2>
                     </div>
-                    <a href="{{ admin_links.expenses }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open expenses</a>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ category_page_obj.paginator.count }} total rows</div>
                 </div>
-                <div class="space-y-2">
-                    {% for row in expense_category_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_110px_150px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.category.name }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.count }} recorded expense row{{ row.count|pluralize }}</div>
-                                </div>
-                                <div class="text-sm font-black text-slate-700">{{ row.count }}</div>
-                                <div class="text-sm font-black text-ink">BDT {{ row.amount }}</div>
-                                <div class="text-right text-sm font-black text-bsbcs-amber">BDT {{ row.outstanding }}</div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No expense categories matched this report range.</div>
-                    {% endfor %}
+                <div class="finance-table-wrap">
+                    <table class="finance-table">
+                        <thead><tr><th>Category</th><th class="num">Rows</th><th class="num">Recorded</th><th class="num">Paid</th><th class="num">Outstanding</th></tr></thead>
+                        <tbody>
+                            {% for row in category_page_obj.object_list %}
+                                <tr>
+                                    <td>{{ row.category.name }}</td>
+                                    <td class="num">{{ row.count }}</td>
+                                    <td class="num">BDT {{ row.amount }}</td>
+                                    <td class="num text-bsbcs-blue">BDT {{ row.paid }}</td>
+                                    <td class="num text-bsbcs-amber">BDT {{ row.outstanding }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-center text-slate-500">No expense categories matched this report range.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% if category_page_obj.has_other_pages %}
+                    <div class="finance-pager mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span class="current">Page {{ category_page_obj.number }} of {{ category_page_obj.paginator.num_pages }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            {% if category_page_obj.has_previous %}<a href="?{{ page_queries.category }}category_page={{ category_page_obj.previous_page_number }}">Previous</a>{% endif %}
+                            {% if category_page_obj.has_next %}<a href="?{{ page_queries.category }}category_page={{ category_page_obj.next_page_number }}">Next</a>{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
             </section>
 
             <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
@@ -246,25 +285,38 @@
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Vendor liability</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Payable report by vendor</h2>
                     </div>
-                    <a href="{{ admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open payments</a>
+                    <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ vendor_page_obj.paginator.count }} total rows</div>
                 </div>
-                <div class="space-y-2">
-                    {% for row in vendor_payable_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_150px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.vendor.name }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.expense_count }} expense row{{ row.expense_count|pluralize }}{% if row.vendor.contact_person %} | {{ row.vendor.contact_person }}{% endif %}</div>
-                                </div>
-                                <div class="text-sm font-black text-slate-700">BDT {{ row.expense_total }}</div>
-                                <div class="text-sm font-black text-bsbcs-green">BDT {{ row.paid_total }}</div>
-                                <div class="text-right text-sm font-black {% if row.outstanding_total > 0 %}text-bsbcs-amber{% else %}text-bsbcs-green{% endif %}">BDT {{ row.outstanding_total }}</div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No vendor payable rows matched this report range.</div>
-                    {% endfor %}
+                <div class="finance-table-wrap">
+                    <table class="finance-table">
+                        <thead><tr><th>Vendor</th><th class="num">Expense rows</th><th class="num">Recorded</th><th class="num">Paid out</th><th class="num">Outstanding</th></tr></thead>
+                        <tbody>
+                            {% for row in vendor_page_obj.object_list %}
+                                <tr>
+                                    <td>
+                                        {{ row.vendor.name }}
+                                        {% if row.vendor.contact_person %}<span class="muted">{{ row.vendor.contact_person }}</span>{% endif %}
+                                    </td>
+                                    <td class="num">{{ row.expense_count }}</td>
+                                    <td class="num">BDT {{ row.expense_total }}</td>
+                                    <td class="num text-bsbcs-blue">BDT {{ row.paid_total }}</td>
+                                    <td class="num {% if row.outstanding_total > 0 %}text-bsbcs-amber{% else %}text-bsbcs-green{% endif %}">BDT {{ row.outstanding_total }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-center text-slate-500">No vendor payable rows matched this report range.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% if vendor_page_obj.has_other_pages %}
+                    <div class="finance-pager mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <span class="current">Page {{ vendor_page_obj.number }} of {{ vendor_page_obj.paginator.num_pages }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            {% if vendor_page_obj.has_previous %}<a href="?{{ page_queries.vendor }}vendor_page={{ vendor_page_obj.previous_page_number }}">Previous</a>{% endif %}
+                            {% if vendor_page_obj.has_next %}<a href="?{{ page_queries.vendor }}vendor_page={{ vendor_page_obj.next_page_number }}">Next</a>{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
             </section>
         </section>
 
@@ -273,36 +325,37 @@
                 <div>
                     <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Activity ledger</div>
                     <h2 class="mt-1 text-xl font-black text-ink">Combined finance activity</h2>
-                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">This timeline mixes money coming in, expenses being recorded, and vendor payouts being made.</p>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Newest rows first across income, expenses, sponsorships, and vendor payments.</p>
                 </div>
-                <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ ledger_rows|length }} ledger rows</div>
+                <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ ledger_page_obj.paginator.count }} total rows</div>
             </div>
-            <div class="space-y-2">
-                {% for row in ledger_rows %}
-                    <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                        <div class="grid gap-3 lg:grid-cols-[150px_170px_minmax(0,1fr)_170px] lg:items-center">
-                            <div class="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-line">
-                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Date</div>
-                                <div class="mt-0.5 text-sm font-black text-ink">{{ row.date|date:"d M Y" }}</div>
-                            </div>
-                            <div>
-                                <div class="text-xs font-black uppercase tracking-wide text-slate-500">Type</div>
-                                <div class="mt-1 text-sm font-black text-ink">{{ row.kind }}</div>
-                            </div>
-                            <div class="min-w-0">
-                                <div class="truncate text-sm font-black text-ink">{{ row.title }}</div>
-                                <div class="mt-1 truncate text-xs font-semibold text-slate-500">{{ row.context }}</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Amount</div>
-                                <div class="mt-0.5 text-lg font-black {{ row.tone }}">BDT {{ row.amount }}</div>
-                            </div>
-                        </div>
-                    </article>
-                {% empty %}
-                    <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No finance activity matched this reporting window.</div>
-                {% endfor %}
+            <div class="finance-table-wrap">
+                <table class="finance-table">
+                    <thead><tr><th>Date</th><th>Type</th><th>Title</th><th>Context</th><th class="num">Amount</th></tr></thead>
+                    <tbody>
+                        {% for row in ledger_page_obj.object_list %}
+                            <tr>
+                                <td>{{ row.date|date:"d M Y" }}</td>
+                                <td>{{ row.kind }}</td>
+                                <td>{{ row.title }}</td>
+                                <td>{{ row.context }}</td>
+                                <td class="num {{ row.tone }}">BDT {{ row.amount }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="5" class="text-center text-slate-500">No finance activity matched this reporting window.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
+            {% if ledger_page_obj.has_other_pages %}
+                <div class="finance-pager mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <span class="current">Page {{ ledger_page_obj.number }} of {{ ledger_page_obj.paginator.num_pages }}</span>
+                    <div class="flex flex-wrap gap-2">
+                        {% if ledger_page_obj.has_previous %}<a href="?{{ page_queries.ledger }}ledger_page={{ ledger_page_obj.previous_page_number }}">Previous</a>{% endif %}
+                        {% if ledger_page_obj.has_next %}<a href="?{{ page_queries.ledger }}ledger_page={{ ledger_page_obj.next_page_number }}">Next</a>{% endif %}
+                    </div>
+                </div>
+            {% endif %}
         </section>
     </main>
 </div>
