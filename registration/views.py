@@ -8961,12 +8961,18 @@ def finance_dashboard(request):
     events = Event.objects.order_by('-year', '-start_date', 'name')
     event_filter = ((request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')) or '').strip()
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+    valid_tabs = {'expense', 'payment', 'income'}
+    active_tab = ((request.POST.get('tab') if request.method == 'POST' else request.GET.get('tab', 'expense')) or 'expense').strip().lower()
+    if active_tab not in valid_tabs:
+        active_tab = 'expense'
 
     query_params = {}
     if event_filter:
         query_params['event'] = event_filter
     if search_query:
         query_params['q'] = search_query
+    if active_tab != 'expense':
+        query_params['tab'] = active_tab
     redirect_url = reverse('finance_dashboard')
     if query_params:
         redirect_url = f"{redirect_url}?{urlencode(query_params)}"
@@ -9313,6 +9319,7 @@ def finance_dashboard(request):
             'event': event_filter,
             'q': search_query,
         },
+        'active_finance_tab': active_tab,
         'totals': {
             'event_income': event_income,
             'corporate_income': corporate_income,

@@ -13,6 +13,10 @@
         .finance-textarea { min-height: 96px; resize: vertical; }
         .finance-input:focus, .finance-select:focus, .finance-textarea:focus, .finance-file:focus { border-color: #1769C2; box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14); }
         .finance-label { display: block; margin-bottom: 0.3rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+        .finance-desk-tab { border: 1px solid #D9E4EF; border-radius: 999px; background: #F8FBFF; color: #1769C2; padding: 0.6rem 1rem; font-size: 0.86rem; font-weight: 900; transition: all .18s ease; }
+        .finance-desk-tab:hover { border-color: #1769C2; background: #EEF6FF; }
+        .finance-desk-tab.is-active { background: #1769C2; border-color: #1769C2; color: #fff; box-shadow: 0 8px 24px rgba(23, 105, 194, 0.18); }
+        .finance-desk-panel[hidden] { display: none !important; }
     </style>
 </head>
 <body class="min-h-screen font-sans text-ink antialiased">
@@ -48,6 +52,7 @@
                 </div>
             </div>
             <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <input type="hidden" name="tab" value="{{ active_finance_tab }}" data-finance-filter-tab>
                 <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                     <div>
                         <label class="finance-label" for="event">Event</label>
@@ -64,7 +69,7 @@
                 </div>
                 <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
                     <input type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, expense title, sponsorship company, bill number, or reference">
-                    <a href="{% url 'finance_dashboard' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                    <a href="{% url 'finance_dashboard' %}{% if active_finance_tab != 'expense' %}?tab={{ active_finance_tab }}{% endif %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
                 </div>
             </form>
         </div>
@@ -91,72 +96,93 @@
 
         <section class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
             <div class="grid gap-3">
-                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Income intake</div>
-                            <h2 class="mt-1 text-2xl font-black text-slate-900">Add sponsorship income</h2>
-                        </div>
-                        <a href="{{ admin_links.sponsorships }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet" data-finance-desk-root data-active-tab="{{ active_finance_tab }}">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Finance intake desk</div>
+                        <h2 class="mt-1 text-2xl font-black text-slate-900">Add income, bills, and payouts from one shared desk</h2>
+                        <p class="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">Keep the whole posting workflow in one card and switch between expense entry, vendor payout, and sponsorship income without leaving the dashboard.</p>
                     </div>
-                    <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
-                        {% csrf_token %}<input type="hidden" name="finance_action" value="add_sponsorship"><input type="hidden" name="q" value="{{ current_filters.q }}">
-                        <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">No event link</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Matched sponsor</label><select name="sponsor_id" class="finance-select"><option value="">Manual company</option>{% for sponsor in sponsors %}<option value="{{ sponsor.id }}">{{ sponsor.name }}{% if sponsor.event %} | {{ sponsor.event.name }} {{ sponsor.event.year }}{% endif %}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Company name</label><input name="sponsorship_company_name" class="finance-input" required></div>
-                        <div><label class="finance-label">Title</label><input name="sponsorship_title" class="finance-input"></div>
-                        <div><label class="finance-label">Amount</label><input name="sponsorship_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
-                        <div><label class="finance-label">Status</label><select name="sponsorship_status" class="finance-select">{% for value, label in finance_status_choices.sponsorship %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Received date</label><input name="sponsorship_received_on" type="date" class="finance-input"></div>
-                        <div><label class="finance-label">Income reference</label><input name="sponsorship_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Agreement or proof file</label><input name="sponsorship_agreement_file" type="file" class="finance-file"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="sponsorship_note" class="finance-textarea"></textarea></div>
-                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save sponsorship income</button></div>
-                    </form>
-                </section>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button type="button" class="finance-desk-tab {% if active_finance_tab == 'expense' %}is-active{% endif %}" data-finance-desk-tab="expense">Expense desk</button>
+                        <button type="button" class="finance-desk-tab {% if active_finance_tab == 'payment' %}is-active{% endif %}" data-finance-desk-tab="payment">Vendor payout</button>
+                        <button type="button" class="finance-desk-tab {% if active_finance_tab == 'income' %}is-active{% endif %}" data-finance-desk-tab="income">Income intake</button>
+                    </div>
 
-                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div><div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Expense desk</div><h2 class="mt-1 text-2xl font-black text-slate-900">Record an expense with bill upload</h2></div>
-                        <a href="{{ admin_links.expenses }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
-                    </div>
-                    <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
-                        {% csrf_token %}<input type="hidden" name="finance_action" value="add_expense"><input type="hidden" name="q" value="{{ current_filters.q }}">
-                        <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General finance expense</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Category</label><select name="expense_category" class="finance-select" required><option value="">Select category</option>{% for category in finance_categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Vendor</label><select name="expense_vendor" class="finance-select"><option value="">No vendor selected</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Expense title</label><input name="expense_title" class="finance-input" required></div>
-                        <div><label class="finance-label">Bill number</label><input name="expense_bill_number" class="finance-input" placeholder="Auto if left empty"></div>
-                        <div><label class="finance-label">Amount</label><input name="expense_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
-                        <div><label class="finance-label">Already paid</label><input name="expense_paid_amount" type="number" step="0.01" min="0" value="0" class="finance-input"></div>
-                        <div><label class="finance-label">Status</label><select name="expense_status" class="finance-select">{% for value, label in finance_status_choices.expense %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Expense date</label><input name="expense_date" type="date" class="finance-input"></div>
-                        <div><label class="finance-label">Due date</label><input name="expense_due_date" type="date" class="finance-input"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Bill file</label><input name="expense_bill_file" type="file" class="finance-file"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Description</label><textarea name="expense_description" class="finance-textarea"></textarea></div>
-                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save expense</button></div>
-                    </form>
-                </section>
+                    <div class="mt-4">
+                        <section class="finance-desk-panel" data-finance-desk-panel="expense" {% if active_finance_tab != 'expense' %}hidden{% endif %}>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Expense desk</div>
+                                    <h3 class="mt-1 text-2xl font-black text-slate-900">Record an expense with bill upload</h3>
+                                </div>
+                                <a href="{{ admin_links.expenses }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                            </div>
+                            <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
+                                {% csrf_token %}<input type="hidden" name="finance_action" value="add_expense"><input type="hidden" name="tab" value="expense"><input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General finance expense</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Category</label><select name="expense_category" class="finance-select" required><option value="">Select category</option>{% for category in finance_categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Vendor</label><select name="expense_vendor" class="finance-select"><option value="">No vendor selected</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Expense title</label><input name="expense_title" class="finance-input" required></div>
+                                <div><label class="finance-label">Bill number</label><input name="expense_bill_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                <div><label class="finance-label">Amount</label><input name="expense_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
+                                <div><label class="finance-label">Already paid</label><input name="expense_paid_amount" type="number" step="0.01" min="0" value="0" class="finance-input"></div>
+                                <div><label class="finance-label">Status</label><select name="expense_status" class="finance-select">{% for value, label in finance_status_choices.expense %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Expense date</label><input name="expense_date" type="date" class="finance-input"></div>
+                                <div><label class="finance-label">Due date</label><input name="expense_due_date" type="date" class="finance-input"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Bill file</label><input name="expense_bill_file" type="file" class="finance-file"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Description</label><textarea name="expense_description" class="finance-textarea"></textarea></div>
+                                <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save expense</button></div>
+                            </form>
+                        </section>
 
-                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div><div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Vendor payout</div><h2 class="mt-1 text-2xl font-black text-slate-900">Record a vendor payment</h2></div>
-                        <a href="{{ admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                        <section class="finance-desk-panel" data-finance-desk-panel="payment" {% if active_finance_tab != 'payment' %}hidden{% endif %}>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Vendor payout</div>
+                                    <h3 class="mt-1 text-2xl font-black text-slate-900">Record a vendor payment</h3>
+                                </div>
+                                <a href="{{ admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                            </div>
+                            <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
+                                {% csrf_token %}<input type="hidden" name="finance_action" value="add_vendor_payment"><input type="hidden" name="tab" value="payment"><input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General vendor payment</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Vendor</label><select name="payment_vendor" class="finance-select" required><option value="">Select vendor</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Linked expense</label><select name="payment_expense" class="finance-select"><option value="">No linked expense</option>{% for expense in recent_expenses %}<option value="{{ expense.id }}">{{ expense.title }}{% if expense.bill_number %} | {{ expense.bill_number }}{% endif %} | BDT {{ expense.outstanding_amount }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Amount</label><input name="payment_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
+                                <div><label class="finance-label">Payment date</label><input name="payment_date" type="date" class="finance-input"></div>
+                                <div><label class="finance-label">Method</label><select name="payment_method" class="finance-select">{% for value, label in finance_status_choices.payment_methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Status</label><select name="payment_status" class="finance-select">{% for value, label in finance_status_choices.payment %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Voucher number / reference</label><input name="payment_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Payment proof file</label><input name="payment_proof_file" type="file" class="finance-file"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="payment_note" class="finance-textarea"></textarea></div>
+                                <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor payment</button></div>
+                            </form>
+                        </section>
+
+                        <section class="finance-desk-panel" data-finance-desk-panel="income" {% if active_finance_tab != 'income' %}hidden{% endif %}>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Income intake</div>
+                                    <h3 class="mt-1 text-2xl font-black text-slate-900">Add sponsorship income</h3>
+                                </div>
+                                <a href="{{ admin_links.sponsorships }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                            </div>
+                            <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
+                                {% csrf_token %}<input type="hidden" name="finance_action" value="add_sponsorship"><input type="hidden" name="tab" value="income"><input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">No event link</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Matched sponsor</label><select name="sponsor_id" class="finance-select"><option value="">Manual company</option>{% for sponsor in sponsors %}<option value="{{ sponsor.id }}">{{ sponsor.name }}{% if sponsor.event %} | {{ sponsor.event.name }} {{ sponsor.event.year }}{% endif %}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Company name</label><input name="sponsorship_company_name" class="finance-input" required></div>
+                                <div><label class="finance-label">Title</label><input name="sponsorship_title" class="finance-input"></div>
+                                <div><label class="finance-label">Amount</label><input name="sponsorship_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
+                                <div><label class="finance-label">Status</label><select name="sponsorship_status" class="finance-select">{% for value, label in finance_status_choices.sponsorship %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Received date</label><input name="sponsorship_received_on" type="date" class="finance-input"></div>
+                                <div><label class="finance-label">Income reference</label><input name="sponsorship_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Agreement or proof file</label><input name="sponsorship_agreement_file" type="file" class="finance-file"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="sponsorship_note" class="finance-textarea"></textarea></div>
+                                <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save sponsorship income</button></div>
+                            </form>
+                        </section>
                     </div>
-                    <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
-                        {% csrf_token %}<input type="hidden" name="finance_action" value="add_vendor_payment"><input type="hidden" name="q" value="{{ current_filters.q }}">
-                        <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General vendor payment</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Vendor</label><select name="payment_vendor" class="finance-select" required><option value="">Select vendor</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Linked expense</label><select name="payment_expense" class="finance-select"><option value="">No linked expense</option>{% for expense in recent_expenses %}<option value="{{ expense.id }}">{{ expense.title }}{% if expense.bill_number %} | {{ expense.bill_number }}{% endif %} | BDT {{ expense.outstanding_amount }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Amount</label><input name="payment_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
-                        <div><label class="finance-label">Payment date</label><input name="payment_date" type="date" class="finance-input"></div>
-                        <div><label class="finance-label">Method</label><select name="payment_method" class="finance-select">{% for value, label in finance_status_choices.payment_methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Status</label><select name="payment_status" class="finance-select">{% for value, label in finance_status_choices.payment %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Voucher number / reference</label><input name="payment_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Payment proof file</label><input name="payment_proof_file" type="file" class="finance-file"></div>
-                        <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="payment_note" class="finance-textarea"></textarea></div>
-                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor payment</button></div>
-                    </form>
                 </section>
             </div>
             <div class="grid gap-3">
@@ -181,8 +207,8 @@
                                             </div>
                                             <div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div>
                                             <div class="grid gap-2 sm:grid-cols-2">
-                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="approve_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Approve</button></form>
-                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
+                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="approve_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Approve</button></form>
+                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
                                             </div>
                                         </div>
                                     </article>
@@ -224,8 +250,8 @@
                                             </div>
                                             <div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div>
                                             <div class="grid gap-2 sm:grid-cols-2">
-                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="mark_payment_paid"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Mark paid</button></form>
-                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_vendor_payment"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
+                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="mark_payment_paid"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Mark paid</button></form>
+                                                <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_vendor_payment"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
                                             </div>
                                         </div>
                                     </article>
@@ -270,6 +296,36 @@
         </section>
     </main>
 </div>
+<script>
+    (function () {
+        document.querySelectorAll('[data-finance-desk-root]').forEach(function (root) {
+            var buttons = Array.prototype.slice.call(root.querySelectorAll('[data-finance-desk-tab]'));
+            var panels = Array.prototype.slice.call(root.querySelectorAll('[data-finance-desk-panel]'));
+            var filterInput = document.querySelector('[data-finance-filter-tab]');
+
+            function setActive(tab) {
+                buttons.forEach(function (button) {
+                    button.classList.toggle('is-active', button.getAttribute('data-finance-desk-tab') === tab);
+                });
+                panels.forEach(function (panel) {
+                    panel.hidden = panel.getAttribute('data-finance-desk-panel') !== tab;
+                });
+                root.setAttribute('data-active-tab', tab);
+                if (filterInput) {
+                    filterInput.value = tab;
+                }
+            }
+
+            buttons.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setActive(button.getAttribute('data-finance-desk-tab'));
+                });
+            });
+
+            setActive(root.getAttribute('data-active-tab') || 'expense');
+        });
+    }());
+</script>
 </body>
 </html>
 
