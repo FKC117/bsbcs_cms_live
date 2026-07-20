@@ -1,0 +1,9 @@
+{% with current_url=request.resolver_match.url_name %}
+<nav class="flex max-w-full flex-wrap items-center justify-end gap-2" aria-label="Finance workspace navigation">
+    <a href="{% url 'finance_dashboard' %}" class="rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition {% if current_url == 'finance_dashboard' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Finance desk</a>
+    <a href="{% url 'finance_reports' %}" class="rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition {% if current_url == 'finance_reports' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Reports</a>
+    <a href="{% url 'finance_registers' %}" class="rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition {% if current_url == 'finance_registers' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Registers</a>
+    <a href="{% url 'finance_setup' %}" class="rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition {% if current_url == 'finance_setup' %}border-white bg-white text-bsbcs-navy{% else %}border-white/25 text-white/90 hover:bg-white/10{% endif %}">Setup</a>
+    <a href="{% url 'admin:index' %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition border-white/25 text-white/90 hover:bg-white/10">Finance admin</a>
+</nav>
+{% endwith %}

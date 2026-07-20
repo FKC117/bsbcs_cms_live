@@ -1,4 +1,4 @@
-from django.conf import settings
+﻿from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include, reverse_lazy
@@ -72,6 +72,10 @@ urlpatterns = [
     path('dashboard/participant-center/lookup/', dashboard_participant_lookup, name='dashboard_participant_lookup'),
     path('dashboard/membership-center/', dashboard_membership_center, name='dashboard_membership_center'),
     path('dashboard/payment-center/', dashboard_payment_center, name='dashboard_payment_center'),
+    path('finance/dashboard/', views.finance_dashboard, name='finance_dashboard'),
+    path('finance/reports/', views.finance_reports, name='finance_reports'),
+    path('finance/registers/', views.finance_registers, name='finance_registers'),
+    path('finance/setup/', views.finance_setup, name='finance_setup'),
     path('dashboard/corporate-center/', dashboard_corporate_center, name='dashboard_corporate_center'),
     path('dashboard/registration-kit-center/', dashboard_registration_kit_center, name='dashboard_registration_kit_center'),
     path('registration-checkin/<uuid:token>/', registration_qr_checkin, name='registration_qr_checkin'),
@@ -128,4 +132,5 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 

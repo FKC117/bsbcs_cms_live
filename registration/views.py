@@ -1,4 +1,4 @@
-﻿# pyrefly: ignore [missing-import]
+# pyrefly: ignore [missing-import]
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from .dashboard_permissions import (
@@ -55,6 +55,8 @@ from datetime import datetime, timedelta
 from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 from .program_emails import (
     build_program_assignment_summary,
     count_program_assignment_talks,
@@ -734,8 +736,8 @@ def _build_user_presentation_assignments(user, user_profile, abstract_submission
                 'title': item.display_title,
                 'role': 'Program talk / activity',
                 'time_label': (
-                    f"{session.program_day.name if session.program_day else 'Day'} Â· "
-                    f"{session.hall_room.name if session.hall_room else 'Room'} Â· "
+                    f"{session.program_day.name if session.program_day else 'Day'} · "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
                     f"{item.start_time.strftime('%I:%M %p').lstrip('0') if item.start_time else 'Start'} - "
                     f"{item.end_time.strftime('%I:%M %p').lstrip('0') if item.end_time else 'End'}"
                 ),
@@ -763,8 +765,8 @@ def _build_user_presentation_assignments(user, user_profile, abstract_submission
                 'title': session.title,
                 'role': 'Session faculty',
                 'time_label': (
-                    f"{session.program_day.name if session.program_day else 'Day'} Â· "
-                    f"{session.hall_room.name if session.hall_room else 'Room'} Â· "
+                    f"{session.program_day.name if session.program_day else 'Day'} · "
+                    f"{session.hall_room.name if session.hall_room else 'Room'} · "
                     f"{session.start_time.strftime('%I:%M %p').lstrip('0') if session.start_time else 'Start'} - "
                     f"{session.end_time.strftime('%I:%M %p').lstrip('0') if session.end_time else 'End'}"
                 ),
@@ -4812,6 +4814,8 @@ from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import render
 from django.db import transaction
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
 from django.db.models import Count, Sum, Q
 from django.urls import reverse
 from registration.models import (
@@ -8369,6 +8373,1258 @@ def dashboard_payment_center(request):
     }
     return render(request, 'dashboard_payment_center.html', context)
 
+
+
+
+
+def _finance_parse_date_input(value, label):
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        raise ValueError(f'Enter a valid date for {label}.')
+
+
+def _finance_apply_range(queryset, field_name, date_from=None, date_to=None):
+    filters = {}
+    if date_from:
+        filters[f'{field_name}__gte'] = date_from
+    if date_to:
+        filters[f'{field_name}__lte'] = date_to
+    return queryset.filter(**filters) if filters else queryset
+
+
+def _finance_decimal_text(value):
+    try:
+        return f'{Decimal(value or 0):.2f}'
+    except (InvalidOperation, TypeError, ValueError):
+        return '0.00'
+
+
+def _finance_excel_response(filename, sheets):
+    from xml.sax.saxutils import escape as xml_escape
+
+    def normalize_sheet_name(name, index):
+        cleaned = re.sub(r'[:\\/*?\[\]]', ' ', str(name or '').strip()).strip()
+        return (cleaned or f'Sheet {index}')[:31]
+
+    def cell_xml(value):
+        if value is None:
+            return '<Cell><Data ss:Type="String"></Data></Cell>'
+        if isinstance(value, bool):
+            return f'<Cell><Data ss:Type="String">{"Yes" if value else "No"}</Data></Cell>'
+        if isinstance(value, (int, float, Decimal)):
+            return f'<Cell ss:StyleID="number"><Data ss:Type="Number">{_finance_decimal_text(value)}</Data></Cell>'
+        if hasattr(value, 'strftime') and not isinstance(value, str):
+            text = xml_escape(value.strftime('%Y-%m-%d %H:%M:%S') if hasattr(value, 'hour') else value.strftime('%Y-%m-%d'))
+            return f'<Cell><Data ss:Type="String">{text}</Data></Cell>'
+        text = xml_escape(str(value))
+        return f'<Cell><Data ss:Type="String">{text}</Data></Cell>'
+
+    workbook_parts = [
+        '<?xml version="1.0"?>',
+        '<?mso-application progid="Excel.Sheet"?>',
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+        ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+        ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
+        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+        '<Styles>',
+        '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Borders/>'
+        '<Font ss:FontName="Calibri" ss:Size="11"/><Interior/><NumberFormat/><Protection/></Style>',
+        '<Style ss:ID="header"><Font ss:Bold="1"/><Interior ss:Color="#DCEBFF" ss:Pattern="Solid"/></Style>',
+        '<Style ss:ID="number"><NumberFormat ss:Format="0.00"/></Style>',
+        '</Styles>',
+    ]
+    for index, sheet in enumerate(sheets, start=1):
+        name = normalize_sheet_name(sheet.get('name'), index)
+        workbook_parts.append(f'<Worksheet ss:Name="{xml_escape(name)}"><Table>')
+        for row_index, row in enumerate(sheet.get('rows', [])):
+            style_id = ' ss:StyleID="header"' if row_index == 0 else ''
+            workbook_parts.append(f'<Row{style_id}>')
+            for value in row:
+                workbook_parts.append(cell_xml(value))
+            workbook_parts.append('</Row>')
+        workbook_parts.append('</Table></Worksheet>')
+    workbook_parts.append('</Workbook>')
+
+    response = HttpResponse(''.join(workbook_parts), content_type='application/vnd.ms-excel')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _finance_statement_pdf_response(context):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    def money(value):
+        return f'BDT {_finance_decimal_text(value)}'
+
+    def table_block(title, headers, rows, col_widths=None):
+        elements = [Paragraph(title, section_style), Spacer(1, 0.12 * inch)]
+        table_rows = [headers] + rows
+        table = Table(table_rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DCEBFF')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#102A43')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#D4E1EF')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FBFF')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.extend([table, Spacer(1, 0.22 * inch)])
+        return elements
+
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=26, leftMargin=26, topMargin=30, bottomMargin=24)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('FinanceTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=20, leading=24, textColor=colors.HexColor('#0F2B46'), spaceAfter=8)
+    meta_style = ParagraphStyle('FinanceMeta', parent=styles['BodyText'], fontName='Helvetica', fontSize=9, leading=12, textColor=colors.HexColor('#486581'), spaceAfter=6)
+    section_style = ParagraphStyle('FinanceSection', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=15, textColor=colors.HexColor('#1769C2'), spaceAfter=2)
+
+    story = [
+        Paragraph('Finance Statement', title_style),
+        Paragraph(f"{context['report_meta']['event_label']} | {context['report_meta']['range_label']}", meta_style),
+        Paragraph(context['report_meta']['date_note'], meta_style),
+        Spacer(1, 0.12 * inch),
+    ]
+    story.extend(table_block('Statement Snapshot', ['Metric', 'Amount'], [[row['label'], money(row['amount'])] for row in context['statement_rows']], col_widths=[4.7 * inch, 2.0 * inch]))
+    story.extend(table_block('Income Streams', ['Source', 'Records', 'Amount', 'Notes'], [[row['label'], row['count'], money(row['amount']), row['meta']] for row in context['income_export_rows']], col_widths=[2.0 * inch, 0.8 * inch, 1.3 * inch, 2.6 * inch]))
+    story.extend(table_block('Expense Categories', ['Category', 'Rows', 'Recorded', 'Paid', 'Outstanding'], [[row['category'].name, row['count'], money(row['amount']), money(row['paid']), money(row['outstanding'])] for row in context['expense_category_export_rows']] or [['No category rows', '', '', '', '']], col_widths=[2.3 * inch, 0.7 * inch, 1.2 * inch, 1.1 * inch, 1.2 * inch]))
+    story.append(PageBreak())
+    story.extend(table_block('Vendor Payables', ['Vendor', 'Expense Rows', 'Recorded', 'Paid Out', 'Outstanding'], [[row['vendor'].name, row['expense_count'], money(row['expense_total']), money(row['paid_total']), money(row['outstanding_total'])] for row in context['vendor_payable_export_rows']] or [['No vendor rows', '', '', '', '']], col_widths=[2.3 * inch, 0.8 * inch, 1.15 * inch, 1.15 * inch, 1.2 * inch]))
+    story.extend(table_block('Event Profitability', ['Event', 'Realized Income', 'Expenses', 'Surplus', 'Outstanding'], [[f"{row['event'].name} {row['event'].year}", money(row['realized_income']), money(row['expense_recorded']), money(row['operating_surplus']), money(row['outstanding_payable'])] for row in context['event_profit_export_rows']] or [['No event rows', '', '', '', '']], col_widths=[2.7 * inch, 1.2 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch]))
+    story.extend(table_block('Monthly Trend', ['Month', 'Income', 'Expenses', 'Vendor Paid', 'Cash Position'], [[row['month'].strftime('%b %Y'), money(row['total_income']), money(row['expense_recorded']), money(row['vendor_paid']), money(row['cash_position'])] for row in context['monthly_trend_export_rows']] or [['No monthly rows', '', '', '', '']], col_widths=[1.5 * inch, 1.3 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch]))
+    story.append(PageBreak())
+    story.extend(table_block('Activity Ledger', ['Date', 'Type', 'Title', 'Context', 'Amount'], [[row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']), row['kind'], row['title'], row['context'], money(row['amount'])] for row in context['ledger_export_rows']] or [['No ledger rows', '', '', '', '']], col_widths=[0.95 * inch, 1.15 * inch, 1.5 * inch, 2.55 * inch, 0.95 * inch]))
+    document.build(story)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="finance_statement_{timezone.localdate().isoformat()}.pdf"'
+    return response
+
+
+def _finance_build_report_context(request, event_filter='', date_from=None, date_to=None):
+    from website.models import MembershipPayment, SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    selected_event = events.filter(pk=event_filter).first() if event_filter else None
+
+    event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
+    corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
+    membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').filter(status='completed')
+    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor').all()
+    expense_rows = FinanceExpense.objects.select_related('event', 'vendor', 'category').exclude(status=FinanceExpense.STATUS_CANCELLED)
+    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense').filter(status=FinanceVendorPayment.STATUS_PAID)
+    vendor_rows = FinanceVendor.objects.filter(is_active=True).order_by('name')
+
+    if event_filter:
+        event_payments = event_payments.filter(event_id=event_filter)
+        corporate_payments = corporate_payments.filter(event_id=event_filter)
+        sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
+        expense_rows = expense_rows.filter(event_id=event_filter)
+        vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+
+    event_payments = _finance_apply_range(event_payments, 'updated_at__date', date_from, date_to)
+    corporate_payments = _finance_apply_range(corporate_payments, 'updated_at__date', date_from, date_to)
+    membership_payments = _finance_apply_range(membership_payments, 'updated_at__date', date_from, date_to)
+    expense_rows = _finance_apply_range(expense_rows, 'expense_date', date_from, date_to)
+    vendor_payment_rows = _finance_apply_range(vendor_payment_rows, 'payment_date', date_from, date_to)
+
+    if date_from or date_to:
+        sponsorship_rows = sponsorship_rows.filter(
+            (
+                Q(received_on__isnull=False)
+                & (Q(received_on__gte=date_from) if date_from else Q())
+                & (Q(received_on__lte=date_to) if date_to else Q())
+            )
+            |
+            (
+                Q(received_on__isnull=True)
+                & (Q(created_at__date__gte=date_from) if date_from else Q())
+                & (Q(created_at__date__lte=date_to) if date_to else Q())
+            )
+        )
+
+    event_income = event_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    corporate_income = corporate_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    membership_income = membership_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    sponsorship_received = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    sponsorship_expected = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_EXPECTED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    expense_recorded = expense_rows.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    expense_paid = expense_rows.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+    vendor_paid = vendor_payment_rows.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    outstanding_payable = Decimal('0.00')
+    for expense in expense_rows:
+        outstanding_payable += expense.outstanding_amount
+
+    total_income = event_income + corporate_income + membership_income + sponsorship_received
+    net_cash_position = total_income - vendor_paid
+    operating_surplus = total_income - expense_recorded
+    income_pipeline = total_income + sponsorship_expected
+
+    income_rows = [
+        {
+            'label': 'Event registrations',
+            'count': event_payments.count(),
+            'amount': event_income,
+            'tone': 'text-bsbcs-blue',
+            'meta': 'Paid and completed participant registrations',
+        },
+        {
+            'label': 'Corporate registrations',
+            'count': corporate_payments.count(),
+            'amount': corporate_income,
+            'tone': 'text-violet-700',
+            'meta': 'Company-sponsored attendee registrations',
+        },
+        {
+            'label': 'Membership fees',
+            'count': membership_payments.count(),
+            'amount': membership_income,
+            'tone': 'text-bsbcs-teal',
+            'meta': 'Completed membership payments',
+        },
+        {
+            'label': 'Sponsorship received',
+            'count': sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED).count(),
+            'amount': sponsorship_received,
+            'tone': 'text-bsbcs-green',
+            'meta': 'Confirmed sponsor money already received',
+        },
+        {
+            'label': 'Sponsorship expected',
+            'count': sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_EXPECTED).count(),
+            'amount': sponsorship_expected,
+            'tone': 'text-bsbcs-amber',
+            'meta': 'Pipeline income not yet received',
+        },
+    ]
+
+    expense_category_rows = []
+    for category in FinanceExpenseCategory.objects.filter(is_active=True).order_by('name'):
+        category_expenses = expense_rows.filter(category=category)
+        if not category_expenses.exists():
+            continue
+        total_amount = category_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        total_paid = category_expenses.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+        category_outstanding = Decimal('0.00')
+        for expense in category_expenses:
+            category_outstanding += expense.outstanding_amount
+        expense_category_rows.append({
+            'category': category,
+            'count': category_expenses.count(),
+            'amount': total_amount,
+            'paid': total_paid,
+            'outstanding': category_outstanding,
+        })
+    expense_category_rows.sort(key=lambda row: row['amount'], reverse=True)
+
+    vendor_payable_rows = []
+    for vendor in vendor_rows:
+        vendor_expenses = expense_rows.filter(vendor=vendor)
+        vendor_payments = vendor_payment_rows.filter(vendor=vendor)
+        if not vendor_expenses.exists() and not vendor_payments.exists() and not vendor.opening_balance:
+            continue
+        outstanding_total = Decimal('0.00')
+        for expense in vendor_expenses:
+            outstanding_total += expense.outstanding_amount
+        vendor_payable_rows.append({
+            'vendor': vendor,
+            'expense_total': vendor_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+            'paid_total': vendor_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+            'outstanding_total': outstanding_total + (vendor.opening_balance or Decimal('0.00')),
+            'expense_count': vendor_expenses.count(),
+        })
+    vendor_payable_rows.sort(key=lambda row: row['outstanding_total'], reverse=True)
+
+    monthly_index = {}
+
+    def ensure_month_row(month_value):
+        month_key = month_value.strftime('%Y-%m-01')
+        row = monthly_index.get(month_key)
+        if row is None:
+            row = {
+                'month': month_value.replace(day=1),
+                'event_income': Decimal('0.00'),
+                'corporate_income': Decimal('0.00'),
+                'membership_income': Decimal('0.00'),
+                'sponsorship_received': Decimal('0.00'),
+                'expense_recorded': Decimal('0.00'),
+                'vendor_paid': Decimal('0.00'),
+            }
+            monthly_index[month_key] = row
+        return row
+
+    for payment in event_payments:
+        month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
+        month_row['event_income'] += payment.amount or Decimal('0.00')
+    for payment in corporate_payments:
+        month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
+        month_row['corporate_income'] += payment.amount or Decimal('0.00')
+    for payment in membership_payments:
+        month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
+        month_row['membership_income'] += payment.amount or Decimal('0.00')
+    for sponsorship in sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED):
+        month_source = sponsorship.received_on or sponsorship.created_at.date()
+        month_row = ensure_month_row(month_source.replace(day=1))
+        month_row['sponsorship_received'] += sponsorship.amount or Decimal('0.00')
+    for expense in expense_rows:
+        month_row = ensure_month_row(expense.expense_date.replace(day=1))
+        month_row['expense_recorded'] += expense.amount or Decimal('0.00')
+    for payment in vendor_payment_rows:
+        month_row = ensure_month_row(payment.payment_date.replace(day=1))
+        month_row['vendor_paid'] += payment.amount or Decimal('0.00')
+
+    monthly_trend_rows = []
+    for row in monthly_index.values():
+        income_total = row['event_income'] + row['corporate_income'] + row['membership_income'] + row['sponsorship_received']
+        monthly_trend_rows.append({
+            **row,
+            'total_income': income_total,
+            'surplus': income_total - row['expense_recorded'],
+            'cash_position': income_total - row['vendor_paid'],
+        })
+    monthly_trend_rows.sort(key=lambda row: row['month'], reverse=True)
+
+    event_profit_index = {}
+
+    def ensure_event_row(event_obj):
+        if not event_obj:
+            return None
+        row = event_profit_index.get(event_obj.id)
+        if row is None:
+            row = {
+                'event': event_obj,
+                'event_income': Decimal('0.00'),
+                'corporate_income': Decimal('0.00'),
+                'sponsorship_received': Decimal('0.00'),
+                'sponsorship_expected': Decimal('0.00'),
+                'expense_recorded': Decimal('0.00'),
+                'vendor_paid': Decimal('0.00'),
+                'outstanding_payable': Decimal('0.00'),
+            }
+            event_profit_index[event_obj.id] = row
+        return row
+
+    for payment in event_payments:
+        row = ensure_event_row(payment.event)
+        if row is not None:
+            row['event_income'] += payment.amount or Decimal('0.00')
+    for payment in corporate_payments:
+        row = ensure_event_row(payment.event)
+        if row is not None:
+            row['corporate_income'] += payment.amount or Decimal('0.00')
+    for sponsorship in sponsorship_rows:
+        row = ensure_event_row(sponsorship.event)
+        if row is not None:
+            if sponsorship.status == FinanceSponsorshipIncome.STATUS_RECEIVED:
+                row['sponsorship_received'] += sponsorship.amount or Decimal('0.00')
+            elif sponsorship.status == FinanceSponsorshipIncome.STATUS_EXPECTED:
+                row['sponsorship_expected'] += sponsorship.amount or Decimal('0.00')
+    for expense in expense_rows:
+        row = ensure_event_row(expense.event)
+        if row is not None:
+            row['expense_recorded'] += expense.amount or Decimal('0.00')
+            row['outstanding_payable'] += expense.outstanding_amount
+    for payment in vendor_payment_rows:
+        row = ensure_event_row(payment.event)
+        if row is not None:
+            row['vendor_paid'] += payment.amount or Decimal('0.00')
+
+    event_profit_rows = []
+    for row in event_profit_index.values():
+        realized_income = row['event_income'] + row['corporate_income'] + row['sponsorship_received']
+        event_profit_rows.append({
+            **row,
+            'realized_income': realized_income,
+            'pipeline_income': realized_income + row['sponsorship_expected'],
+            'operating_surplus': realized_income - row['expense_recorded'],
+            'cash_position': realized_income - row['vendor_paid'],
+        })
+    event_profit_rows.sort(key=lambda row: row['realized_income'], reverse=True)
+
+    statement_rows = [
+        {'label': 'Realized income', 'amount': total_income, 'tone': 'text-bsbcs-green'},
+        {'label': 'Expected sponsorship pipeline', 'amount': sponsorship_expected, 'tone': 'text-bsbcs-amber'},
+        {'label': 'Expenses recorded', 'amount': expense_recorded, 'tone': 'text-slate-900'},
+        {'label': 'Vendor payments sent', 'amount': vendor_paid, 'tone': 'text-rose-700'},
+        {'label': 'Outstanding payable', 'amount': outstanding_payable, 'tone': 'text-bsbcs-amber'},
+        {'label': 'Operating surplus', 'amount': operating_surplus, 'tone': 'text-bsbcs-blue' if operating_surplus >= 0 else 'text-rose-700'},
+        {'label': 'Net cash position', 'amount': net_cash_position, 'tone': 'text-bsbcs-green' if net_cash_position >= 0 else 'text-rose-700'},
+    ]
+
+    ledger_rows = []
+    for payment in event_payments.order_by('-updated_at')[:20]:
+        ledger_rows.append({
+            'date': payment.updated_at,
+            'kind': 'Event income',
+            'title': payment.participant.name,
+            'context': f'{payment.event.name} {payment.event.year} | {payment.merchant_invoice_number}',
+            'amount': payment.amount or Decimal('0.00'),
+            'tone': 'text-bsbcs-green',
+        })
+    for payment in corporate_payments.order_by('-updated_at')[:20]:
+        ledger_rows.append({
+            'date': payment.updated_at,
+            'kind': 'Corporate income',
+            'title': payment.corporate_account.company_name,
+            'context': f'{payment.event.name} {payment.event.year} | {payment.merchant_invoice_number}',
+            'amount': payment.amount or Decimal('0.00'),
+            'tone': 'text-bsbcs-green',
+        })
+    for payment in membership_payments.order_by('-updated_at')[:20]:
+        ledger_rows.append({
+            'date': payment.updated_at,
+            'kind': 'Membership income',
+            'title': payment.user_profile.name,
+            'context': payment.merchant_invoice_number,
+            'amount': payment.amount or Decimal('0.00'),
+            'tone': 'text-bsbcs-green',
+        })
+    for sponsorship in sponsorship_rows.order_by('-created_at')[:20]:
+        ledger_rows.append({
+            'date': sponsorship.received_on or sponsorship.created_at.date(),
+            'kind': 'Sponsorship',
+            'title': sponsorship.company_name,
+            'context': sponsorship.title or sponsorship.get_status_display(),
+            'amount': sponsorship.amount or Decimal('0.00'),
+            'tone': 'text-bsbcs-green' if sponsorship.status == FinanceSponsorshipIncome.STATUS_RECEIVED else 'text-bsbcs-amber',
+        })
+    for expense in expense_rows.order_by('-expense_date', '-created_at')[:20]:
+        ledger_rows.append({
+            'date': expense.expense_date,
+            'kind': 'Expense',
+            'title': expense.title,
+            'context': f'{expense.category.name}{(" | " + expense.vendor.name) if expense.vendor else ""}',
+            'amount': expense.amount or Decimal('0.00'),
+            'tone': 'text-rose-700',
+        })
+    for payment in vendor_payment_rows.order_by('-payment_date', '-created_at')[:20]:
+        ledger_rows.append({
+            'date': payment.payment_date,
+            'kind': 'Vendor payment',
+            'title': payment.vendor.name,
+            'context': payment.reference_number or payment.get_method_display(),
+            'amount': payment.amount or Decimal('0.00'),
+            'tone': 'text-rose-700',
+        })
+    ledger_rows.sort(key=lambda row: row['date'] or timezone.localdate(), reverse=True)
+
+    return {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'current_filters': {
+            'event': event_filter,
+            'date_from': date_from.isoformat() if date_from else '',
+            'date_to': date_to.isoformat() if date_to else '',
+        },
+        'totals': {
+            'event_income': event_income,
+            'corporate_income': corporate_income,
+            'membership_income': membership_income,
+            'sponsorship_received': sponsorship_received,
+            'sponsorship_expected': sponsorship_expected,
+            'total_income': total_income,
+            'expense_recorded': expense_recorded,
+            'expense_paid': expense_paid,
+            'vendor_paid': vendor_paid,
+            'outstanding_payable': outstanding_payable,
+            'net_cash_position': net_cash_position,
+            'operating_surplus': operating_surplus,
+            'income_pipeline': income_pipeline,
+        },
+        'income_rows': income_rows[:5],
+        'income_export_rows': income_rows,
+        'expense_category_rows': expense_category_rows[:12],
+        'expense_category_export_rows': expense_category_rows,
+        'vendor_payable_rows': vendor_payable_rows[:12],
+        'vendor_payable_export_rows': vendor_payable_rows,
+        'event_profit_rows': event_profit_rows[:12],
+        'event_profit_export_rows': event_profit_rows,
+        'monthly_trend_rows': monthly_trend_rows[:12],
+        'monthly_trend_export_rows': monthly_trend_rows,
+        'statement_rows': statement_rows,
+        'ledger_rows': ledger_rows[:32],
+        'ledger_export_rows': ledger_rows,
+        'report_meta': {
+            'event_label': f'{selected_event.name} {selected_event.year}' if selected_event else 'All event-linked finance records',
+            'range_label': (
+                f'{date_from.strftime("%d %b %Y") if date_from else "Start"} to {date_to.strftime("%d %b %Y") if date_to else "Today"}'
+                if date_from or date_to else
+                'All available dates'
+            ),
+            'date_note': 'Payment income uses the payment record update date because the current models do not yet store a dedicated paid-at field.',
+        },
+        'admin_links': {
+            'dashboard': reverse('finance_dashboard'),
+            'reports': reverse('finance_reports'),
+            'setup': reverse('finance_setup'),
+            'categories': reverse('admin:registration_financeexpensecategory_changelist'),
+            'vendors': reverse('admin:registration_financevendor_changelist'),
+            'sponsorships': reverse('admin:registration_financesponsorshipincome_changelist'),
+            'expenses': reverse('admin:registration_financeexpense_changelist'),
+            'payments': reverse('admin:registration_financevendorpayment_changelist'),
+            'payment_center': reverse('dashboard_payment_center'),
+        },
+    }
+
+
+@dashboard_permission_required('finance')
+def finance_dashboard(request):
+    from website.models import MembershipPayment, SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    event_filter = ((request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')) or '').strip()
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+
+    query_params = {}
+    if event_filter:
+        query_params['event'] = event_filter
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('finance_dashboard')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    def parse_amount(value, label):
+        try:
+            return Decimal(str(value or '').strip())
+        except (InvalidOperation, ValueError):
+            raise ValueError(f'Enter a valid amount for {label}.')
+
+    def parse_date(value, label):
+        raw = str(value or '').strip()
+        if not raw:
+            return None
+        try:
+            return datetime.strptime(raw, '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError(f'Enter a valid date for {label}.')
+
+    if request.method == 'POST':
+        action = (request.POST.get('finance_action') or '').strip()
+        try:
+            if action == 'add_category':
+                name = (request.POST.get('category_name') or '').strip()
+                code = (request.POST.get('category_code') or '').strip() or None
+                description = (request.POST.get('category_description') or '').strip() or None
+                if not name:
+                    raise ValueError('Category name is required.')
+                category = FinanceExpenseCategory.objects.create(name=name, code=code, description=description)
+                dashboard_log_action(request, category, ADDITION, 'Created finance expense category from finance dashboard.')
+                messages.success(request, f'Expense category "{category.name}" created.')
+                return redirect(redirect_url)
+
+            if action == 'add_vendor':
+                name = (request.POST.get('vendor_name') or '').strip()
+                if not name:
+                    raise ValueError('Vendor name is required.')
+                vendor = FinanceVendor.objects.create(
+                    name=name,
+                    contact_person=(request.POST.get('vendor_contact_person') or '').strip() or None,
+                    email=(request.POST.get('vendor_email') or '').strip() or None,
+                    phone=(request.POST.get('vendor_phone') or '').strip() or None,
+                    address=(request.POST.get('vendor_address') or '').strip() or None,
+                    notes=(request.POST.get('vendor_notes') or '').strip() or None,
+                    opening_balance=parse_amount(request.POST.get('vendor_opening_balance') or '0', 'opening balance'),
+                )
+                dashboard_log_action(request, vendor, ADDITION, 'Created finance vendor from finance dashboard.')
+                messages.success(request, f'Vendor "{vendor.name}" created.')
+                return redirect(redirect_url)
+
+            if action == 'add_sponsorship':
+                company_name = (request.POST.get('sponsorship_company_name') or '').strip()
+                if not company_name:
+                    raise ValueError('Sponsor or company name is required.')
+                sponsorship = FinanceSponsorshipIncome.objects.create(
+                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
+                    sponsor=Sponsor.objects.filter(pk=(request.POST.get('sponsor_id') or '').strip()).first() if (request.POST.get('sponsor_id') or '').strip() else None,
+                    company_name=company_name,
+                    title=(request.POST.get('sponsorship_title') or '').strip() or None,
+                    amount=parse_amount(request.POST.get('sponsorship_amount'), 'sponsorship amount'),
+                    status=(request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED,
+                    received_on=parse_date(request.POST.get('sponsorship_received_on'), 'received date'),
+                    reference_number=(request.POST.get('sponsorship_reference_number') or '').strip() or None,
+                    agreement_file=request.FILES.get('sponsorship_agreement_file'),
+                    note=(request.POST.get('sponsorship_note') or '').strip() or None,
+                )
+                dashboard_log_action(request, sponsorship, ADDITION, 'Created sponsorship income from finance dashboard.')
+                messages.success(request, f'Sponsorship income saved for {sponsorship.company_name}.')
+                return redirect(redirect_url)
+
+            if action == 'add_expense':
+                title = (request.POST.get('expense_title') or '').strip()
+                category = FinanceExpenseCategory.objects.filter(pk=(request.POST.get('expense_category') or '').strip()).first()
+                if not title:
+                    raise ValueError('Expense title is required.')
+                if not category:
+                    raise ValueError('Choose a valid expense category.')
+                expense_status = (request.POST.get('expense_status') or FinanceExpense.STATUS_DRAFT).strip() or FinanceExpense.STATUS_DRAFT
+                expense = FinanceExpense.objects.create(
+                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
+                    category=category,
+                    vendor=FinanceVendor.objects.filter(pk=(request.POST.get('expense_vendor') or '').strip()).first() if (request.POST.get('expense_vendor') or '').strip() else None,
+                    title=title,
+                    bill_number=(request.POST.get('expense_bill_number') or '').strip() or None,
+                    expense_date=parse_date(request.POST.get('expense_date'), 'expense date') or timezone.localdate(),
+                    due_date=parse_date(request.POST.get('expense_due_date'), 'expense due date'),
+                    amount=parse_amount(request.POST.get('expense_amount'), 'expense amount'),
+                    paid_amount=parse_amount(request.POST.get('expense_paid_amount') or '0', 'paid amount'),
+                    status=expense_status,
+                    approved_by=request.user if expense_status in [FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID, FinanceExpense.STATUS_PAID] else None,
+                    approved_at=timezone.now() if expense_status in [FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID, FinanceExpense.STATUS_PAID] else None,
+                    cancelled_by=request.user if expense_status == FinanceExpense.STATUS_CANCELLED else None,
+                    cancelled_at=timezone.now() if expense_status == FinanceExpense.STATUS_CANCELLED else None,
+                    description=(request.POST.get('expense_description') or '').strip() or None,
+                )
+                expense_file = request.FILES.get('expense_bill_file')
+                if expense_file:
+                    FinanceExpenseAttachment.objects.create(expense=expense, title='Primary bill', file=expense_file)
+                dashboard_log_action(request, expense, ADDITION, 'Created expense row from finance dashboard.')
+                messages.success(request, f'Expense "{expense.title}" saved.')
+                return redirect(redirect_url)
+
+            if action == 'add_vendor_payment':
+                vendor = FinanceVendor.objects.filter(pk=(request.POST.get('payment_vendor') or '').strip()).first()
+                if not vendor:
+                    raise ValueError('Choose a valid vendor for the payment.')
+                payment_status = (request.POST.get('payment_status') or FinanceVendorPayment.STATUS_PAID).strip() or FinanceVendorPayment.STATUS_PAID
+                vendor_payment = FinanceVendorPayment.objects.create(
+                    vendor=vendor,
+                    expense=FinanceExpense.objects.filter(pk=(request.POST.get('payment_expense') or '').strip()).first() if (request.POST.get('payment_expense') or '').strip() else None,
+                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
+                    amount=parse_amount(request.POST.get('payment_amount'), 'vendor payment amount'),
+                    payment_date=parse_date(request.POST.get('payment_date'), 'payment date') or timezone.localdate(),
+                    method=(request.POST.get('payment_method') or FinanceVendorPayment.METHOD_BANK).strip() or FinanceVendorPayment.METHOD_BANK,
+                    status=payment_status,
+                    scheduled_by=request.user if payment_status == FinanceVendorPayment.STATUS_SCHEDULED else None,
+                    scheduled_at=timezone.now() if payment_status == FinanceVendorPayment.STATUS_SCHEDULED else None,
+                    paid_confirmed_by=request.user if payment_status == FinanceVendorPayment.STATUS_PAID else None,
+                    paid_confirmed_at=timezone.now() if payment_status == FinanceVendorPayment.STATUS_PAID else None,
+                    cancelled_by=request.user if payment_status == FinanceVendorPayment.STATUS_CANCELLED else None,
+                    cancelled_at=timezone.now() if payment_status == FinanceVendorPayment.STATUS_CANCELLED else None,
+                    reference_number=(request.POST.get('payment_reference_number') or '').strip() or None,
+                    note=(request.POST.get('payment_note') or '').strip() or None,
+                )
+                proof_file = request.FILES.get('payment_proof_file')
+                if proof_file:
+                    FinanceVendorPaymentAttachment.objects.create(payment=vendor_payment, title='Primary proof', file=proof_file)
+                if vendor_payment.expense_id and vendor_payment.status == FinanceVendorPayment.STATUS_PAID:
+                    expense = vendor_payment.expense
+                    expense.paid_amount = (expense.paid_amount or Decimal('0.00')) + (vendor_payment.amount or Decimal('0.00'))
+                    if expense.paid_amount >= (expense.amount or Decimal('0.00')):
+                        expense.status = FinanceExpense.STATUS_PAID
+                    elif expense.paid_amount > 0 and expense.status != FinanceExpense.STATUS_CANCELLED:
+                        expense.status = FinanceExpense.STATUS_PARTIALLY_PAID
+                    expense.save(update_fields=['paid_amount', 'status', 'updated_at'])
+                dashboard_log_action(request, vendor_payment, ADDITION, 'Created vendor payment from finance dashboard.')
+                messages.success(request, f'Vendor payment saved for {vendor.name}.')
+                return redirect(redirect_url)
+
+            if action == 'approve_expense':
+                expense = get_object_or_404(FinanceExpense, pk=(request.POST.get('expense_id') or '').strip())
+                if expense.status == FinanceExpense.STATUS_CANCELLED:
+                    raise ValueError('Cancelled expenses cannot be approved.')
+                expense.status = FinanceExpense.STATUS_APPROVED if (expense.paid_amount or Decimal('0.00')) <= 0 else FinanceExpense.STATUS_PARTIALLY_PAID
+                expense.approved_by = request.user
+                expense.approved_at = timezone.now()
+                expense.cancelled_by = None
+                expense.cancelled_at = None
+                expense.save(update_fields=['status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                dashboard_log_action(request, expense, CHANGE, 'Approved expense from finance dashboard.')
+                messages.success(request, f'Expense "{expense.title}" approved.')
+                return redirect(redirect_url)
+
+            if action == 'cancel_expense':
+                expense = get_object_or_404(FinanceExpense, pk=(request.POST.get('expense_id') or '').strip())
+                expense.status = FinanceExpense.STATUS_CANCELLED
+                expense.cancelled_by = request.user
+                expense.cancelled_at = timezone.now()
+                expense.save(update_fields=['status', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                dashboard_log_action(request, expense, CHANGE, 'Cancelled expense from finance dashboard.')
+                messages.success(request, f'Expense "{expense.title}" cancelled.')
+                return redirect(redirect_url)
+
+            if action == 'mark_payment_scheduled':
+                vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
+                if vendor_payment.status == FinanceVendorPayment.STATUS_PAID:
+                    raise ValueError('This vendor payment is already marked paid.')
+                vendor_payment.status = FinanceVendorPayment.STATUS_SCHEDULED
+                vendor_payment.scheduled_by = request.user
+                vendor_payment.scheduled_at = timezone.now()
+                vendor_payment.cancelled_by = None
+                vendor_payment.cancelled_at = None
+                vendor_payment.save(update_fields=['status', 'scheduled_by', 'scheduled_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                dashboard_log_action(request, vendor_payment, CHANGE, 'Marked vendor payment scheduled from finance dashboard.')
+                messages.success(request, f'Payment for {vendor_payment.vendor.name} marked scheduled.')
+                return redirect(redirect_url)
+
+            if action == 'mark_payment_paid':
+                vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
+                if vendor_payment.status != FinanceVendorPayment.STATUS_PAID:
+                    vendor_payment.status = FinanceVendorPayment.STATUS_PAID
+                    vendor_payment.paid_confirmed_by = request.user
+                    vendor_payment.paid_confirmed_at = timezone.now()
+                    vendor_payment.cancelled_by = None
+                    vendor_payment.cancelled_at = None
+                    vendor_payment.save(update_fields=['status', 'paid_confirmed_by', 'paid_confirmed_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                    if vendor_payment.expense_id:
+                        expense = vendor_payment.expense
+                        expense.paid_amount = min((expense.amount or Decimal('0.00')), (expense.paid_amount or Decimal('0.00')) + (vendor_payment.amount or Decimal('0.00')))
+                        if expense.paid_amount >= (expense.amount or Decimal('0.00')):
+                            expense.status = FinanceExpense.STATUS_PAID
+                        elif expense.paid_amount > 0 and expense.status != FinanceExpense.STATUS_CANCELLED:
+                            expense.status = FinanceExpense.STATUS_PARTIALLY_PAID
+                        expense.save(update_fields=['paid_amount', 'status', 'updated_at'])
+                dashboard_log_action(request, vendor_payment, CHANGE, 'Marked vendor payment paid from finance dashboard.')
+                messages.success(request, f'Payment for {vendor_payment.vendor.name} marked paid.')
+                return redirect(redirect_url)
+
+            if action == 'cancel_vendor_payment':
+                vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
+                if vendor_payment.status == FinanceVendorPayment.STATUS_PAID:
+                    raise ValueError('Paid vendor payments should be corrected from admin to avoid balance mismatch.')
+                vendor_payment.status = FinanceVendorPayment.STATUS_CANCELLED
+                vendor_payment.cancelled_by = request.user
+                vendor_payment.cancelled_at = timezone.now()
+                vendor_payment.save(update_fields=['status', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                dashboard_log_action(request, vendor_payment, CHANGE, 'Cancelled vendor payment from finance dashboard.')
+                messages.success(request, f'Payment for {vendor_payment.vendor.name} cancelled.')
+                return redirect(redirect_url)
+
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(redirect_url)
+        except Exception as exc:
+            logger.exception('Finance dashboard action failed: %s', exc)
+            messages.error(request, 'Finance action failed. Please review the values and try again.')
+            return redirect(redirect_url)
+
+    event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
+    corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
+    membership_payments = MembershipPayment.objects.select_related('user_profile').filter(status='completed')
+    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor').all()
+    expense_rows = FinanceExpense.objects.select_related('event', 'vendor', 'category').all()
+    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense').all()
+    vendor_rows = FinanceVendor.objects.filter(is_active=True).order_by('name')
+    category_rows = FinanceExpenseCategory.objects.filter(is_active=True).order_by('name')
+    sponsor_rows = Sponsor.objects.select_related('event').order_by('name')
+
+    if event_filter:
+        event_payments = event_payments.filter(event_id=event_filter)
+        corporate_payments = corporate_payments.filter(event_id=event_filter)
+        sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
+        expense_rows = expense_rows.filter(event_id=event_filter)
+        vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+
+    if search_query:
+        sponsorship_rows = sponsorship_rows.filter(
+            Q(company_name__icontains=search_query)
+            | Q(title__icontains=search_query)
+            | Q(reference_number__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+        expense_rows = expense_rows.filter(
+            Q(title__icontains=search_query)
+            | Q(bill_number__icontains=search_query)
+            | Q(vendor__name__icontains=search_query)
+            | Q(category__name__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+        vendor_payment_rows = vendor_payment_rows.filter(
+            Q(vendor__name__icontains=search_query)
+            | Q(reference_number__icontains=search_query)
+            | Q(expense__title__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+        vendor_rows = vendor_rows.filter(
+            Q(name__icontains=search_query)
+            | Q(contact_person__icontains=search_query)
+            | Q(email__icontains=search_query)
+        )
+        category_rows = category_rows.filter(Q(name__icontains=search_query) | Q(code__icontains=search_query))
+
+    event_income = event_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    corporate_income = corporate_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    membership_income = membership_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    sponsorship_received = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    sponsorship_expected = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_EXPECTED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    expense_recorded = expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    expense_paid = expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED).aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+    vendor_paid = vendor_payment_rows.filter(status=FinanceVendorPayment.STATUS_PAID).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    outstanding_payable = Decimal('0.00')
+    for expense in expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED):
+        outstanding_payable += expense.outstanding_amount
+
+    vendor_snapshots = []
+    for vendor in vendor_rows[:12]:
+        vendor_expenses = expense_rows.filter(vendor=vendor).exclude(status=FinanceExpense.STATUS_CANCELLED)
+        vendor_outstanding = Decimal('0.00')
+        for expense in vendor_expenses:
+            vendor_outstanding += expense.outstanding_amount
+        vendor_snapshots.append({
+            'vendor': vendor,
+            'expense_total': vendor_expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+            'paid_total': vendor_payment_rows.filter(vendor=vendor, status=FinanceVendorPayment.STATUS_PAID).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'),
+            'outstanding_total': vendor_outstanding + (vendor.opening_balance or Decimal('0.00')),
+        })
+    vendor_snapshots.sort(key=lambda row: row['outstanding_total'], reverse=True)
+
+    total_income = event_income + corporate_income + membership_income + sponsorship_received
+    net_cash_position = total_income - vendor_paid
+    selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
+
+    context = {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'current_filters': {
+            'event': event_filter,
+            'q': search_query,
+        },
+        'totals': {
+            'event_income': event_income,
+            'corporate_income': corporate_income,
+            'membership_income': membership_income,
+            'sponsorship_received': sponsorship_received,
+            'sponsorship_expected': sponsorship_expected,
+            'total_income': total_income,
+            'expense_recorded': expense_recorded,
+            'expense_paid': expense_paid,
+            'vendor_paid': vendor_paid,
+            'outstanding_payable': outstanding_payable,
+            'net_cash_position': net_cash_position,
+        },
+        'recent_sponsorships': sponsorship_rows.order_by('-received_on', '-created_at')[:8],
+        'recent_expenses': expense_rows.order_by('-expense_date', '-created_at')[:10],
+        'recent_vendor_payments': vendor_payment_rows.order_by('-payment_date', '-created_at')[:10],
+        'vendor_snapshots': vendor_snapshots[:8],
+        'approval_expenses': expense_rows.filter(status=FinanceExpense.STATUS_DRAFT).order_by('-created_at')[:8],
+        'approved_expenses': expense_rows.filter(status__in=[FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID]).order_by('-expense_date', '-updated_at')[:8],
+        'scheduled_vendor_payments': vendor_payment_rows.filter(status=FinanceVendorPayment.STATUS_SCHEDULED).order_by('payment_date', '-created_at')[:8],
+        'finance_categories': FinanceExpenseCategory.objects.filter(is_active=True).order_by('name'),
+        'finance_vendors': FinanceVendor.objects.filter(is_active=True).order_by('name'),
+        'sponsors': sponsor_rows[:50],
+        'finance_status_choices': {
+            'sponsorship': FinanceSponsorshipIncome.STATUS_CHOICES,
+            'expense': FinanceExpense.STATUS_CHOICES,
+            'payment': FinanceVendorPayment.STATUS_CHOICES,
+            'payment_methods': FinanceVendorPayment.METHOD_CHOICES,
+        },
+        'admin_links': {
+            'dashboard': reverse('finance_dashboard'),
+            'reports': reverse('finance_reports'),
+            'categories': reverse('admin:registration_financeexpensecategory_changelist'),
+            'vendors': reverse('admin:registration_financevendor_changelist'),
+            'sponsorships': reverse('admin:registration_financesponsorshipincome_changelist'),
+            'expenses': reverse('admin:registration_financeexpense_changelist'),
+            'payments': reverse('admin:registration_financevendorpayment_changelist'),
+            'payment_center': reverse('dashboard_payment_center'),
+        },
+    }
+    return render(request, 'finance_dashboard.html', context)
+
+
+
+
+def _finance_build_register_context(request, event_filter='', date_from=None, date_to=None, query=''):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    events = Event.objects.order_by('-year', '-start_date', 'name')
+    selected_event = events.filter(pk=event_filter).first() if event_filter else None
+
+    expense_rows = FinanceExpense.objects.select_related('event', 'vendor', 'category', 'approved_by', 'cancelled_by').all()
+    vendor_payment_rows = FinanceVendorPayment.objects.select_related(
+        'event', 'vendor', 'expense', 'scheduled_by', 'paid_confirmed_by', 'cancelled_by'
+    ).all()
+
+    if event_filter:
+        expense_rows = expense_rows.filter(event_id=event_filter)
+        vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+
+    expense_rows = _finance_apply_range(expense_rows, 'expense_date', date_from, date_to)
+    vendor_payment_rows = _finance_apply_range(vendor_payment_rows, 'payment_date', date_from, date_to)
+
+    query_text = (query or '').strip()
+    if query_text:
+        expense_rows = expense_rows.filter(
+            Q(title__icontains=query_text)
+            | Q(bill_number__icontains=query_text)
+            | Q(vendor__name__icontains=query_text)
+            | Q(category__name__icontains=query_text)
+            | Q(event__name__icontains=query_text)
+            | Q(description__icontains=query_text)
+        )
+        vendor_payment_rows = vendor_payment_rows.filter(
+            Q(vendor__name__icontains=query_text)
+            | Q(reference_number__icontains=query_text)
+            | Q(expense__title__icontains=query_text)
+            | Q(event__name__icontains=query_text)
+            | Q(note__icontains=query_text)
+        )
+
+    bill_rows = expense_rows.order_by('-expense_date', '-created_at')
+    voucher_rows = vendor_payment_rows.order_by('-payment_date', '-created_at')
+
+    bill_total = bill_rows.exclude(status=FinanceExpense.STATUS_CANCELLED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    bill_outstanding = Decimal('0.00')
+    bill_attachment_total = 0
+    for row in bill_rows:
+        bill_outstanding += row.outstanding_amount
+        bill_attachment_total += row.attachments.count()
+
+    voucher_total = voucher_rows.filter(status=FinanceVendorPayment.STATUS_PAID).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    voucher_attachment_total = sum(row.attachments.count() for row in voucher_rows)
+    scheduled_total = voucher_rows.filter(status=FinanceVendorPayment.STATUS_SCHEDULED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    return {
+        'site_settings': site_settings,
+        'events': events,
+        'selected_event': selected_event,
+        'current_filters': {
+            'event': event_filter,
+            'date_from': date_from.isoformat() if date_from else '',
+            'date_to': date_to.isoformat() if date_to else '',
+            'q': query_text,
+        },
+        'totals': {
+            'bill_rows': bill_rows.count(),
+            'bill_total': bill_total,
+            'bill_outstanding': bill_outstanding,
+            'bill_attachments': bill_attachment_total,
+            'voucher_rows': voucher_rows.count(),
+            'voucher_total': voucher_total,
+            'voucher_attachments': voucher_attachment_total,
+            'scheduled_total': scheduled_total,
+        },
+        'bill_rows': bill_rows[:60],
+        'bill_export_rows': bill_rows,
+        'voucher_rows': voucher_rows[:60],
+        'voucher_export_rows': voucher_rows,
+        'register_meta': {
+            'event_label': f'{selected_event.name} {selected_event.year}' if selected_event else 'All event-linked finance records',
+            'range_label': (
+                f'{date_from.strftime("%d %b %Y") if date_from else "Start"} to {date_to.strftime("%d %b %Y") if date_to else "Today"}'
+                if date_from or date_to else 'All available dates'
+            ),
+        },
+        'admin_links': {
+            'dashboard': reverse('finance_dashboard'),
+            'reports': reverse('finance_reports'),
+            'registers': reverse('finance_registers'),
+            'setup': reverse('finance_setup'),
+            'expenses': reverse('admin:registration_financeexpense_changelist'),
+            'payments': reverse('admin:registration_financevendorpayment_changelist'),
+        },
+    }
+
+
+
+@dashboard_permission_required('finance')
+def finance_setup(request):
+    from website.models import SiteSettings
+
+    site_settings = SiteSettings.objects.first()
+    scope = ((request.POST.get('scope') if request.method == 'POST' else request.GET.get('scope', 'all')) or 'all').strip()
+    search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
+
+    query_params = {}
+    if scope and scope != 'all':
+        query_params['scope'] = scope
+    if search_query:
+        query_params['q'] = search_query
+    redirect_url = reverse('finance_setup')
+    if query_params:
+        redirect_url = f"{redirect_url}?{urlencode(query_params)}"
+
+    def parse_amount(value, label):
+        try:
+            return Decimal(str(value or '').strip())
+        except (InvalidOperation, ValueError):
+            raise ValueError(f'Enter a valid amount for {label}.')
+
+    if request.method == 'POST':
+        action = (request.POST.get('finance_action') or '').strip()
+        try:
+            if action == 'add_category':
+                name = (request.POST.get('category_name') or '').strip()
+                code = (request.POST.get('category_code') or '').strip() or None
+                description = (request.POST.get('category_description') or '').strip() or None
+                if not name:
+                    raise ValueError('Category name is required.')
+                category = FinanceExpenseCategory.objects.create(name=name, code=code, description=description)
+                dashboard_log_action(request, category, ADDITION, 'Created finance expense category from finance setup.')
+                messages.success(request, f'Expense category "{category.name}" created.')
+                return redirect(redirect_url)
+
+            if action == 'add_vendor':
+                name = (request.POST.get('vendor_name') or '').strip()
+                if not name:
+                    raise ValueError('Vendor name is required.')
+                vendor = FinanceVendor.objects.create(
+                    name=name,
+                    contact_person=(request.POST.get('vendor_contact_person') or '').strip() or None,
+                    email=(request.POST.get('vendor_email') or '').strip() or None,
+                    phone=(request.POST.get('vendor_phone') or '').strip() or None,
+                    address=(request.POST.get('vendor_address') or '').strip() or None,
+                    notes=(request.POST.get('vendor_notes') or '').strip() or None,
+                    opening_balance=parse_amount(request.POST.get('vendor_opening_balance') or '0', 'opening balance'),
+                )
+                dashboard_log_action(request, vendor, ADDITION, 'Created finance vendor from finance setup.')
+                messages.success(request, f'Vendor "{vendor.name}" created.')
+                return redirect(redirect_url)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:
+            logger.exception('Finance setup action failed: %s', exc)
+            messages.error(request, str(exc))
+
+    vendor_rows = FinanceVendor.objects.all().order_by('name')
+    category_rows = FinanceExpenseCategory.objects.all().order_by('name')
+    if search_query:
+        vendor_rows = vendor_rows.filter(
+            Q(name__icontains=search_query)
+            | Q(contact_person__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+        )
+        category_rows = category_rows.filter(
+            Q(name__icontains=search_query)
+            | Q(code__icontains=search_query)
+            | Q(description__icontains=search_query)
+        )
+
+    context = {
+        'site_settings': site_settings,
+        'current_filters': {
+            'scope': scope,
+            'q': search_query,
+        },
+        'vendor_rows': vendor_rows[:40],
+        'category_rows': category_rows[:40],
+        'totals': {
+            'vendors': vendor_rows.count(),
+            'active_vendors': vendor_rows.filter(is_active=True).count(),
+            'categories': category_rows.count(),
+            'active_categories': category_rows.filter(is_active=True).count(),
+        },
+        'view_flags': {
+            'show_vendors': scope in {'all', 'vendors'},
+            'show_categories': scope in {'all', 'categories'},
+        },
+        'setup_meta': {
+            'scope_label': 'All setup records' if scope == 'all' else ('Vendor setup only' if scope == 'vendors' else 'Category setup only'),
+        },
+        'admin_links': {
+            'dashboard': reverse('finance_dashboard'),
+            'reports': reverse('finance_reports'),
+            'registers': reverse('finance_registers'),
+            'setup': reverse('finance_setup'),
+            'vendors': reverse('admin:registration_financevendor_changelist'),
+            'categories': reverse('admin:registration_financeexpensecategory_changelist'),
+        },
+    }
+    return render(request, 'finance_setup.html', context)
+
+
+@dashboard_permission_required('finance')
+def finance_reports(request):
+    try:
+        event_filter = (request.GET.get('event') or '').strip()
+        date_from = _finance_parse_date_input(request.GET.get('date_from'), 'from date')
+        date_to = _finance_parse_date_input(request.GET.get('date_to'), 'to date')
+        if date_from and date_to and date_from > date_to:
+            raise ValueError('From date cannot be after To date.')
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(reverse('finance_reports'))
+
+    context = _finance_build_report_context(request, event_filter=event_filter, date_from=date_from, date_to=date_to)
+
+    export_type = (request.GET.get('export') or '').strip()
+    if export_type == 'pdf':
+        return _finance_statement_pdf_response(context)
+
+    if export_type == 'excel':
+        filename_suffix = timezone.localdate().isoformat()
+        sheets = [
+            {
+                'name': 'Statement',
+                'rows': [['Metric', 'Amount']] + [[row['label'], row['amount']] for row in context['statement_rows']],
+            },
+            {
+                'name': 'Income',
+                'rows': [['Source', 'Records', 'Amount', 'Notes']] + [[row['label'], row['count'], row['amount'], row['meta']] for row in context['income_export_rows']],
+            },
+            {
+                'name': 'Expense Categories',
+                'rows': [['Category', 'Expense Rows', 'Amount', 'Paid', 'Outstanding']] + [[row['category'].name, row['count'], row['amount'], row['paid'], row['outstanding']] for row in context['expense_category_export_rows']],
+            },
+            {
+                'name': 'Vendor Payables',
+                'rows': [['Vendor', 'Expense Rows', 'Recorded Expense', 'Paid Out', 'Outstanding']] + [[row['vendor'].name, row['expense_count'], row['expense_total'], row['paid_total'], row['outstanding_total']] for row in context['vendor_payable_export_rows']],
+            },
+            {
+                'name': 'Event Profitability',
+                'rows': [['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses', 'Operating Surplus', 'Vendor Paid', 'Cash Position', 'Outstanding Payable']] + [[f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['operating_surplus'], row['vendor_paid'], row['cash_position'], row['outstanding_payable']] for row in context['event_profit_export_rows']],
+            },
+            {
+                'name': 'Monthly Trend',
+                'rows': [['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Operating Surplus', 'Cash Position']] + [[row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus'], row['cash_position']] for row in context['monthly_trend_export_rows']],
+            },
+            {
+                'name': 'Ledger',
+                'rows': [['Date', 'Type', 'Title', 'Context', 'Amount']] + [[row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']), row['kind'], row['title'], row['context'], row['amount']] for row in context['ledger_export_rows']],
+            },
+        ]
+        return _finance_excel_response(f'finance_reports_{filename_suffix}.xls', sheets)
+
+    if export_type:
+        response = HttpResponse(content_type='text/csv')
+        filename_suffix = timezone.localdate().isoformat()
+        response['Content-Disposition'] = f'attachment; filename="finance_{export_type}_{filename_suffix}.csv"'
+        writer = csv.writer(response)
+
+        if export_type == 'summary':
+            writer.writerow(['Metric', 'Amount'])
+            for row in context['statement_rows']:
+                writer.writerow([row['label'], row['amount']])
+            return response
+
+        if export_type == 'income':
+            writer.writerow(['Source', 'Records', 'Amount', 'Notes'])
+            for row in context['income_export_rows']:
+                writer.writerow([row['label'], row['count'], row['amount'], row['meta']])
+            return response
+
+        if export_type == 'categories':
+            writer.writerow(['Category', 'Expense Rows', 'Amount', 'Paid', 'Outstanding'])
+            for row in context['expense_category_export_rows']:
+                writer.writerow([row['category'].name, row['count'], row['amount'], row['paid'], row['outstanding']])
+            return response
+
+        if export_type == 'vendors':
+            writer.writerow(['Vendor', 'Expense Rows', 'Recorded Expense', 'Paid Out', 'Outstanding'])
+            for row in context['vendor_payable_export_rows']:
+                writer.writerow([row['vendor'].name, row['expense_count'], row['expense_total'], row['paid_total'], row['outstanding_total']])
+            return response
+
+        if export_type == 'events':
+            writer.writerow(['Event', 'Event Income', 'Corporate Income', 'Sponsorship Received', 'Sponsorship Expected', 'Realized Income', 'Expenses', 'Operating Surplus', 'Vendor Paid', 'Cash Position', 'Outstanding Payable'])
+            for row in context['event_profit_export_rows']:
+                writer.writerow([f"{row['event'].name} {row['event'].year}", row['event_income'], row['corporate_income'], row['sponsorship_received'], row['sponsorship_expected'], row['realized_income'], row['expense_recorded'], row['operating_surplus'], row['vendor_paid'], row['cash_position'], row['outstanding_payable']])
+            return response
+
+        if export_type == 'monthly':
+            writer.writerow(['Month', 'Event Income', 'Corporate Income', 'Membership Income', 'Sponsorship Received', 'Total Income', 'Expenses Recorded', 'Vendor Paid', 'Operating Surplus', 'Cash Position'])
+            for row in context['monthly_trend_export_rows']:
+                writer.writerow([row['month'].strftime('%Y-%m'), row['event_income'], row['corporate_income'], row['membership_income'], row['sponsorship_received'], row['total_income'], row['expense_recorded'], row['vendor_paid'], row['surplus'], row['cash_position']])
+            return response
+
+        if export_type == 'ledger':
+            writer.writerow(['Date', 'Type', 'Title', 'Context', 'Amount'])
+            for row in context['ledger_export_rows']:
+                date_value = row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date'])
+                writer.writerow([date_value, row['kind'], row['title'], row['context'], row['amount']])
+            return response
+
+    return render(request, 'finance_reports.html', context)
+
+
+@dashboard_permission_required('finance')
+def finance_registers(request):
+    try:
+        event_filter = (request.GET.get('event') or '').strip()
+        date_from = _finance_parse_date_input(request.GET.get('date_from'), 'from date')
+        date_to = _finance_parse_date_input(request.GET.get('date_to'), 'to date')
+        query = (request.GET.get('q') or '').strip()
+        if date_from and date_to and date_from > date_to:
+            raise ValueError('From date cannot be after To date.')
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(reverse('finance_registers'))
+
+    context = _finance_build_register_context(request, event_filter=event_filter, date_from=date_from, date_to=date_to, query=query)
+
+    export_type = (request.GET.get('export') or '').strip()
+    if export_type == 'excel':
+        filename_suffix = timezone.localdate().isoformat()
+        sheets = [
+            {
+                'name': 'Bills',
+                'rows': [['Expense Date', 'Title', 'Event', 'Category', 'Vendor', 'Bill Number', 'Amount', 'Paid Amount', 'Outstanding', 'Status', 'Approved By', 'Approved At', 'Attachment Count']] + [[row.expense_date, row.title, f'{row.event.name} {row.event.year}' if row.event else '', row.category.name, row.vendor.name if row.vendor else '', row.bill_number or '', row.amount, row.paid_amount, row.outstanding_amount, row.get_status_display(), row.approved_by.get_username() if row.approved_by else '', row.approved_at.strftime('%Y-%m-%d %H:%M:%S') if row.approved_at else '', row.attachments.count()] for row in context['bill_export_rows']],
+            },
+            {
+                'name': 'Vouchers',
+                'rows': [['Payment Date', 'Vendor', 'Event', 'Linked Expense', 'Method', 'Reference', 'Amount', 'Status', 'Scheduled By', 'Scheduled At', 'Paid Confirmed By', 'Paid Confirmed At', 'Attachment Count']] + [[row.payment_date, row.vendor.name, f'{row.event.name} {row.event.year}' if row.event else '', row.expense.title if row.expense else '', row.get_method_display(), row.reference_number or '', row.amount, row.get_status_display(), row.scheduled_by.get_username() if row.scheduled_by else '', row.scheduled_at.strftime('%Y-%m-%d %H:%M:%S') if row.scheduled_at else '', row.paid_confirmed_by.get_username() if row.paid_confirmed_by else '', row.paid_confirmed_at.strftime('%Y-%m-%d %H:%M:%S') if row.paid_confirmed_at else '', row.attachments.count()] for row in context['voucher_export_rows']],
+            },
+        ]
+        return _finance_excel_response(f'finance_registers_{filename_suffix}.xls', sheets)
+
+    if export_type:
+        response = HttpResponse(content_type='text/csv')
+        filename_suffix = timezone.localdate().isoformat()
+        response['Content-Disposition'] = f'attachment; filename="finance_register_{export_type}_{filename_suffix}.csv"'
+        writer = csv.writer(response)
+
+        if export_type == 'bills':
+            writer.writerow(['Expense Date', 'Title', 'Event', 'Category', 'Vendor', 'Bill Number', 'Amount', 'Paid Amount', 'Outstanding', 'Status', 'Approved By', 'Approved At', 'Attachment Count'])
+            for row in context['bill_export_rows']:
+                writer.writerow([
+                    row.expense_date,
+                    row.title,
+                    f'{row.event.name} {row.event.year}' if row.event else '',
+                    row.category.name,
+                    row.vendor.name if row.vendor else '',
+                    row.bill_number or '',
+                    row.amount,
+                    row.paid_amount,
+                    row.outstanding_amount,
+                    row.get_status_display(),
+                    row.approved_by.get_username() if row.approved_by else '',
+                    row.approved_at.strftime('%Y-%m-%d %H:%M:%S') if row.approved_at else '',
+                    row.attachments.count(),
+                ])
+            return response
+
+        if export_type == 'vouchers':
+            writer.writerow(['Payment Date', 'Vendor', 'Event', 'Linked Expense', 'Method', 'Reference', 'Amount', 'Status', 'Scheduled By', 'Scheduled At', 'Paid Confirmed By', 'Paid Confirmed At', 'Attachment Count'])
+            for row in context['voucher_export_rows']:
+                writer.writerow([
+                    row.payment_date,
+                    row.vendor.name,
+                    f'{row.event.name} {row.event.year}' if row.event else '',
+                    row.expense.title if row.expense else '',
+                    row.get_method_display(),
+                    row.reference_number or '',
+                    row.amount,
+                    row.get_status_display(),
+                    row.scheduled_by.get_username() if row.scheduled_by else '',
+                    row.scheduled_at.strftime('%Y-%m-%d %H:%M:%S') if row.scheduled_at else '',
+                    row.paid_confirmed_by.get_username() if row.paid_confirmed_by else '',
+                    row.paid_confirmed_at.strftime('%Y-%m-%d %H:%M:%S') if row.paid_confirmed_at else '',
+                    row.attachments.count(),
+                ])
+            return response
+
+    return render(request, 'finance_registers.html', context)
 
 def _issue_registration_kit(payment_record):
     kit, _ = RegistrationKit.objects.get_or_create(
@@ -12913,6 +14169,9 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
+
+
 
 
 

@@ -183,7 +183,37 @@ DASHBOARD_PERMISSION_GROUPS = {
             "registration.change_systemsmstemplate",
         ),
     },
-    "staff_activity": {
+    "finance": {
+        "read": (
+            "registration.view_paymentstatus",
+            "registration.view_corporatepayment",
+            "registration.view_sponsor",
+            "registration.view_financeexpensecategory",
+            "registration.view_financevendor",
+            "registration.view_financesponsorshipincome",
+            "registration.view_financeexpense",
+            "registration.view_financeexpenseattachment",
+            "registration.view_financevendorpayment",
+            "registration.view_financevendorpaymentattachment",
+            "website.view_membershippayment",
+        ),
+        "write": (
+            "registration.add_financeexpensecategory",
+            "registration.change_financeexpensecategory",
+            "registration.add_financevendor",
+            "registration.change_financevendor",
+            "registration.add_financesponsorshipincome",
+            "registration.change_financesponsorshipincome",
+            "registration.add_financeexpense",
+            "registration.change_financeexpense",
+            "registration.add_financeexpenseattachment",
+            "registration.change_financeexpenseattachment",
+            "registration.add_financevendorpayment",
+            "registration.change_financevendorpayment",
+            "registration.add_financevendorpaymentattachment",
+            "registration.change_financevendorpaymentattachment",
+        ),
+    },    "staff_activity": {
         "read": ("admin.view_logentry",),
         "write": (),
     },
@@ -246,5 +276,6 @@ def dashboard_access_map(user):
         area: user_can_access_dashboard_area(user, area)
         for area in DASHBOARD_PERMISSION_GROUPS
     }
+
 
 

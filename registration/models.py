@@ -2602,3 +2602,207 @@ class PendingPaymentReminder(models.Model):
         unique_together = ('participant', 'event')  # Prevent duplicate entries for the same participant/event
 # Pending Payment Reminder models ends here-------------------------------------------------------------#
 
+
+
+# Finance Models START------------------------------------------------------------------------------------#
+class FinanceExpenseCategory(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    code = models.CharField(max_length=40, unique=True, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Finance expense category'
+        verbose_name_plural = 'Finance expense categories'
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            self.code = slugify(self.name).upper().replace('-', '_')[:40]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class FinanceVendor(models.Model):
+    name = models.CharField(max_length=180, unique=True)
+    contact_person = models.CharField(max_length=120, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notes = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Finance vendor'
+        verbose_name_plural = 'Finance vendors'
+
+    def __str__(self):
+        return self.name
+
+
+class FinanceSponsorshipIncome(models.Model):
+    STATUS_EXPECTED = 'expected'
+    STATUS_RECEIVED = 'received'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_EXPECTED, 'Expected'),
+        (STATUS_RECEIVED, 'Received'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_sponsorship_incomes')
+    sponsor = models.ForeignKey('Sponsor', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_income_rows')
+    company_name = models.CharField(max_length=180)
+    title = models.CharField(max_length=180, blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_EXPECTED)
+    received_on = models.DateField(blank=True, null=True)
+    reference_number = models.CharField(max_length=120, blank=True, null=True)
+    agreement_file = models.FileField(upload_to='finance/sponsorships/', blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-received_on', '-created_at']
+        verbose_name = 'Finance sponsorship income'
+        verbose_name_plural = 'Finance sponsorship incomes'
+
+    def __str__(self):
+        return f"{self.company_name} - {self.amount}"
+
+
+class FinanceExpense(models.Model):
+    STATUS_DRAFT = 'draft'
+    STATUS_APPROVED = 'approved'
+    STATUS_PARTIALLY_PAID = 'partially_paid'
+    STATUS_PAID = 'paid'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_PARTIALLY_PAID, 'Partially paid'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_expenses')
+    category = models.ForeignKey(FinanceExpenseCategory, on_delete=models.PROTECT, related_name='expenses')
+    vendor = models.ForeignKey(FinanceVendor, on_delete=models.SET_NULL, blank=True, null=True, related_name='expenses')
+    title = models.CharField(max_length=180)
+    bill_number = models.CharField(max_length=120, blank=True, null=True)
+    expense_date = models.DateField(default=timezone.now)
+    due_date = models.DateField(blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='approved_finance_expenses')
+    approved_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='cancelled_finance_expenses')
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-expense_date', '-created_at']
+        verbose_name = 'Finance expense'
+        verbose_name_plural = 'Finance expenses'
+
+    @property
+    def outstanding_amount(self):
+        return max(Decimal('0.00'), (self.amount or Decimal('0.00')) - (self.paid_amount or Decimal('0.00')))
+
+    def __str__(self):
+        return f"{self.title} - {self.amount}"
+
+
+class FinanceExpenseAttachment(models.Model):
+    expense = models.ForeignKey(FinanceExpense, on_delete=models.CASCADE, related_name='attachments')
+    title = models.CharField(max_length=180, blank=True, null=True)
+    file = models.FileField(upload_to='finance/expense_bills/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'Finance expense attachment'
+        verbose_name_plural = 'Finance expense attachments'
+
+    def __str__(self):
+        return self.title or self.file.name.rsplit('/', 1)[-1]
+
+
+class FinanceVendorPayment(models.Model):
+    METHOD_BANK = 'bank'
+    METHOD_CASH = 'cash'
+    METHOD_BKASH = 'bkash'
+    METHOD_NAGAD = 'nagad'
+    METHOD_CHEQUE = 'cheque'
+    METHOD_OTHER = 'other'
+    METHOD_CHOICES = [
+        (METHOD_BANK, 'Bank transfer'),
+        (METHOD_CASH, 'Cash'),
+        (METHOD_BKASH, 'bKash'),
+        (METHOD_NAGAD, 'Nagad'),
+        (METHOD_CHEQUE, 'Cheque'),
+        (METHOD_OTHER, 'Other'),
+    ]
+
+    STATUS_SCHEDULED = 'scheduled'
+    STATUS_PAID = 'paid'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_SCHEDULED, 'Scheduled'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    vendor = models.ForeignKey(FinanceVendor, on_delete=models.CASCADE, related_name='payments')
+    expense = models.ForeignKey(FinanceExpense, on_delete=models.SET_NULL, blank=True, null=True, related_name='vendor_payments')
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_vendor_payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_date = models.DateField(default=timezone.now)
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES, default=METHOD_BANK)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PAID)
+    scheduled_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='scheduled_finance_vendor_payments')
+    scheduled_at = models.DateTimeField(blank=True, null=True)
+    paid_confirmed_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='paid_finance_vendor_payments')
+    paid_confirmed_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='cancelled_finance_vendor_payments')
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    reference_number = models.CharField(max_length=120, blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+        verbose_name = 'Finance vendor payment'
+        verbose_name_plural = 'Finance vendor payments'
+
+    def __str__(self):
+        return f"{self.vendor.name} - {self.amount}"
+
+
+class FinanceVendorPaymentAttachment(models.Model):
+    payment = models.ForeignKey(FinanceVendorPayment, on_delete=models.CASCADE, related_name='attachments')
+    title = models.CharField(max_length=180, blank=True, null=True)
+    file = models.FileField(upload_to='finance/vendor_payment_proofs/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'Finance vendor payment attachment'
+        verbose_name_plural = 'Finance vendor payment attachments'
+
+    def __str__(self):
+        return self.title or self.file.name.rsplit('/', 1)[-1]
+# Finance Models END------------------------------------------------------------------------------------#

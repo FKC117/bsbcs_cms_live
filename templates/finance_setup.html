@@ -1,0 +1,174 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Finance Setup</title>
+    <link rel="stylesheet" href="{% static 'css/site_main.css' %}">
+    <style>
+        body { margin: 0; background: #EEF6FB; }
+        .finance-input, .finance-select, .finance-textarea { width: 100%; border: 1px solid #D9E4EF; border-radius: 0.75rem; background: #fff; padding: 0.65rem 0.8rem; font-size: 0.9rem; outline: none; }
+        .finance-textarea { min-height: 96px; resize: vertical; }
+        .finance-input:focus, .finance-select:focus, .finance-textarea:focus { border-color: #1769C2; box-shadow: 0 0 0 3px rgba(23, 105, 194, 0.14); }
+        .finance-label { display: block; margin-bottom: 0.3rem; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+    </style>
+</head>
+<body class="min-h-screen font-sans text-ink antialiased">
+<div class="min-h-screen bg-[linear-gradient(180deg,#F8FCFF_0%,#EEF6FB_52%,#F8FAFC_100%)]">
+    <header class="border-b border-white/15 bg-gradient-to-r from-bsbcs-navy via-[#124C85] to-bsbcs-teal text-white">
+        <div class="mx-auto flex w-[min(1440px,calc(100%-32px))] flex-wrap items-center justify-between gap-4 py-4">
+            <div class="flex items-center gap-3">
+                <div class="grid h-11 w-11 place-items-center overflow-hidden rounded-xl border border-white/25 bg-white/15 text-sm font-black">
+                    {% if site_settings and site_settings.logo %}
+                        <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.site_name|default:'BSBCS' }}" class="h-full w-full bg-white object-contain">
+                    {% else %}
+                        B
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-base font-black leading-tight">{{ site_settings.site_name|default:"BSBCS" }}</div>
+                    <div class="text-xs font-medium text-white/70">Finance and accounts workspace</div>
+                </div>
+            </div>
+            <div class="max-w-full lg:max-w-[980px]">
+                {% include "partials/finance_nav.html" %}
+            </div>
+        </div>
+        <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-end">
+            <div>
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Finance setup</div>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage vendor masters and expense categories in one setup-only finance desk.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Keep vendor records, opening balances, contact details, and finance categories separate from the live intake and approval workflow.</p>
+            </div>
+            <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
+                <div class="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                    <div>
+                        <label class="finance-label" for="scope">View</label>
+                        <select id="scope" name="scope" class="finance-select">
+                            <option value="all" {% if current_filters.scope == 'all' %}selected{% endif %}>All setup rows</option>
+                            <option value="vendors" {% if current_filters.scope == 'vendors' %}selected{% endif %}>Vendors only</option>
+                            <option value="categories" {% if current_filters.scope == 'categories' %}selected{% endif %}>Categories only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="finance-label" for="q">Search</label>
+                        <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, contact, phone, code, or category">
+                    </div>
+                    <div class="grid content-end">
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Apply</button>
+                    </div>
+                </div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <div class="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ setup_meta.scope_label }}</div>
+                    <a href="{% url 'finance_setup' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                </div>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
+        {% if messages %}
+            <section class="mb-3 space-y-2">
+                {% for message in messages %}
+                    <div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">{{ message }}</div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendors</div><div class="mt-2 text-2xl font-black text-ink">{{ totals.vendors }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Active vendors</div><div class="mt-2 text-2xl font-black text-bsbcs-green">{{ totals.active_vendors }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Categories</div><div class="mt-2 text-2xl font-black text-ink">{{ totals.categories }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Active categories</div><div class="mt-2 text-2xl font-black text-bsbcs-green">{{ totals.active_categories }}</div></div>
+        </section>
+
+        <section class="mt-3 grid gap-3 xl:grid-cols-2">
+            {% if view_flags.show_vendors %}
+            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Vendor setup</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Add and review vendors</h2>
+                    </div>
+                    <a href="{{ admin_links.vendors }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Vendor admin</a>
+                </div>
+                <form method="post" class="mt-4 rounded-xl border border-line bg-slate-50 p-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="finance_action" value="add_vendor">
+                    <input type="hidden" name="scope" value="{{ current_filters.scope }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <div><label class="finance-label">Vendor name</label><input name="vendor_name" class="finance-input" required></div>
+                        <div><label class="finance-label">Contact person</label><input name="vendor_contact_person" class="finance-input"></div>
+                        <div><label class="finance-label">Email</label><input name="vendor_email" type="email" class="finance-input"></div>
+                        <div><label class="finance-label">Phone</label><input name="vendor_phone" class="finance-input"></div>
+                        <div><label class="finance-label">Opening balance</label><input name="vendor_opening_balance" type="number" step="0.01" min="0" value="0" class="finance-input"></div>
+                        <div><label class="finance-label">Address</label><input name="vendor_address" class="finance-input"></div>
+                        <div class="md:col-span-2"><label class="finance-label">Notes</label><textarea name="vendor_notes" class="finance-textarea"></textarea></div>
+                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor</button></div>
+                    </div>
+                </form>
+                <div class="mt-3 space-y-2">
+                    {% for row in vendor_rows %}
+                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px] md:items-center">
+                                <div>
+                                    <div class="text-sm font-black text-ink">{{ row.name }}</div>
+                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.contact_person|default:'No contact person' }}{% if row.phone %} | {{ row.phone }}{% endif %}{% if row.email %} | {{ row.email }}{% endif %}</div>
+                                </div>
+                                <div class="text-sm font-black text-slate-700">BDT {{ row.opening_balance }}</div>
+                                <div class="text-right text-xs font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</div>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No vendor rows matched this setup filter.</div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            {% if view_flags.show_categories %}
+            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Category setup</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Add and review finance categories</h2>
+                    </div>
+                    <a href="{{ admin_links.categories }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Category admin</a>
+                </div>
+                <form method="post" class="mt-4 rounded-xl border border-line bg-slate-50 p-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="finance_action" value="add_category">
+                    <input type="hidden" name="scope" value="{{ current_filters.scope }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <div><label class="finance-label">Category name</label><input name="category_name" class="finance-input" required></div>
+                        <div><label class="finance-label">Code</label><input name="category_code" class="finance-input" placeholder="AUTO if left empty"></div>
+                        <div class="md:col-span-2"><label class="finance-label">Description</label><textarea name="category_description" class="finance-textarea"></textarea></div>
+                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save category</button></div>
+                    </div>
+                </form>
+                <div class="mt-3 space-y-2">
+                    {% for row in category_rows %}
+                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_120px] md:items-center">
+                                <div>
+                                    <div class="text-sm font-black text-ink">{{ row.name }}</div>
+                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.description|default:'No description yet.' }}</div>
+                                </div>
+                                <div class="text-sm font-black text-slate-700">{{ row.code|default:'No code' }}</div>
+                                <div class="text-right text-xs font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</div>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No category rows matched this setup filter.</div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+        </section>
+    </main>
+</div>
+</body>
+</html>
