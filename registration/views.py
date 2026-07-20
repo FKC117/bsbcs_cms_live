@@ -8456,23 +8456,50 @@ def _finance_excel_response(filename, sheets):
 
 def _finance_statement_pdf_response(context):
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
+    from reportlab.platypus import Image as PlatypusImage
     from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape as xml_escape
 
     def money(value):
         return f'BDT {_finance_decimal_text(value)}'
 
-    def table_block(title, headers, rows, col_widths=None):
-        elements = [Paragraph(title, section_style), Spacer(1, 0.12 * inch)]
-        table_rows = [headers] + rows
-        table = Table(table_rows, colWidths=col_widths, repeatRows=1)
-        table.setStyle(TableStyle([
+    def as_text(value):
+        if value is None:
+            return ''
+        return str(value)
+
+    def as_paragraph(value, style):
+        text_value = xml_escape(as_text(value)).replace('\n', '<br/>')
+        return Paragraph(text_value or '&nbsp;', style)
+
+    def build_rows(headers, rows, body_style, number_columns=None):
+        number_columns = set(number_columns or [])
+        built = [[as_paragraph(header, table_header_style) for header in headers]]
+        for row in rows:
+            built_row = []
+            for index, value in enumerate(row):
+                built_row.append(as_paragraph(value, table_number_style if index in number_columns else body_style))
+            built.append(built_row)
+        return built
+
+    def table_block(title, headers, rows, col_widths=None, number_columns=None, summary=None, total_row=None):
+        elements = [Paragraph(title, section_style)]
+        if summary:
+            elements.extend([Paragraph(summary, note_style), Spacer(1, 0.08 * inch)])
+        else:
+            elements.append(Spacer(1, 0.08 * inch))
+        full_rows = list(rows)
+        if total_row:
+            full_rows.append(total_row)
+        table = Table(build_rows(headers, full_rows, table_body_style, number_columns=number_columns), colWidths=col_widths, repeatRows=1)
+        total_row_index = len(full_rows)
+        style_commands = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DCEBFF')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#102A43')),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#D4E1EF')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FBFF')]),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -8480,33 +8507,156 @@ def _finance_statement_pdf_response(context):
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 5),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        elements.extend([table, Spacer(1, 0.22 * inch)])
+        ]
+        if total_row:
+            style_commands.extend([
+                ('BACKGROUND', (0, total_row_index), (-1, total_row_index), colors.HexColor('#EAF4FF')),
+                ('FONTNAME', (0, total_row_index), (-1, total_row_index), 'Helvetica-Bold'),
+                ('LINEABOVE', (0, total_row_index), (-1, total_row_index), 0.7, colors.HexColor('#9FBCE0')),
+            ])
+        table.setStyle(TableStyle(style_commands))
+        elements.extend([table, Spacer(1, 0.2 * inch)])
         return elements
 
     buffer = io.BytesIO()
-    document = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=26, leftMargin=26, topMargin=30, bottomMargin=24)
+    document = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=22, leftMargin=22, topMargin=24, bottomMargin=26)
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('FinanceTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=20, leading=24, textColor=colors.HexColor('#0F2B46'), spaceAfter=8)
-    meta_style = ParagraphStyle('FinanceMeta', parent=styles['BodyText'], fontName='Helvetica', fontSize=9, leading=12, textColor=colors.HexColor('#486581'), spaceAfter=6)
+    title_style = ParagraphStyle('FinanceTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=19, leading=23, textColor=colors.HexColor('#0F2B46'), spaceAfter=5)
+    subtitle_style = ParagraphStyle('FinanceSubtitle', parent=styles['BodyText'], fontName='Helvetica-Bold', fontSize=10, leading=12, textColor=colors.HexColor('#1769C2'), spaceAfter=3)
+    meta_style = ParagraphStyle('FinanceMeta', parent=styles['BodyText'], fontName='Helvetica', fontSize=9, leading=12, textColor=colors.HexColor('#486581'), spaceAfter=5)
+    note_style = ParagraphStyle('FinanceNote', parent=styles['BodyText'], fontName='Helvetica', fontSize=8.3, leading=11, textColor=colors.HexColor('#5B6C7D'), spaceAfter=3)
     section_style = ParagraphStyle('FinanceSection', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=15, textColor=colors.HexColor('#1769C2'), spaceAfter=2)
+    table_header_style = ParagraphStyle('FinanceTableHeader', parent=styles['BodyText'], fontName='Helvetica-Bold', fontSize=8.6, leading=10, textColor=colors.HexColor('#102A43'))
+    table_body_style = ParagraphStyle('FinanceTableBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=8.2, leading=10, textColor=colors.HexColor('#102A43'))
+    table_number_style = ParagraphStyle('FinanceTableNumber', parent=table_body_style, alignment=2)
 
-    story = [
-        Paragraph('Finance Statement', title_style),
-        Paragraph(f"{context['report_meta']['event_label']} | {context['report_meta']['range_label']}", meta_style),
-        Paragraph(context['report_meta']['date_note'], meta_style),
-        Spacer(1, 0.12 * inch),
+    story = []
+    site_settings = context.get('site_settings')
+    site_name = getattr(site_settings, 'site_name', None) or 'BSBCS'
+    generated_at = timezone.localtime().strftime('%d %b %Y %I:%M %p')
+    logo_path = None
+    if site_settings and getattr(site_settings, 'logo', None):
+        try:
+            logo_path = site_settings.logo.path
+        except Exception:
+            logo_path = None
+
+    header_right = [
+        Paragraph(xml_escape(site_name), subtitle_style),
+        Paragraph('Finance and accounts workspace', meta_style),
+        Paragraph('Finance statement pack', title_style),
+        Paragraph(xml_escape(f"{context['report_meta']['event_label']} | {context['report_meta']['range_label']}"), meta_style),
+        Paragraph(xml_escape(f"Generated on {generated_at}"), meta_style),
+        Paragraph(xml_escape(context['report_meta']['date_note']), note_style),
     ]
-    story.extend(table_block('Statement Snapshot', ['Metric', 'Amount'], [[row['label'], money(row['amount'])] for row in context['statement_rows']], col_widths=[4.7 * inch, 2.0 * inch]))
-    story.extend(table_block('Income Streams', ['Source', 'Records', 'Amount', 'Notes'], [[row['label'], row['count'], money(row['amount']), row['meta']] for row in context['income_export_rows']], col_widths=[2.0 * inch, 0.8 * inch, 1.3 * inch, 2.6 * inch]))
-    story.extend(table_block('Expense Categories', ['Category', 'Rows', 'Recorded', 'Paid', 'Outstanding'], [[row['category'].name, row['count'], money(row['amount']), money(row['paid']), money(row['outstanding'])] for row in context['expense_category_export_rows']] or [['No category rows', '', '', '', '']], col_widths=[2.3 * inch, 0.7 * inch, 1.2 * inch, 1.1 * inch, 1.2 * inch]))
+    if logo_path and os.path.exists(logo_path):
+        header_table = Table([
+            [PlatypusImage(logo_path, width=0.72 * inch, height=0.72 * inch), header_right],
+        ], colWidths=[0.95 * inch, 6.2 * inch])
+    else:
+        header_table = Table([
+            [Paragraph('B', ParagraphStyle('FinanceLogoFallback', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=18, alignment=1, textColor=colors.white, backColor=colors.HexColor('#1769C2'))), header_right],
+        ], colWidths=[0.6 * inch, 6.55 * inch])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    story.extend([header_table, Spacer(1, 0.18 * inch)])
+
+    definition_rows = [[item['term'], item['definition']] for item in context.get('report_definitions', [])]
+    story.extend(table_block(
+        'Legend and Definitions',
+        ['Term', 'Meaning in this report'],
+        definition_rows or [['No definitions available', '']],
+        col_widths=[1.8 * inch, 5.2 * inch],
+        summary='These definitions apply to the filtered finance report below and explain how each summary label should be interpreted.',
+    ))
+    story.extend(table_block(
+        'Statement Snapshot',
+        ['Metric', 'Amount'],
+        [[row['label'], money(row['amount'])] for row in context['statement_rows']],
+        col_widths=[4.9 * inch, 2.0 * inch],
+        number_columns={1},
+        summary='This section combines the key filtered totals into one quick management summary. Use the legend above before interpreting accrual or cash figures.',
+    ))
+    story.extend(table_block(
+        'Income Streams',
+        ['Source', 'Records', 'Amount', 'Notes'],
+        [[row['label'], row['count'], money(row['amount']), row['meta']] for row in context['income_export_rows']],
+        col_widths=[2.1 * inch, 0.8 * inch, 1.35 * inch, 5.0 * inch],
+        number_columns={1, 2},
+        summary='All income rows below are already filtered by the selected event and date range rules applied to this report.',
+        total_row=['Total', sum(row['count'] for row in context['income_export_rows']), money(sum((row['amount'] or Decimal('0.00')) for row in context['income_export_rows'])), 'Combined filtered income and sponsor pipeline rows shown above.'],
+    ))
+    story.extend(table_block(
+        'Expense Categories',
+        ['Category', 'Rows', 'Recorded', 'Paid', 'Outstanding'],
+        [[row['category'].name, row['count'], money(row['amount']), money(row['paid']), money(row['outstanding'])] for row in context['expense_category_export_rows']] or [['No category rows', '', '', '', '']],
+        col_widths=[3.0 * inch, 0.7 * inch, 1.25 * inch, 1.25 * inch, 1.35 * inch],
+        number_columns={1, 2, 3, 4},
+        summary='Expense categories are shown from the filtered finance expense records only.',
+        total_row=['Total', sum(row['count'] for row in context['expense_category_export_rows']), money(sum((row['amount'] or Decimal('0.00')) for row in context['expense_category_export_rows'])), money(sum((row['paid'] or Decimal('0.00')) for row in context['expense_category_export_rows'])), money(sum((row['outstanding'] or Decimal('0.00')) for row in context['expense_category_export_rows']))],
+    ))
     story.append(PageBreak())
-    story.extend(table_block('Vendor Payables', ['Vendor', 'Expense Rows', 'Recorded', 'Paid Out', 'Outstanding'], [[row['vendor'].name, row['expense_count'], money(row['expense_total']), money(row['paid_total']), money(row['outstanding_total'])] for row in context['vendor_payable_export_rows']] or [['No vendor rows', '', '', '', '']], col_widths=[2.3 * inch, 0.8 * inch, 1.15 * inch, 1.15 * inch, 1.2 * inch]))
-    story.extend(table_block('Event Profitability', ['Event', 'Realized Income', 'Recorded', 'Paid', 'Accrual', 'Cash Move'], [[f"{row['event'].name} {row['event'].year}", money(row['realized_income']), money(row['expense_recorded']), money(row['expense_paid']), money(row['operating_surplus']), money(row['cash_movement'])] for row in context['event_profit_export_rows']] or [['No event rows', '', '', '', '', '']], col_widths=[2.3 * inch, 1.0 * inch, 0.95 * inch, 0.9 * inch, 0.95 * inch, 0.95 * inch]))
-    story.extend(table_block('Monthly Trend', ['Month', 'Income', 'Recorded', 'Vendor Paid', 'Accrual'], [[row['month'].strftime('%b %Y'), money(row['total_income']), money(row['expense_recorded']), money(row['vendor_paid']), money(row['surplus'])] for row in context['monthly_trend_export_rows']] or [['No monthly rows', '', '', '', '']], col_widths=[1.4 * inch, 1.3 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch]))
+    story.extend(table_block(
+        'Vendor Payables',
+        ['Vendor', 'Expense Rows', 'Recorded', 'Paid Out', 'Outstanding'],
+        [[row['vendor'].name, row['expense_count'], money(row['expense_total']), money(row['paid_total']), money(row['outstanding_total'])] for row in context['vendor_payable_export_rows']] or [['No vendor rows', '', '', '', '']],
+        col_widths=[3.1 * inch, 0.85 * inch, 1.25 * inch, 1.25 * inch, 1.35 * inch],
+        number_columns={1, 2, 3, 4},
+        summary='Outstanding includes unpaid expense balances and vendor opening balances where applicable.',
+        total_row=['Total', sum(row['expense_count'] for row in context['vendor_payable_export_rows']), money(sum((row['expense_total'] or Decimal('0.00')) for row in context['vendor_payable_export_rows'])), money(sum((row['paid_total'] or Decimal('0.00')) for row in context['vendor_payable_export_rows'])), money(sum((row['outstanding_total'] or Decimal('0.00')) for row in context['vendor_payable_export_rows']))],
+    ))
+    story.extend(table_block(
+        'Event Profitability',
+        ['Event', 'Event Income', 'Corporate Income', 'Sponsor Rec.', 'Sponsor Exp.', 'Realized', 'Recorded', 'Paid', 'Accrual', 'Vendor Paid', 'Cash Move', 'Outstanding'],
+        [[f"{row['event'].name} {row['event'].year}", money(row['event_income']), money(row['corporate_income']), money(row['sponsorship_received']), money(row['sponsorship_expected']), money(row['realized_income']), money(row['expense_recorded']), money(row['expense_paid']), money(row['operating_surplus']), money(row['vendor_paid']), money(row['cash_movement']), money(row['outstanding_payable'])] for row in context['event_profit_export_rows']] or [['No event rows', '', '', '', '', '', '', '', '', '', '', '']],
+        col_widths=[2.45 * inch, 0.78 * inch, 0.78 * inch, 0.74 * inch, 0.74 * inch, 0.78 * inch, 0.78 * inch, 0.74 * inch, 0.74 * inch, 0.8 * inch, 0.82 * inch, 0.88 * inch],
+        number_columns={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+        summary='This matches the full event profitability export fields for the selected filter window.',
+        total_row=['Total', money(sum((row['event_income'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['corporate_income'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['sponsorship_received'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['sponsorship_expected'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['realized_income'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['expense_recorded'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['expense_paid'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['operating_surplus'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['vendor_paid'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['cash_movement'] or Decimal('0.00')) for row in context['event_profit_export_rows'])), money(sum((row['outstanding_payable'] or Decimal('0.00')) for row in context['event_profit_export_rows']))],
+    ))
+    story.extend(table_block(
+        'Monthly Trend',
+        ['Month', 'Event Inc.', 'Corp. Inc.', 'Member Inc.', 'Sponsor Rec.', 'Total Inc.', 'Recorded', 'Vendor Paid', 'Accrual'],
+        [[row['month'].strftime('%b %Y'), money(row['event_income']), money(row['corporate_income']), money(row['membership_income']), money(row['sponsorship_received']), money(row['total_income']), money(row['expense_recorded']), money(row['vendor_paid']), money(row['surplus'])] for row in context['monthly_trend_export_rows']] or [['No monthly rows', '', '', '', '', '', '', '', '']],
+        col_widths=[1.1 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch, 0.95 * inch, 0.95 * inch, 0.95 * inch, 0.95 * inch],
+        number_columns={1, 2, 3, 4, 5, 6, 7, 8},
+        summary='This matches the full monthly export fields for the selected report window.',
+        total_row=['Total', money(sum((row['event_income'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['corporate_income'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['membership_income'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['sponsorship_received'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['total_income'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['expense_recorded'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['vendor_paid'] or Decimal('0.00')) for row in context['monthly_trend_export_rows'])), money(sum((row['surplus'] or Decimal('0.00')) for row in context['monthly_trend_export_rows']))],
+    ))
     story.append(PageBreak())
-    story.extend(table_block('Activity Ledger', ['Date', 'Type', 'Title', 'Context', 'Amount'], [[row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']), row['kind'], row['title'], row['context'], money(row['amount'])] for row in context['ledger_export_rows']] or [['No ledger rows', '', '', '', '']], col_widths=[0.95 * inch, 1.15 * inch, 1.5 * inch, 2.55 * inch, 0.95 * inch]))
-    document.build(story)
+    story.extend(table_block(
+        'Activity Ledger',
+        ['Date', 'Type', 'Title', 'Context', 'Amount'],
+        [[row['date'].strftime('%Y-%m-%d') if hasattr(row['date'], 'strftime') else str(row['date']), row['kind'], row['title'], row['context'], money(row['amount'])] for row in context['ledger_export_rows']] or [['No ledger rows', '', '', '', '']],
+        col_widths=[0.95 * inch, 1.25 * inch, 1.8 * inch, 5.2 * inch, 1.0 * inch],
+        number_columns={4},
+        summary='This is the full filtered finance activity list included in the PDF pack, ordered newest first.',
+        total_row=['Total', '', '', 'Full ledger amount sum for the filtered rows shown above.', money(sum((row['amount'] or Decimal('0.00')) for row in context['ledger_export_rows']))],
+    ))
+
+    footer_style = ParagraphStyle('FinanceFooter', parent=styles['BodyText'], fontName='Helvetica', fontSize=8, leading=9, textColor=colors.HexColor('#5B6C7D'))
+
+    def draw_footer(canvas, document_obj):
+        canvas.saveState()
+        width, _height = landscape(A4)
+        footer_y = 14
+        canvas.setStrokeColor(colors.HexColor('#D4E1EF'))
+        canvas.setLineWidth(0.5)
+        canvas.line(document_obj.leftMargin, footer_y + 10, width - document_obj.rightMargin, footer_y + 10)
+        footer_text = f"{site_name} finance statement pack"
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(colors.HexColor('#5B6C7D'))
+        canvas.drawString(document_obj.leftMargin, footer_y, footer_text)
+        canvas.drawCentredString(width / 2.0, footer_y, f"Generated on {generated_at}")
+        canvas.drawRightString(width - document_obj.rightMargin, footer_y, f"Page {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    document.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     buffer.seek(0)
 
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -8532,6 +8682,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
     if event_filter:
         event_payments = event_payments.filter(event_id=event_filter)
         corporate_payments = corporate_payments.filter(event_id=event_filter)
+        membership_payments = membership_payments.none()
         sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
         expense_rows = expense_rows.filter(event_id=event_filter)
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
@@ -8889,6 +9040,40 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'vendor': build_page_query('vendor_page'),
             'ledger': build_page_query('ledger_page'),
         },
+        'report_definitions': [
+            {
+                'term': 'Realized income',
+                'definition': 'Money already confirmed as received in the selected reporting window from event registration, corporate registration, membership fees, and received sponsorships.',
+            },
+            {
+                'term': 'Sponsor pipeline',
+                'definition': 'Sponsorship amounts marked expected but not yet received, so these are not counted as realized income yet.',
+            },
+            {
+                'term': 'Expenses recorded',
+                'definition': 'Total approved or active expense value entered in the period, whether fully paid, partly paid, or still unpaid.',
+            },
+            {
+                'term': 'Recorded cash out',
+                'definition': 'Total amount marked as paid on expense rows. This is the broader cash-out figure used for the report cash movement summary.',
+            },
+            {
+                'term': 'Vendor paid',
+                'definition': 'Only the dated vendor payment vouchers that are marked paid in the selected reporting period.',
+            },
+            {
+                'term': 'Outstanding payable',
+                'definition': 'Unpaid balance still owed against recorded expense rows, plus any vendor opening balance where applicable.',
+            },
+            {
+                'term': 'Accrual surplus',
+                'definition': 'Realized income minus expenses recorded. This is the operating surplus view, not a bank-balance view.',
+            },
+            {
+                'term': 'Net cash movement',
+                'definition': 'Realized income minus recorded cash out. This shows money movement based on received income and paid expense amounts, not opening or closing bank balance.',
+            },
+        ],
         'report_meta': {
             'event_label': f'{selected_event.name} {selected_event.year}' if selected_event else 'All event-linked finance records',
             'range_label': (
@@ -8896,7 +9081,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 if date_from or date_to else
                 'All available dates'
             ),
-            'date_note': 'Income uses payment record update dates. Cash movement uses recorded paid amounts on expense rows, while the monthly table shows dated vendor payouts only.',
+            'date_note': ('Membership payments are excluded whenever a specific event filter is selected. ' if selected_event else '') + 'Income uses payment record update dates. Cash movement uses recorded paid amounts on expense rows, while the monthly table shows dated vendor payouts only.',
         },
         'admin_links': {
             'dashboard': reverse('finance_dashboard'),
@@ -9275,6 +9460,7 @@ def finance_dashboard(request):
     if event_filter:
         event_payments = event_payments.filter(event_id=event_filter)
         corporate_payments = corporate_payments.filter(event_id=event_filter)
+        membership_payments = membership_payments.none()
         sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
         expense_rows = expense_rows.filter(event_id=event_filter)
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)

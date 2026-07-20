@@ -109,13 +109,29 @@
         </section>
 
         <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Realized income</div><div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.total_income }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsor pipeline</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.sponsorship_expected }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-1 text-2xl font-black text-ink">BDT {{ totals.expense_recorded }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Recorded cash out</div><div class="mt-1 text-2xl font-black text-rose-700">BDT {{ totals.expense_paid }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.vendor_paid }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.outstanding_payable }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash movement</div><div class="mt-1 text-2xl font-black {% if totals.net_cash_movement >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_movement }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Realized income</div><div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.total_income }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Confirmed received income only.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsor pipeline</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.sponsorship_expected }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Expected, not yet received.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-1 text-2xl font-black text-ink">BDT {{ totals.expense_recorded }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Recorded liability for the period.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Recorded cash out</div><div class="mt-1 text-2xl font-black text-rose-700">BDT {{ totals.expense_paid }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Paid amounts on expense rows.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.vendor_paid }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Paid vendor vouchers with dates.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.outstanding_payable }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Still owed and not yet cleared.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash movement</div><div class="mt-1 text-2xl font-black {% if totals.net_cash_movement >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_movement }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Income less recorded cash out.</div></div>
+        </section>
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-3">
+                <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Legend and definitions</div>
+                <h2 class="mt-1 text-xl font-black text-ink">What each finance term means in this report</h2>
+                <p class="mt-1 text-sm font-semibold leading-6 text-slate-600">These definitions explain exactly how the report is calculating the major finance labels on this page.</p>
+            </div>
+            <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {% for item in report_definitions %}
+                    <article class="rounded-xl border border-line bg-slate-50 px-3 py-3">
+                        <div class="text-sm font-black text-ink">{{ item.term }}</div>
+                        <div class="mt-1 text-xs font-semibold leading-5 text-slate-600">{{ item.definition }}</div>
+                    </article>
+                {% endfor %}
+            </div>
         </section>
 
         <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
@@ -169,6 +185,7 @@
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Monthly trend</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Month-wise finance performance</h2>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Accrual surplus here means income minus expenses recorded. Vendor paid is shown separately as dated voucher payout activity.</p>
                     </div>
                     <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ monthly_page_obj.paginator.count }} total rows</div>
                 </div>
@@ -206,6 +223,7 @@
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Event profitability</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Event-wise profit and cash view</h2>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">This table separates accrual result from cash movement so finance can distinguish recorded liability from actual paid-out amounts.</p>
                     </div>
                     <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ event_page_obj.paginator.count }} total rows</div>
                 </div>
@@ -284,6 +302,7 @@
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Vendor liability</div>
                         <h2 class="mt-1 text-xl font-black text-ink">Payable report by vendor</h2>
+                        <p class="mt-1 text-xs font-semibold leading-5 text-slate-500">Outstanding includes unpaid expense balances and vendor opening balance where applicable.</p>
                     </div>
                     <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ vendor_page_obj.paginator.count }} total rows</div>
                 </div>
@@ -325,7 +344,7 @@
                 <div>
                     <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Activity ledger</div>
                     <h2 class="mt-1 text-xl font-black text-ink">Combined finance activity</h2>
-                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Newest rows first across income, expenses, sponsorships, and vendor payments.</p>
+                    <p class="mt-1 text-sm font-semibold leading-5 text-slate-600">Newest rows first across income, expenses, sponsorships, and vendor payments. This is an activity report, not a bank reconciliation ledger.</p>
                 </div>
                 <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ ledger_page_obj.paginator.count }} total rows</div>
             </div>
