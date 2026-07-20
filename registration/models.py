@@ -7,6 +7,7 @@ from django.utils.text import slugify
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
+from decimal import Decimal
 
 
 # Create your models here.

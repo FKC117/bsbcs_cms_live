@@ -108,7 +108,7 @@
                         <div><label class="finance-label">Amount</label><input name="sponsorship_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
                         <div><label class="finance-label">Status</label><select name="sponsorship_status" class="finance-select">{% for value, label in finance_status_choices.sponsorship %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Received date</label><input name="sponsorship_received_on" type="date" class="finance-input"></div>
-                        <div><label class="finance-label">Reference</label><input name="sponsorship_reference_number" class="finance-input"></div>
+                        <div><label class="finance-label">Income reference</label><input name="sponsorship_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
                         <div class="md:col-span-2"><label class="finance-label">Agreement or proof file</label><input name="sponsorship_agreement_file" type="file" class="finance-file"></div>
                         <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="sponsorship_note" class="finance-textarea"></textarea></div>
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save sponsorship income</button></div>
@@ -126,7 +126,7 @@
                         <div><label class="finance-label">Category</label><select name="expense_category" class="finance-select" required><option value="">Select category</option>{% for category in finance_categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Vendor</label><select name="expense_vendor" class="finance-select"><option value="">No vendor selected</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Expense title</label><input name="expense_title" class="finance-input" required></div>
-                        <div><label class="finance-label">Bill number</label><input name="expense_bill_number" class="finance-input"></div>
+                        <div><label class="finance-label">Bill number</label><input name="expense_bill_number" class="finance-input" placeholder="Auto if left empty"></div>
                         <div><label class="finance-label">Amount</label><input name="expense_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
                         <div><label class="finance-label">Already paid</label><input name="expense_paid_amount" type="number" step="0.01" min="0" value="0" class="finance-input"></div>
                         <div><label class="finance-label">Status</label><select name="expense_status" class="finance-select">{% for value, label in finance_status_choices.expense %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
@@ -147,12 +147,12 @@
                         {% csrf_token %}<input type="hidden" name="finance_action" value="add_vendor_payment"><input type="hidden" name="q" value="{{ current_filters.q }}">
                         <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General vendor payment</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Vendor</label><select name="payment_vendor" class="finance-select" required><option value="">Select vendor</option>{% for vendor in finance_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Linked expense</label><select name="payment_expense" class="finance-select"><option value="">No linked expense</option>{% for expense in recent_expenses %}<option value="{{ expense.id }}">{{ expense.title }} | BDT {{ expense.amount }}</option>{% endfor %}</select></div>
+                        <div><label class="finance-label">Linked expense</label><select name="payment_expense" class="finance-select"><option value="">No linked expense</option>{% for expense in recent_expenses %}<option value="{{ expense.id }}">{{ expense.title }}{% if expense.bill_number %} | {{ expense.bill_number }}{% endif %} | BDT {{ expense.outstanding_amount }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Amount</label><input name="payment_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
                         <div><label class="finance-label">Payment date</label><input name="payment_date" type="date" class="finance-input"></div>
                         <div><label class="finance-label">Method</label><select name="payment_method" class="finance-select">{% for value, label in finance_status_choices.payment_methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Status</label><select name="payment_status" class="finance-select">{% for value, label in finance_status_choices.payment %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                        <div><label class="finance-label">Reference</label><input name="payment_reference_number" class="finance-input"></div>
+                        <div><label class="finance-label">Voucher number / reference</label><input name="payment_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
                         <div class="md:col-span-2"><label class="finance-label">Payment proof file</label><input name="payment_proof_file" type="file" class="finance-file"></div>
                         <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="payment_note" class="finance-textarea"></textarea></div>
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor payment</button></div>

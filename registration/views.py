@@ -8821,7 +8821,10 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-rose-700',
         })
-    ledger_rows.sort(key=lambda row: row['date'] or timezone.localdate(), reverse=True)
+    ledger_rows.sort(
+        key=lambda row: ((row['date'].date() if hasattr(row['date'], 'hour') else row['date']) or timezone.localdate()),
+        reverse=True,
+    )
 
     return {
         'site_settings': site_settings,
@@ -8881,6 +8884,73 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'payment_center': reverse('dashboard_payment_center'),
         },
     }
+
+
+def _finance_event_code(event):
+    return f"EVT{event.pk}" if event else 'GEN'
+
+
+def _finance_next_reference(model, field_name, prefix):
+    rows = model.objects.filter(**{f'{field_name}__startswith': prefix}).values_list(field_name, flat=True)
+    next_number = 1
+    pattern = re.compile(rf'^{re.escape(prefix)}-(\d+)$')
+    for value in rows:
+        match = pattern.match(str(value or '').strip())
+        if match:
+            next_number = max(next_number, int(match.group(1)) + 1)
+    return f'{prefix}-{next_number:04d}'
+
+
+def _finance_build_bill_number(expense_date, event=None):
+    prefix = f"BILL-{_finance_event_code(event)}-{expense_date.strftime('%Y%m')}"
+    return _finance_next_reference(FinanceExpense, 'bill_number', prefix)
+
+
+def _finance_build_voucher_number(payment_date, event=None):
+    prefix = f"VCH-{_finance_event_code(event)}-{payment_date.strftime('%Y%m')}"
+    return _finance_next_reference(FinanceVendorPayment, 'reference_number', prefix)
+
+
+def _finance_build_income_reference(received_on, event=None):
+    prefix = f"INC-{_finance_event_code(event)}-{received_on.strftime('%Y%m')}"
+    return _finance_next_reference(FinanceSponsorshipIncome, 'reference_number', prefix)
+
+
+def _finance_validate_money_pair(amount, paid_amount=Decimal('0.00')):
+    amount = Decimal(amount or '0')
+    paid_amount = Decimal(paid_amount or '0')
+    if amount <= 0:
+        raise ValueError('Amount must be greater than zero.')
+    if paid_amount < 0:
+        raise ValueError('Paid amount cannot be negative.')
+    if paid_amount > amount:
+        raise ValueError('Paid amount cannot be greater than the total amount.')
+    return amount, paid_amount
+
+
+def _finance_sync_expense_state(expense, acting_user=None):
+    amount = expense.amount or Decimal('0.00')
+    paid_amount = expense.paid_amount or Decimal('0.00')
+    if expense.status == FinanceExpense.STATUS_CANCELLED:
+        expense.cancelled_by = acting_user or expense.cancelled_by
+        expense.cancelled_at = expense.cancelled_at or timezone.now()
+        return
+    expense.cancelled_by = None
+    expense.cancelled_at = None
+    if paid_amount >= amount and amount > 0:
+        expense.status = FinanceExpense.STATUS_PAID
+    elif paid_amount > 0:
+        expense.status = FinanceExpense.STATUS_PARTIALLY_PAID
+    elif expense.status != FinanceExpense.STATUS_DRAFT:
+        expense.status = FinanceExpense.STATUS_APPROVED
+    if expense.status in {FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID, FinanceExpense.STATUS_PAID}:
+        if acting_user and not expense.approved_by:
+            expense.approved_by = acting_user
+        if not expense.approved_at:
+            expense.approved_at = timezone.now()
+    elif expense.status == FinanceExpense.STATUS_DRAFT:
+        expense.approved_by = None
+        expense.approved_at = None
 
 
 @dashboard_permission_required('finance')
@@ -8951,20 +9021,26 @@ def finance_dashboard(request):
                 company_name = (request.POST.get('sponsorship_company_name') or '').strip()
                 if not company_name:
                     raise ValueError('Sponsor or company name is required.')
+                sponsorship_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                sponsorship_status = (request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED
+                received_on = parse_date(request.POST.get('sponsorship_received_on'), 'received date')
+                if sponsorship_status == FinanceSponsorshipIncome.STATUS_RECEIVED and not received_on:
+                    received_on = timezone.localdate()
+                reference_number = (request.POST.get('sponsorship_reference_number') or '').strip() or _finance_build_income_reference(received_on or timezone.localdate(), sponsorship_event)
                 sponsorship = FinanceSponsorshipIncome.objects.create(
-                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
+                    event=sponsorship_event,
                     sponsor=Sponsor.objects.filter(pk=(request.POST.get('sponsor_id') or '').strip()).first() if (request.POST.get('sponsor_id') or '').strip() else None,
                     company_name=company_name,
                     title=(request.POST.get('sponsorship_title') or '').strip() or None,
                     amount=parse_amount(request.POST.get('sponsorship_amount'), 'sponsorship amount'),
-                    status=(request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED,
-                    received_on=parse_date(request.POST.get('sponsorship_received_on'), 'received date'),
-                    reference_number=(request.POST.get('sponsorship_reference_number') or '').strip() or None,
+                    status=sponsorship_status,
+                    received_on=received_on,
+                    reference_number=reference_number,
                     agreement_file=request.FILES.get('sponsorship_agreement_file'),
                     note=(request.POST.get('sponsorship_note') or '').strip() or None,
                 )
                 dashboard_log_action(request, sponsorship, ADDITION, 'Created sponsorship income from finance dashboard.')
-                messages.success(request, f'Sponsorship income saved for {sponsorship.company_name}.')
+                messages.success(request, f'Sponsorship income saved for {sponsorship.company_name} as {sponsorship.reference_number}.')
                 return redirect(redirect_url)
 
             if action == 'add_expense':
@@ -8974,42 +9050,74 @@ def finance_dashboard(request):
                     raise ValueError('Expense title is required.')
                 if not category:
                     raise ValueError('Choose a valid expense category.')
-                expense_status = (request.POST.get('expense_status') or FinanceExpense.STATUS_DRAFT).strip() or FinanceExpense.STATUS_DRAFT
-                expense = FinanceExpense.objects.create(
-                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
+                expense_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                expense_vendor = FinanceVendor.objects.filter(pk=(request.POST.get('expense_vendor') or '').strip()).first() if (request.POST.get('expense_vendor') or '').strip() else None
+                expense_date = parse_date(request.POST.get('expense_date'), 'expense date') or timezone.localdate()
+                due_date = parse_date(request.POST.get('expense_due_date'), 'expense due date')
+                if due_date and due_date < expense_date:
+                    raise ValueError('Due date cannot be earlier than the expense date.')
+                amount, paid_amount = _finance_validate_money_pair(
+                    parse_amount(request.POST.get('expense_amount'), 'expense amount'),
+                    parse_amount(request.POST.get('expense_paid_amount') or '0', 'paid amount'),
+                )
+                requested_status = (request.POST.get('expense_status') or FinanceExpense.STATUS_DRAFT).strip() or FinanceExpense.STATUS_DRAFT
+                expense = FinanceExpense(
+                    event=expense_event,
                     category=category,
-                    vendor=FinanceVendor.objects.filter(pk=(request.POST.get('expense_vendor') or '').strip()).first() if (request.POST.get('expense_vendor') or '').strip() else None,
+                    vendor=expense_vendor,
                     title=title,
-                    bill_number=(request.POST.get('expense_bill_number') or '').strip() or None,
-                    expense_date=parse_date(request.POST.get('expense_date'), 'expense date') or timezone.localdate(),
-                    due_date=parse_date(request.POST.get('expense_due_date'), 'expense due date'),
-                    amount=parse_amount(request.POST.get('expense_amount'), 'expense amount'),
-                    paid_amount=parse_amount(request.POST.get('expense_paid_amount') or '0', 'paid amount'),
-                    status=expense_status,
-                    approved_by=request.user if expense_status in [FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID, FinanceExpense.STATUS_PAID] else None,
-                    approved_at=timezone.now() if expense_status in [FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID, FinanceExpense.STATUS_PAID] else None,
-                    cancelled_by=request.user if expense_status == FinanceExpense.STATUS_CANCELLED else None,
-                    cancelled_at=timezone.now() if expense_status == FinanceExpense.STATUS_CANCELLED else None,
+                    bill_number=(request.POST.get('expense_bill_number') or '').strip() or _finance_build_bill_number(expense_date, expense_event),
+                    expense_date=expense_date,
+                    due_date=due_date,
+                    amount=amount,
+                    paid_amount=paid_amount,
+                    status=FinanceExpense.STATUS_CANCELLED if requested_status == FinanceExpense.STATUS_CANCELLED else requested_status,
                     description=(request.POST.get('expense_description') or '').strip() or None,
                 )
+                if expense.status == FinanceExpense.STATUS_CANCELLED:
+                    expense.cancelled_by = request.user
+                    expense.cancelled_at = timezone.now()
+                    expense.approved_by = None
+                    expense.approved_at = None
+                else:
+                    if expense.status == FinanceExpense.STATUS_DRAFT and paid_amount > 0:
+                        expense.status = FinanceExpense.STATUS_APPROVED
+                    _finance_sync_expense_state(expense, acting_user=request.user if requested_status != FinanceExpense.STATUS_DRAFT or paid_amount > 0 else None)
+                expense.save()
                 expense_file = request.FILES.get('expense_bill_file')
                 if expense_file:
                     FinanceExpenseAttachment.objects.create(expense=expense, title='Primary bill', file=expense_file)
                 dashboard_log_action(request, expense, ADDITION, 'Created expense row from finance dashboard.')
-                messages.success(request, f'Expense "{expense.title}" saved.')
+                messages.success(request, f'Expense "{expense.title}" saved as {expense.bill_number}.')
                 return redirect(redirect_url)
 
             if action == 'add_vendor_payment':
                 vendor = FinanceVendor.objects.filter(pk=(request.POST.get('payment_vendor') or '').strip()).first()
                 if not vendor:
                     raise ValueError('Choose a valid vendor for the payment.')
-                payment_status = (request.POST.get('payment_status') or FinanceVendorPayment.STATUS_PAID).strip() or FinanceVendorPayment.STATUS_PAID
+                linked_expense = FinanceExpense.objects.filter(pk=(request.POST.get('payment_expense') or '').strip()).first() if (request.POST.get('payment_expense') or '').strip() else None
+                payment_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                payment_status = (request.POST.get('payment_status') or FinanceVendorPayment.STATUS_SCHEDULED).strip() or FinanceVendorPayment.STATUS_SCHEDULED
+                payment_date = parse_date(request.POST.get('payment_date'), 'payment date') or timezone.localdate()
+                payment_amount = parse_amount(request.POST.get('payment_amount'), 'vendor payment amount')
+                if payment_amount <= 0:
+                    raise ValueError('Vendor payment amount must be greater than zero.')
+                if linked_expense:
+                    if linked_expense.status in {FinanceExpense.STATUS_DRAFT, FinanceExpense.STATUS_CANCELLED}:
+                        raise ValueError('Only approved or active expense rows can be linked to a payment.')
+                    if linked_expense.vendor_id and linked_expense.vendor_id != vendor.id:
+                        raise ValueError('The selected vendor does not match the linked expense vendor.')
+                    if payment_status == FinanceVendorPayment.STATUS_PAID and payment_amount > linked_expense.outstanding_amount:
+                        raise ValueError('Payment amount cannot be greater than the linked expense outstanding amount.')
+                    if not payment_event and linked_expense.event_id:
+                        payment_event = linked_expense.event
+                reference_number = (request.POST.get('payment_reference_number') or '').strip() or _finance_build_voucher_number(payment_date, payment_event)
                 vendor_payment = FinanceVendorPayment.objects.create(
                     vendor=vendor,
-                    expense=FinanceExpense.objects.filter(pk=(request.POST.get('payment_expense') or '').strip()).first() if (request.POST.get('payment_expense') or '').strip() else None,
-                    event=Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None,
-                    amount=parse_amount(request.POST.get('payment_amount'), 'vendor payment amount'),
-                    payment_date=parse_date(request.POST.get('payment_date'), 'payment date') or timezone.localdate(),
+                    expense=linked_expense,
+                    event=payment_event,
+                    amount=payment_amount,
+                    payment_date=payment_date,
                     method=(request.POST.get('payment_method') or FinanceVendorPayment.METHOD_BANK).strip() or FinanceVendorPayment.METHOD_BANK,
                     status=payment_status,
                     scheduled_by=request.user if payment_status == FinanceVendorPayment.STATUS_SCHEDULED else None,
@@ -9018,7 +9126,7 @@ def finance_dashboard(request):
                     paid_confirmed_at=timezone.now() if payment_status == FinanceVendorPayment.STATUS_PAID else None,
                     cancelled_by=request.user if payment_status == FinanceVendorPayment.STATUS_CANCELLED else None,
                     cancelled_at=timezone.now() if payment_status == FinanceVendorPayment.STATUS_CANCELLED else None,
-                    reference_number=(request.POST.get('payment_reference_number') or '').strip() or None,
+                    reference_number=reference_number,
                     note=(request.POST.get('payment_note') or '').strip() or None,
                 )
                 proof_file = request.FILES.get('payment_proof_file')
@@ -9026,32 +9134,30 @@ def finance_dashboard(request):
                     FinanceVendorPaymentAttachment.objects.create(payment=vendor_payment, title='Primary proof', file=proof_file)
                 if vendor_payment.expense_id and vendor_payment.status == FinanceVendorPayment.STATUS_PAID:
                     expense = vendor_payment.expense
-                    expense.paid_amount = (expense.paid_amount or Decimal('0.00')) + (vendor_payment.amount or Decimal('0.00'))
-                    if expense.paid_amount >= (expense.amount or Decimal('0.00')):
-                        expense.status = FinanceExpense.STATUS_PAID
-                    elif expense.paid_amount > 0 and expense.status != FinanceExpense.STATUS_CANCELLED:
-                        expense.status = FinanceExpense.STATUS_PARTIALLY_PAID
-                    expense.save(update_fields=['paid_amount', 'status', 'updated_at'])
+                    expense.paid_amount = min((expense.amount or Decimal('0.00')), (expense.paid_amount or Decimal('0.00')) + (vendor_payment.amount or Decimal('0.00')))
+                    _finance_sync_expense_state(expense, acting_user=request.user)
+                    expense.save(update_fields=['paid_amount', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                 dashboard_log_action(request, vendor_payment, ADDITION, 'Created vendor payment from finance dashboard.')
-                messages.success(request, f'Vendor payment saved for {vendor.name}.')
+                messages.success(request, f'Vendor payment saved for {vendor.name} as {vendor_payment.reference_number}.')
                 return redirect(redirect_url)
 
             if action == 'approve_expense':
                 expense = get_object_or_404(FinanceExpense, pk=(request.POST.get('expense_id') or '').strip())
                 if expense.status == FinanceExpense.STATUS_CANCELLED:
                     raise ValueError('Cancelled expenses cannot be approved.')
-                expense.status = FinanceExpense.STATUS_APPROVED if (expense.paid_amount or Decimal('0.00')) <= 0 else FinanceExpense.STATUS_PARTIALLY_PAID
-                expense.approved_by = request.user
-                expense.approved_at = timezone.now()
-                expense.cancelled_by = None
-                expense.cancelled_at = None
-                expense.save(update_fields=['status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                if not expense.bill_number:
+                    expense.bill_number = _finance_build_bill_number(expense.expense_date or timezone.localdate(), expense.event)
+                expense.status = FinanceExpense.STATUS_APPROVED
+                _finance_sync_expense_state(expense, acting_user=request.user)
+                expense.save(update_fields=['bill_number', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                 dashboard_log_action(request, expense, CHANGE, 'Approved expense from finance dashboard.')
                 messages.success(request, f'Expense "{expense.title}" approved.')
                 return redirect(redirect_url)
 
             if action == 'cancel_expense':
                 expense = get_object_or_404(FinanceExpense, pk=(request.POST.get('expense_id') or '').strip())
+                if expense.vendor_payments.filter(status=FinanceVendorPayment.STATUS_PAID).exists():
+                    raise ValueError('This expense already has paid vouchers. Cancel it from admin only after reconciliation.')
                 expense.status = FinanceExpense.STATUS_CANCELLED
                 expense.cancelled_by = request.user
                 expense.cancelled_at = timezone.now()
@@ -9064,12 +9170,16 @@ def finance_dashboard(request):
                 vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
                 if vendor_payment.status == FinanceVendorPayment.STATUS_PAID:
                     raise ValueError('This vendor payment is already marked paid.')
+                if vendor_payment.expense_id and vendor_payment.expense.status in {FinanceExpense.STATUS_DRAFT, FinanceExpense.STATUS_CANCELLED}:
+                    raise ValueError('This voucher is linked to an expense that is not payable.')
+                if not vendor_payment.reference_number:
+                    vendor_payment.reference_number = _finance_build_voucher_number(vendor_payment.payment_date or timezone.localdate(), vendor_payment.event)
                 vendor_payment.status = FinanceVendorPayment.STATUS_SCHEDULED
                 vendor_payment.scheduled_by = request.user
                 vendor_payment.scheduled_at = timezone.now()
                 vendor_payment.cancelled_by = None
                 vendor_payment.cancelled_at = None
-                vendor_payment.save(update_fields=['status', 'scheduled_by', 'scheduled_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                vendor_payment.save(update_fields=['reference_number', 'status', 'scheduled_by', 'scheduled_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                 dashboard_log_action(request, vendor_payment, CHANGE, 'Marked vendor payment scheduled from finance dashboard.')
                 messages.success(request, f'Payment for {vendor_payment.vendor.name} marked scheduled.')
                 return redirect(redirect_url)
@@ -9077,20 +9187,25 @@ def finance_dashboard(request):
             if action == 'mark_payment_paid':
                 vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
                 if vendor_payment.status != FinanceVendorPayment.STATUS_PAID:
+                    if vendor_payment.expense_id:
+                        expense = vendor_payment.expense
+                        if expense.status in {FinanceExpense.STATUS_DRAFT, FinanceExpense.STATUS_CANCELLED}:
+                            raise ValueError('This linked expense cannot receive a paid voucher.')
+                        if vendor_payment.amount > expense.outstanding_amount:
+                            raise ValueError('This voucher amount is greater than the linked expense outstanding amount.')
+                    if not vendor_payment.reference_number:
+                        vendor_payment.reference_number = _finance_build_voucher_number(vendor_payment.payment_date or timezone.localdate(), vendor_payment.event)
                     vendor_payment.status = FinanceVendorPayment.STATUS_PAID
                     vendor_payment.paid_confirmed_by = request.user
                     vendor_payment.paid_confirmed_at = timezone.now()
                     vendor_payment.cancelled_by = None
                     vendor_payment.cancelled_at = None
-                    vendor_payment.save(update_fields=['status', 'paid_confirmed_by', 'paid_confirmed_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                    vendor_payment.save(update_fields=['reference_number', 'status', 'paid_confirmed_by', 'paid_confirmed_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                     if vendor_payment.expense_id:
                         expense = vendor_payment.expense
                         expense.paid_amount = min((expense.amount or Decimal('0.00')), (expense.paid_amount or Decimal('0.00')) + (vendor_payment.amount or Decimal('0.00')))
-                        if expense.paid_amount >= (expense.amount or Decimal('0.00')):
-                            expense.status = FinanceExpense.STATUS_PAID
-                        elif expense.paid_amount > 0 and expense.status != FinanceExpense.STATUS_CANCELLED:
-                            expense.status = FinanceExpense.STATUS_PARTIALLY_PAID
-                        expense.save(update_fields=['paid_amount', 'status', 'updated_at'])
+                        _finance_sync_expense_state(expense, acting_user=request.user)
+                        expense.save(update_fields=['paid_amount', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                 dashboard_log_action(request, vendor_payment, CHANGE, 'Marked vendor payment paid from finance dashboard.')
                 messages.success(request, f'Payment for {vendor_payment.vendor.name} marked paid.')
                 return redirect(redirect_url)
