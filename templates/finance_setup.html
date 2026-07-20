@@ -42,7 +42,7 @@
                 <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Keep vendor records, opening balances, contact details, and finance categories separate from the live intake and approval workflow.</p>
             </div>
             <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
-                <div class="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                     <div>
                         <label class="finance-label" for="scope">View</label>
                         <select id="scope" name="scope" class="finance-select">
@@ -51,16 +51,12 @@
                             <option value="categories" {% if current_filters.scope == 'categories' %}selected{% endif %}>Categories only</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="finance-label" for="q">Search</label>
-                        <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, contact, phone, code, or category">
-                    </div>
                     <div class="grid content-end">
-                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Apply</button>
+                        <button class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
                     </div>
                 </div>
-                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                    <div class="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ setup_meta.scope_label }}</div>
+                <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, contact, phone, code, or category">
                     <a href="{% url 'finance_setup' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
                 </div>
             </form>
