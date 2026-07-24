@@ -108,13 +108,36 @@
             </div>
         </section>
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-7">
+        <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Report workflow</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Reports are read-only, editing lives in the working desks</h2>
+                    <p class="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-600">Use this page to read totals, trends, liabilities, and ledgers. When a number looks wrong, go to the finance desk to post rows, the registers to edit bills and vouchers, or setup to update vendors, categories, and accounts.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <a href="{% url 'finance_dashboard' %}{% if current_filters.event or current_filters.date_from or current_filters.date_to %}?{% endif %}{% if current_filters.event %}event={{ current_filters.event }}{% endif %}{% if current_filters.date_from %}{% if current_filters.event %}&{% endif %}date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}{% if current_filters.event or current_filters.date_from %}&{% endif %}date_to={{ current_filters.date_to }}{% endif %}" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Open finance desk</a>
+                    <a href="{% url 'finance_registers' %}{% if current_filters.event or current_filters.date_from or current_filters.date_to %}?{% endif %}{% if current_filters.event %}event={{ current_filters.event }}{% endif %}{% if current_filters.date_from %}{% if current_filters.event %}&{% endif %}date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}{% if current_filters.event or current_filters.date_from %}&{% endif %}date_to={{ current_filters.date_to }}{% endif %}" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open registers</a>
+                    <a href="{% url 'finance_setup' %}" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open setup</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-10">
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Realized income</div><div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.total_income }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Confirmed received income only.</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsor pipeline</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.sponsorship_expected }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Expected, not yet received.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Other income</div><div class="mt-1 text-2xl font-black text-bsbcs-green">BDT {{ totals.other_income_received }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Interest, donation, and misc inflow.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Interest income</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.interest_income }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">FDR and bank interest only.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Bkash gateway gross</div><div class="mt-1 text-2xl font-black text-bsbcs-teal">BDT {{ totals.gateway_collections_gross }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">{{ finance_control.gateway_collection_account.name|default:'No gateway account tagged yet' }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Gateway fee deducted</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.gateway_fee_total }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Registration and membership settlement charge.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Gateway net settlement</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.gateway_net_settlement }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Registration: {{ finance_control.registration_receiving_account.name|default:'Not tagged' }} | Membership: {{ finance_control.membership_receiving_account.name|default:'Not tagged' }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-1 text-2xl font-black text-ink">BDT {{ totals.expense_recorded }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Recorded liability for the period.</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Recorded cash out</div><div class="mt-1 text-2xl font-black text-rose-700">BDT {{ totals.expense_paid }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Paid amounts on expense rows.</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.vendor_paid }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Paid vendor vouchers with dates.</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.outstanding_payable }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Still owed and not yet cleared.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Transfers</div><div class="mt-1 text-2xl font-black text-slate-900">BDT {{ totals.transfer_total }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Internal movement only.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Bank balance</div><div class="mt-1 text-2xl font-black text-bsbcs-blue">BDT {{ totals.bank_balance }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Tracked bank-account balance.</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Petty cash</div><div class="mt-1 text-2xl font-black text-bsbcs-amber">BDT {{ totals.petty_cash_balance }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Cash in hand from tagged flows.</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash movement</div><div class="mt-1 text-2xl font-black {% if totals.net_cash_movement >= 0 %}text-bsbcs-green{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_movement }}</div><div class="mt-1 text-[11px] font-semibold text-slate-500">Income less recorded cash out.</div></div>
         </section>
 
@@ -131,6 +154,42 @@
                         <div class="mt-1 text-xs font-semibold leading-5 text-slate-600">{{ item.definition }}</div>
                     </article>
                 {% endfor %}
+            </div>
+        </section>
+
+
+        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <div class="mb-3 flex items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Tracked account balance</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Bank, petty cash, and FDR position</h2>
+                    <p class="mt-1 text-sm font-semibold leading-6 text-slate-600">These balances use opening balances, tagged inflows, internal transfers, and account-tagged vendor payments.</p>
+                </div>
+                <div class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-bsbcs-blue ring-1 ring-blue-100">{{ account_balance_rows|length }} accounts</div>
+            </div>
+            <div class="finance-table-wrap">
+                <table class="finance-table">
+                    <thead><tr><th>Account</th><th>Type</th><th class="num">Opening</th><th class="num">Inflows</th><th class="num">Gateway gross</th><th class="num">Gateway charge</th><th class="num">Gateway net in</th><th class="num">Transfers in</th><th class="num">Transfers out</th><th class="num">Vendor paid</th><th class="num">Closing</th></tr></thead>
+                    <tbody>
+                        {% for row in account_balance_rows %}
+                            <tr>
+                                <td>{{ row.account.name }}</td>
+                                <td>{{ row.account.get_account_type_display }}</td>
+                                <td class="num">BDT {{ row.opening_balance }}</td>
+                                <td class="num text-bsbcs-green">BDT {{ row.total_inflows }}</td>
+                                <td class="num">BDT {{ row.gateway_collection_in }}</td>
+                                <td class="num text-bsbcs-amber">BDT {{ row.gateway_fee }}</td>
+                                <td class="num text-bsbcs-blue">BDT {{ row.gateway_settlement_in }}</td>
+                                <td class="num">BDT {{ row.transfers_in }}</td>
+                                <td class="num">BDT {{ row.transfers_out|add:row.gateway_settlement_out }}</td>
+                                <td class="num text-rose-700">BDT {{ row.vendor_paid }}</td>
+                                <td class="num {% if row.closing_balance >= 0 %}text-bsbcs-blue{% else %}text-rose-700{% endif %}">BDT {{ row.closing_balance }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="11" class="text-center text-slate-500">No finance accounts matched this reporting window.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </section>
 

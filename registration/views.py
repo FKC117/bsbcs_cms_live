@@ -8674,9 +8674,11 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
     event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
     corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
     membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').filter(status='completed')
-    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor').all()
+    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor', 'received_account').all()
+    other_income_rows = FinanceOtherIncome.objects.select_related('event', 'received_account').all()
     expense_rows = FinanceExpense.objects.select_related('event', 'vendor', 'category').exclude(status=FinanceExpense.STATUS_CANCELLED)
-    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense').filter(status=FinanceVendorPayment.STATUS_PAID)
+    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense', 'source_account').filter(status=FinanceVendorPayment.STATUS_PAID)
+    transfer_rows = FinanceTransfer.objects.select_related('event', 'from_account', 'to_account').filter(status=FinanceTransfer.STATUS_POSTED)
     vendor_rows = FinanceVendor.objects.filter(is_active=True).order_by('name')
 
     if event_filter:
@@ -8684,14 +8686,18 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         corporate_payments = corporate_payments.filter(event_id=event_filter)
         membership_payments = membership_payments.none()
         sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
+        other_income_rows = other_income_rows.filter(event_id=event_filter)
         expense_rows = expense_rows.filter(event_id=event_filter)
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+        transfer_rows = transfer_rows.filter(event_id=event_filter)
 
     event_payments = _finance_apply_range(event_payments, 'updated_at__date', date_from, date_to)
     corporate_payments = _finance_apply_range(corporate_payments, 'updated_at__date', date_from, date_to)
     membership_payments = _finance_apply_range(membership_payments, 'updated_at__date', date_from, date_to)
+    other_income_rows = _finance_apply_range(other_income_rows, 'received_on', date_from, date_to)
     expense_rows = _finance_apply_range(expense_rows, 'expense_date', date_from, date_to)
     vendor_payment_rows = _finance_apply_range(vendor_payment_rows, 'payment_date', date_from, date_to)
+    transfer_rows = _finance_apply_range(transfer_rows, 'transfer_date', date_from, date_to)
 
     if date_from or date_to:
         sponsorship_rows = sponsorship_rows.filter(
@@ -8708,22 +8714,37 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             )
         )
 
+    finance_control = _finance_get_control()
     event_income = event_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     corporate_income = corporate_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     membership_income = membership_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    event_gateway_fee = _finance_calculate_gateway_fee(event_income, finance_control.gateway_charge_percent)
+    membership_gateway_fee = _finance_calculate_gateway_fee(membership_income, finance_control.gateway_charge_percent)
+    gateway_fee_total = event_gateway_fee + membership_gateway_fee
+    gateway_collections_gross = event_income + membership_income
+    gateway_net_settlement = gateway_collections_gross - gateway_fee_total
     sponsorship_received = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     sponsorship_expected = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_EXPECTED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    other_income_received = other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    interest_income = other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED, income_type__in=[FinanceOtherIncome.TYPE_FDR_INTEREST, FinanceOtherIncome.TYPE_BANK_INTEREST]).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     expense_recorded = expense_rows.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     expense_paid = expense_rows.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
     vendor_paid = vendor_payment_rows.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    transfer_total = transfer_rows.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     outstanding_payable = Decimal('0.00')
     for expense in expense_rows:
         outstanding_payable += expense.outstanding_amount
 
-    total_income = event_income + corporate_income + membership_income + sponsorship_received
+    account_balance_rows = _finance_build_account_balance_rows(event_filter=event_filter, date_from=date_from, date_to=date_to)
+    bank_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_BANK), Decimal('0.00'))
+    petty_cash_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_PETTY_CASH), Decimal('0.00'))
+    fdr_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_FDR), Decimal('0.00'))
+    total_account_balance = sum((row['closing_balance'] for row in account_balance_rows), Decimal('0.00'))
+
+    total_income = event_income + corporate_income + membership_income + sponsorship_received + other_income_received
     operating_surplus = total_income - expense_recorded
-    net_cash_movement = total_income - expense_paid
+    net_cash_movement = total_income - expense_paid - gateway_fee_total
     income_pipeline = total_income + sponsorship_expected
 
     income_rows = [
@@ -8761,6 +8782,20 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'amount': sponsorship_expected,
             'tone': 'text-bsbcs-amber',
             'meta': 'Pipeline income not yet received',
+        },
+        {
+            'label': 'Other income received',
+            'count': other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED).count(),
+            'amount': other_income_received,
+            'tone': 'text-bsbcs-green',
+            'meta': 'Interest, donations, and other finance income already received',
+        },
+        {
+            'label': 'Interest income',
+            'count': other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED, income_type__in=[FinanceOtherIncome.TYPE_FDR_INTEREST, FinanceOtherIncome.TYPE_BANK_INTEREST]).count(),
+            'amount': interest_income,
+            'tone': 'text-bsbcs-blue',
+            'meta': 'FDR and bank interest received in the reporting window',
         },
     ]
 
@@ -8812,7 +8847,9 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 'event_income': Decimal('0.00'),
                 'corporate_income': Decimal('0.00'),
                 'membership_income': Decimal('0.00'),
+                'gateway_fee': Decimal('0.00'),
                 'sponsorship_received': Decimal('0.00'),
+                'other_income': Decimal('0.00'),
                 'expense_recorded': Decimal('0.00'),
                 'vendor_paid': Decimal('0.00'),
             }
@@ -8821,17 +8858,25 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
 
     for payment in event_payments:
         month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
-        month_row['event_income'] += payment.amount or Decimal('0.00')
+        payment_amount = payment.amount or Decimal('0.00')
+        month_row['event_income'] += payment_amount
+        month_row['gateway_fee'] += _finance_calculate_gateway_fee(payment_amount, finance_control.gateway_charge_percent)
     for payment in corporate_payments:
         month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
         month_row['corporate_income'] += payment.amount or Decimal('0.00')
     for payment in membership_payments:
         month_row = ensure_month_row(payment.updated_at.date().replace(day=1))
-        month_row['membership_income'] += payment.amount or Decimal('0.00')
+        payment_amount = payment.amount or Decimal('0.00')
+        month_row['membership_income'] += payment_amount
+        month_row['gateway_fee'] += _finance_calculate_gateway_fee(payment_amount, finance_control.gateway_charge_percent)
     for sponsorship in sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED):
         month_source = sponsorship.received_on or sponsorship.created_at.date()
         month_row = ensure_month_row(month_source.replace(day=1))
         month_row['sponsorship_received'] += sponsorship.amount or Decimal('0.00')
+    for other_income in other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED):
+        month_source = other_income.received_on or other_income.created_at.date()
+        month_row = ensure_month_row(month_source.replace(day=1))
+        month_row['other_income'] += other_income.amount or Decimal('0.00')
     for expense in expense_rows:
         month_row = ensure_month_row(expense.expense_date.replace(day=1))
         month_row['expense_recorded'] += expense.amount or Decimal('0.00')
@@ -8841,11 +8886,12 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
 
     monthly_trend_rows = []
     for row in monthly_index.values():
-        income_total = row['event_income'] + row['corporate_income'] + row['membership_income'] + row['sponsorship_received']
+        income_total = row['event_income'] + row['corporate_income'] + row['membership_income'] + row['sponsorship_received'] + row.get('other_income', Decimal('0.00'))
         monthly_trend_rows.append({
             **row,
             'total_income': income_total,
             'surplus': income_total - row['expense_recorded'],
+            'cash_in_after_gateway': income_total - row.get('gateway_fee', Decimal('0.00')),
         })
     monthly_trend_rows.sort(key=lambda row: row['month'], reverse=True)
 
@@ -8860,6 +8906,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 'event': event_obj,
                 'event_income': Decimal('0.00'),
                 'corporate_income': Decimal('0.00'),
+                'gateway_fee': Decimal('0.00'),
                 'sponsorship_received': Decimal('0.00'),
                 'sponsorship_expected': Decimal('0.00'),
                 'expense_recorded': Decimal('0.00'),
@@ -8873,7 +8920,9 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
     for payment in event_payments:
         row = ensure_event_row(payment.event)
         if row is not None:
-            row['event_income'] += payment.amount or Decimal('0.00')
+            payment_amount = payment.amount or Decimal('0.00')
+            row['event_income'] += payment_amount
+            row['gateway_fee'] += _finance_calculate_gateway_fee(payment_amount, finance_control.gateway_charge_percent)
     for payment in corporate_payments:
         row = ensure_event_row(payment.event)
         if row is not None:
@@ -8904,17 +8953,24 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'realized_income': realized_income,
             'pipeline_income': realized_income + row['sponsorship_expected'],
             'operating_surplus': realized_income - row['expense_recorded'],
-            'cash_movement': realized_income - row['expense_paid'],
+            'cash_movement': realized_income - row['expense_paid'] - row.get('gateway_fee', Decimal('0.00')),
         })
     event_profit_rows.sort(key=lambda row: row['realized_income'], reverse=True)
 
     statement_rows = [
         {'label': 'Realized income', 'amount': total_income, 'tone': 'text-bsbcs-green'},
+        {'label': 'Interest income', 'amount': interest_income, 'tone': 'text-bsbcs-blue'},
         {'label': 'Expected sponsorship pipeline', 'amount': sponsorship_expected, 'tone': 'text-bsbcs-amber'},
         {'label': 'Expenses recorded', 'amount': expense_recorded, 'tone': 'text-slate-900'},
         {'label': 'Recorded cash out', 'amount': expense_paid, 'tone': 'text-rose-700'},
+        {'label': 'Gateway fee deducted', 'amount': gateway_fee_total, 'tone': 'text-bsbcs-amber'},
         {'label': 'Vendor payments sent', 'amount': vendor_paid, 'tone': 'text-bsbcs-blue'},
+        {'label': 'Internal transfers', 'amount': transfer_total, 'tone': 'text-slate-700'},
         {'label': 'Outstanding payable', 'amount': outstanding_payable, 'tone': 'text-bsbcs-amber'},
+        {'label': 'Bank balance', 'amount': bank_balance, 'tone': 'text-bsbcs-blue'},
+        {'label': 'Petty cash balance', 'amount': petty_cash_balance, 'tone': 'text-bsbcs-amber'},
+        {'label': 'FDR balance', 'amount': fdr_balance, 'tone': 'text-slate-900'},
+        {'label': 'Tracked account balance', 'amount': total_account_balance, 'tone': 'text-bsbcs-green' if total_account_balance >= 0 else 'text-rose-700'},
         {'label': 'Accrual surplus', 'amount': operating_surplus, 'tone': 'text-bsbcs-blue' if operating_surplus >= 0 else 'text-rose-700'},
         {'label': 'Net cash movement', 'amount': net_cash_movement, 'tone': 'text-bsbcs-green' if net_cash_movement >= 0 else 'text-rose-700'},
     ]
@@ -8952,9 +9008,18 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'date': sponsorship.received_on or sponsorship.created_at.date(),
             'kind': 'Sponsorship',
             'title': sponsorship.company_name,
-            'context': sponsorship.title or sponsorship.get_status_display(),
+            'context': (sponsorship.title or sponsorship.get_status_display()) + (f" | {sponsorship.received_account.name}" if sponsorship.received_account else ''),
             'amount': sponsorship.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green' if sponsorship.status == FinanceSponsorshipIncome.STATUS_RECEIVED else 'text-bsbcs-amber',
+        })
+    for other_income in other_income_rows.order_by('-received_on', '-created_at'):
+        ledger_rows.append({
+            'date': other_income.received_on or other_income.created_at.date(),
+            'kind': 'Other income',
+            'title': other_income.title,
+            'context': f"{other_income.get_income_type_display()}{(' | ' + other_income.received_account.name) if other_income.received_account else ''}",
+            'amount': other_income.amount or Decimal('0.00'),
+            'tone': 'text-bsbcs-green' if other_income.status == FinanceOtherIncome.STATUS_RECEIVED else 'text-bsbcs-amber',
         })
     for expense in expense_rows.order_by('-expense_date', '-created_at'):
         ledger_rows.append({
@@ -8970,9 +9035,18 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'date': payment.payment_date,
             'kind': 'Vendor payment',
             'title': payment.vendor.name,
-            'context': payment.reference_number or payment.get_method_display(),
+            'context': (payment.reference_number or payment.get_method_display()) + (f" | {payment.source_account.name}" if payment.source_account else ''),
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-rose-700',
+        })
+    for transfer in transfer_rows.order_by('-transfer_date', '-created_at'):
+        ledger_rows.append({
+            'date': transfer.transfer_date,
+            'kind': 'Internal transfer',
+            'title': f'{transfer.from_account.name} to {transfer.to_account.name}',
+            'context': transfer.reference_number or transfer.get_status_display(),
+            'amount': transfer.amount or Decimal('0.00'),
+            'tone': 'text-slate-700',
         })
     ledger_rows.sort(
         key=lambda row: ((row['date'].date() if hasattr(row['date'], 'hour') else row['date']) or timezone.localdate()),
@@ -8993,6 +9067,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
 
     return {
         'site_settings': site_settings,
+        'finance_control': finance_control,
         'events': events,
         'selected_event': selected_event,
         'current_filters': {
@@ -9006,11 +9081,21 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             'membership_income': membership_income,
             'sponsorship_received': sponsorship_received,
             'sponsorship_expected': sponsorship_expected,
+            'other_income_received': other_income_received,
+            'interest_income': interest_income,
+            'gateway_collections_gross': gateway_collections_gross,
+            'gateway_fee_total': gateway_fee_total,
+            'gateway_net_settlement': gateway_net_settlement,
             'total_income': total_income,
             'expense_recorded': expense_recorded,
             'expense_paid': expense_paid,
             'vendor_paid': vendor_paid,
+            'transfer_total': transfer_total,
             'outstanding_payable': outstanding_payable,
+            'bank_balance': bank_balance,
+            'petty_cash_balance': petty_cash_balance,
+            'fdr_balance': fdr_balance,
+            'total_account_balance': total_account_balance,
             'net_cash_movement': net_cash_movement,
             'operating_surplus': operating_surplus,
             'income_pipeline': income_pipeline,
@@ -9026,6 +9111,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         'monthly_trend_rows': monthly_page_obj.object_list,
         'monthly_trend_export_rows': monthly_trend_rows,
         'statement_rows': statement_rows,
+        'account_balance_rows': account_balance_rows,
         'ledger_rows': ledger_page_obj.object_list,
         'ledger_export_rows': ledger_rows,
         'monthly_page_obj': monthly_page_obj,
@@ -9043,7 +9129,11 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         'report_definitions': [
             {
                 'term': 'Realized income',
-                'definition': 'Money already confirmed as received in the selected reporting window from event registration, corporate registration, membership fees, and received sponsorships.',
+                'definition': 'Money already confirmed as received in the selected reporting window from event registration, corporate registration, membership fees, received sponsorships, and received other income.',
+            },
+            {
+                'term': 'Interest income',
+                'definition': 'FDR interest and bank interest recorded as received in the selected reporting window. This is finance income, not event registration income.',
             },
             {
                 'term': 'Sponsor pipeline',
@@ -9056,6 +9146,18 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             {
                 'term': 'Recorded cash out',
                 'definition': 'Total amount marked as paid on expense rows. This is the broader cash-out figure used for the report cash movement summary.',
+            },
+            {
+                'term': 'Gateway gross collection',
+                'definition': 'The combined registration and membership money first collected through the configured Bkash gateway account before any gateway deduction is applied.',
+            },
+            {
+                'term': 'Gateway fee deducted',
+                'definition': 'The configured payment gateway percentage deducted from registration and membership collections before the net settlement reaches the receiving bank account.',
+            },
+            {
+                'term': 'Gateway net settlement',
+                'definition': 'The actual amount expected to settle into the tagged bank account after the Bkash gateway deduction has been removed from the gross collection.',
             },
             {
                 'term': 'Vendor paid',
@@ -9071,7 +9173,15 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             },
             {
                 'term': 'Net cash movement',
-                'definition': 'Realized income minus recorded cash out. This shows money movement based on received income and paid expense amounts, not opening or closing bank balance.',
+                'definition': 'Realized income minus recorded cash out and minus gateway deductions on registration and membership collections. This shows money movement based on actual settled inflow, not opening or closing bank balance.',
+            },
+            {
+                'term': 'Internal transfers',
+                'definition': 'Money moved between finance accounts such as bank to petty cash. Transfers change where money sits, but they do not create income or expense.',
+            },
+            {
+                'term': 'Tracked account balance',
+                'definition': 'Opening balances plus tagged inflows and transfers in, less transfers out and account-tagged vendor payments. This is the current tracked balance by finance account bucket.',
             },
         ],
         'report_meta': {
@@ -9081,7 +9191,7 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
                 if date_from or date_to else
                 'All available dates'
             ),
-            'date_note': ('Membership payments are excluded whenever a specific event filter is selected. ' if selected_event else '') + 'Income uses payment record update dates. Cash movement uses recorded paid amounts on expense rows, while the monthly table shows dated vendor payouts only.',
+            'date_note': ('Membership payments are excluded whenever a specific event filter is selected. ' if selected_event else '') + 'Income uses payment record update dates. Cash movement uses recorded paid amounts on expense rows, while internal transfers only move value between tracked accounts and do not count as income.',
         },
         'admin_links': {
             'dashboard': reverse('finance_dashboard'),
@@ -9125,6 +9235,160 @@ def _finance_build_voucher_number(payment_date, event=None):
 def _finance_build_income_reference(received_on, event=None):
     prefix = f"INC-{_finance_event_code(event)}-{received_on.strftime('%Y%m')}"
     return _finance_next_reference(FinanceSponsorshipIncome, 'reference_number', prefix)
+
+
+def _finance_build_other_income_reference(received_on, event=None):
+    prefix = f"OINC-{_finance_event_code(event)}-{received_on.strftime('%Y%m')}"
+    return _finance_next_reference(FinanceOtherIncome, 'reference_number', prefix)
+
+
+def _finance_build_transfer_reference(transfer_date, event=None):
+    prefix = f"TRF-{_finance_event_code(event)}-{transfer_date.strftime('%Y%m')}"
+    return _finance_next_reference(FinanceTransfer, 'reference_number', prefix)
+
+
+def _finance_get_control():
+    control = FinanceControl.objects.order_by('pk').first()
+    if control is None:
+        control = FinanceControl.objects.create()
+    return control
+
+
+def _finance_calculate_gateway_fee(amount, percent):
+    amount = Decimal(amount or '0.00')
+    percent = Decimal(percent or '0.00')
+    if amount <= 0 or percent <= 0:
+        return Decimal('0.00')
+    return (amount * percent / Decimal('100')).quantize(Decimal('0.01'))
+
+
+def _finance_build_account_balance_rows(event_filter='', date_from=None, date_to=None):
+    from website.models import MembershipPayment
+
+    account_rows = []
+    accounts = FinanceAccount.objects.filter(is_active=True).order_by('name')
+    control = _finance_get_control()
+
+    event_payments = PaymentStatus.objects.select_related('event').filter(status__in=['paid', 'completed'])
+    corporate_payments = CorporatePayment.objects.select_related('event').filter(status__in=['paid', 'completed'])
+    membership_payments = MembershipPayment.objects.filter(status='completed')
+    sponsorship_rows = FinanceSponsorshipIncome.objects.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED)
+    other_income_rows = FinanceOtherIncome.objects.filter(status=FinanceOtherIncome.STATUS_RECEIVED)
+    transfer_rows = FinanceTransfer.objects.filter(status=FinanceTransfer.STATUS_POSTED)
+    vendor_payment_rows = FinanceVendorPayment.objects.filter(status=FinanceVendorPayment.STATUS_PAID)
+
+    if event_filter:
+        event_payments = event_payments.filter(event_id=event_filter)
+        corporate_payments = corporate_payments.filter(event_id=event_filter)
+        membership_payments = membership_payments.none()
+        sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
+        other_income_rows = other_income_rows.filter(event_id=event_filter)
+        transfer_rows = transfer_rows.filter(event_id=event_filter)
+        vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+
+    event_payments = _finance_apply_range(event_payments, 'updated_at__date', date_from, date_to)
+    corporate_payments = _finance_apply_range(corporate_payments, 'updated_at__date', date_from, date_to)
+    membership_payments = _finance_apply_range(membership_payments, 'updated_at__date', date_from, date_to)
+    sponsorship_rows = _finance_apply_range(sponsorship_rows, 'received_on', date_from, date_to)
+    other_income_rows = _finance_apply_range(other_income_rows, 'received_on', date_from, date_to)
+    transfer_rows = _finance_apply_range(transfer_rows, 'transfer_date', date_from, date_to)
+    vendor_payment_rows = _finance_apply_range(vendor_payment_rows, 'payment_date', date_from, date_to)
+
+    event_income_gross = event_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    corporate_income_gross = corporate_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    membership_income_gross = membership_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    event_gateway_fee = _finance_calculate_gateway_fee(event_income_gross, control.gateway_charge_percent)
+    membership_gateway_fee = _finance_calculate_gateway_fee(membership_income_gross, control.gateway_charge_percent)
+    gateway_collections_gross = event_income_gross + membership_income_gross
+    gateway_fee_total = event_gateway_fee + membership_gateway_fee
+    event_settlement_net = event_income_gross - event_gateway_fee
+    membership_settlement_net = membership_income_gross - membership_gateway_fee
+
+    for account in accounts:
+        sponsorship_income = sponsorship_rows.filter(received_account=account).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        other_income = other_income_rows.filter(received_account=account).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        transfers_in = transfer_rows.filter(to_account=account).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        transfers_out = transfer_rows.filter(from_account=account).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        vendor_paid = vendor_payment_rows.filter(source_account=account).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        event_income = Decimal('0.00')
+        corporate_income = Decimal('0.00')
+        membership_income = Decimal('0.00')
+        gateway_collection_in = Decimal('0.00')
+        gateway_fee = Decimal('0.00')
+        gateway_settlement_in = Decimal('0.00')
+        gateway_settlement_out = Decimal('0.00')
+
+        if control.gateway_collection_account_id and account.pk == control.gateway_collection_account_id:
+            gateway_collection_in = gateway_collections_gross
+            gateway_fee = gateway_fee_total
+            if control.registration_receiving_account_id and control.registration_receiving_account_id != control.gateway_collection_account_id:
+                gateway_settlement_out += event_settlement_net
+            if control.membership_receiving_account_id and control.membership_receiving_account_id != control.gateway_collection_account_id:
+                gateway_settlement_out += membership_settlement_net
+
+        if control.registration_receiving_account_id and account.pk == control.registration_receiving_account_id:
+            if control.gateway_collection_account_id and control.gateway_collection_account_id != control.registration_receiving_account_id:
+                event_income = event_settlement_net
+                gateway_settlement_in += event_settlement_net
+            else:
+                event_income = event_settlement_net
+        if control.corporate_receiving_account_id and account.pk == control.corporate_receiving_account_id:
+            corporate_income = corporate_income_gross
+        if control.membership_receiving_account_id and account.pk == control.membership_receiving_account_id:
+            if control.gateway_collection_account_id and control.gateway_collection_account_id != control.membership_receiving_account_id:
+                membership_income = membership_settlement_net
+                gateway_settlement_in += membership_settlement_net
+            else:
+                membership_income = membership_settlement_net
+
+        if control.gateway_collection_account_id and account.pk == control.gateway_collection_account_id:
+            if control.registration_receiving_account_id == control.gateway_collection_account_id:
+                event_income = Decimal('0.00')
+            if control.membership_receiving_account_id == control.gateway_collection_account_id:
+                membership_income = Decimal('0.00')
+
+        total_inflows = (
+            event_income
+            + corporate_income
+            + membership_income
+            + sponsorship_income
+            + other_income
+            + gateway_collection_in
+        )
+        closing_balance = (
+            (account.opening_balance or Decimal('0.00'))
+            + event_income
+            + corporate_income
+            + membership_income
+            + sponsorship_income
+            + other_income
+            + gateway_collection_in
+            + transfers_in
+            - transfers_out
+            - gateway_settlement_out
+            - gateway_fee
+            - vendor_paid
+        )
+        account_rows.append({
+            'account': account,
+            'opening_balance': account.opening_balance or Decimal('0.00'),
+            'event_income': event_income,
+            'corporate_income': corporate_income,
+            'membership_income': membership_income,
+            'sponsorship_income': sponsorship_income,
+            'other_income': other_income,
+            'gateway_collection_in': gateway_collection_in,
+            'gateway_fee': gateway_fee,
+            'gateway_settlement_in': gateway_settlement_in,
+            'gateway_settlement_out': gateway_settlement_out,
+            'transfers_in': transfers_in,
+            'transfers_out': transfers_out,
+            'vendor_paid': vendor_paid,
+            'total_inflows': total_inflows,
+            'closing_balance': closing_balance,
+        })
+    account_rows.sort(key=lambda row: row['closing_balance'], reverse=True)
+    return account_rows
 
 
 def _finance_validate_money_pair(amount, paid_amount=Decimal('0.00')):
@@ -9172,7 +9436,7 @@ def finance_dashboard(request):
     events = Event.objects.order_by('-year', '-start_date', 'name')
     event_filter = ((request.POST.get('event') if request.method == 'POST' else request.GET.get('event', '')) or '').strip()
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
-    valid_tabs = {'expense', 'payment', 'income'}
+    valid_tabs = {'expense', 'payment', 'income', 'transfer'}
     active_tab = ((request.POST.get('tab') if request.method == 'POST' else request.GET.get('tab', 'expense')) or 'expense').strip().lower()
     if active_tab not in valid_tabs:
         active_tab = 'expense'
@@ -9206,6 +9470,44 @@ def finance_dashboard(request):
     if request.method == 'POST':
         action = (request.POST.get('finance_action') or '').strip()
         try:
+            if action == 'save_finance_control':
+                previous_state = {
+                    'gateway_collection_account_id': finance_control.gateway_collection_account_id,
+                    'registration_receiving_account_id': finance_control.registration_receiving_account_id,
+                    'corporate_receiving_account_id': finance_control.corporate_receiving_account_id,
+                    'membership_receiving_account_id': finance_control.membership_receiving_account_id,
+                    'gateway_charge_percent': finance_control.gateway_charge_percent,
+                    'note': finance_control.note or None,
+                }
+                gateway_collection_account_id = (request.POST.get('gateway_collection_account') or '').strip()
+                registration_account_id = (request.POST.get('registration_receiving_account') or '').strip()
+                corporate_account_id = (request.POST.get('corporate_receiving_account') or '').strip()
+                membership_account_id = (request.POST.get('membership_receiving_account') or '').strip()
+                finance_control.gateway_collection_account = FinanceAccount.objects.filter(pk=gateway_collection_account_id, is_active=True).first() if gateway_collection_account_id else None
+                finance_control.registration_receiving_account = FinanceAccount.objects.filter(pk=registration_account_id, is_active=True).first() if registration_account_id else None
+                finance_control.corporate_receiving_account = FinanceAccount.objects.filter(pk=corporate_account_id, is_active=True).first() if corporate_account_id else None
+                finance_control.membership_receiving_account = FinanceAccount.objects.filter(pk=membership_account_id, is_active=True).first() if membership_account_id else None
+                gateway_percent = parse_amount(request.POST.get('gateway_charge_percent') or '0', 'gateway charge percent')
+                if gateway_percent < 0 or gateway_percent > Decimal('100'):
+                    raise ValueError('Gateway charge percent must be between 0 and 100.')
+                finance_control.gateway_charge_percent = gateway_percent
+                finance_control.note = (request.POST.get('finance_control_note') or '').strip() or None
+                new_state = {
+                    'gateway_collection_account_id': finance_control.gateway_collection_account_id,
+                    'registration_receiving_account_id': finance_control.registration_receiving_account_id,
+                    'corporate_receiving_account_id': finance_control.corporate_receiving_account_id,
+                    'membership_receiving_account_id': finance_control.membership_receiving_account_id,
+                    'gateway_charge_percent': finance_control.gateway_charge_percent,
+                    'note': finance_control.note or None,
+                }
+                if previous_state == new_state:
+                    messages.warning(request, 'No change was saved. The control is still using the same values as before.')
+                    return redirect(redirect_url)
+                finance_control.save()
+                dashboard_log_action(request, finance_control, CHANGE, 'Updated finance control from finance setup.')
+                messages.success(request, f'Finance control updated. Bkash gateway: {finance_control.gateway_collection_account or "Not configured"}, Registration bank: {finance_control.registration_receiving_account or "Not configured"}, Corporate: {finance_control.corporate_receiving_account or "Not configured"}, Membership bank: {finance_control.membership_receiving_account or "Not configured"}, Gateway: {finance_control.gateway_charge_percent}%.')
+                return redirect(redirect_url)
+
             if action == 'add_category':
                 name = (request.POST.get('category_name') or '').strip()
                 code = (request.POST.get('category_code') or '').strip() or None
@@ -9241,12 +9543,14 @@ def finance_dashboard(request):
                 sponsorship_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
                 sponsorship_status = (request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED
                 received_on = parse_date(request.POST.get('sponsorship_received_on'), 'received date')
+                received_account = FinanceAccount.objects.filter(pk=(request.POST.get('sponsorship_received_account') or '').strip(), is_active=True).first() if (request.POST.get('sponsorship_received_account') or '').strip() else None
                 if sponsorship_status == FinanceSponsorshipIncome.STATUS_RECEIVED and not received_on:
                     received_on = timezone.localdate()
                 reference_number = (request.POST.get('sponsorship_reference_number') or '').strip() or _finance_build_income_reference(received_on or timezone.localdate(), sponsorship_event)
                 sponsorship = FinanceSponsorshipIncome.objects.create(
                     event=sponsorship_event,
                     sponsor=Sponsor.objects.filter(pk=(request.POST.get('sponsor_id') or '').strip()).first() if (request.POST.get('sponsor_id') or '').strip() else None,
+                    received_account=received_account,
                     company_name=company_name,
                     title=(request.POST.get('sponsorship_title') or '').strip() or None,
                     amount=parse_amount(request.POST.get('sponsorship_amount'), 'sponsorship amount'),
@@ -9258,6 +9562,60 @@ def finance_dashboard(request):
                 )
                 dashboard_log_action(request, sponsorship, ADDITION, 'Created sponsorship income from finance dashboard.')
                 messages.success(request, f'Sponsorship income saved for {sponsorship.company_name} as {sponsorship.reference_number}.')
+                return redirect(redirect_url)
+
+            if action == 'add_other_income':
+                title = (request.POST.get('other_income_title') or '').strip()
+                if not title:
+                    raise ValueError('Income title is required.')
+                other_income_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                other_income_status = (request.POST.get('other_income_status') or FinanceOtherIncome.STATUS_RECEIVED).strip() or FinanceOtherIncome.STATUS_RECEIVED
+                received_on = parse_date(request.POST.get('other_income_received_on'), 'other income date')
+                received_account = FinanceAccount.objects.filter(pk=(request.POST.get('other_income_received_account') or '').strip(), is_active=True).first() if (request.POST.get('other_income_received_account') or '').strip() else None
+                if other_income_status == FinanceOtherIncome.STATUS_RECEIVED and not received_on:
+                    received_on = timezone.localdate()
+                reference_number = (request.POST.get('other_income_reference_number') or '').strip() or _finance_build_other_income_reference(received_on or timezone.localdate(), other_income_event)
+                other_income = FinanceOtherIncome.objects.create(
+                    event=other_income_event,
+                    received_account=received_account,
+                    income_type=(request.POST.get('other_income_type') or FinanceOtherIncome.TYPE_OTHER).strip() or FinanceOtherIncome.TYPE_OTHER,
+                    title=title,
+                    source_name=(request.POST.get('other_income_source_name') or '').strip() or None,
+                    amount=parse_amount(request.POST.get('other_income_amount'), 'other income amount'),
+                    status=other_income_status,
+                    received_on=received_on,
+                    reference_number=reference_number,
+                    proof_file=request.FILES.get('other_income_proof_file'),
+                    note=(request.POST.get('other_income_note') or '').strip() or None,
+                )
+                dashboard_log_action(request, other_income, ADDITION, 'Created other income from finance dashboard.')
+                messages.success(request, f'Other income "{other_income.title}" saved as {other_income.reference_number}.')
+                return redirect(redirect_url)
+
+            if action == 'add_transfer':
+                from_account = FinanceAccount.objects.filter(pk=(request.POST.get('transfer_from_account') or '').strip(), is_active=True).first()
+                to_account = FinanceAccount.objects.filter(pk=(request.POST.get('transfer_to_account') or '').strip(), is_active=True).first()
+                if not from_account or not to_account:
+                    raise ValueError('Choose valid source and destination accounts for the transfer.')
+                if from_account.id == to_account.id:
+                    raise ValueError('Transfer source and destination cannot be the same account.')
+                transfer_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                transfer_date = parse_date(request.POST.get('transfer_date'), 'transfer date') or timezone.localdate()
+                transfer_amount = parse_amount(request.POST.get('transfer_amount'), 'transfer amount')
+                if transfer_amount <= 0:
+                    raise ValueError('Transfer amount must be greater than zero.')
+                transfer = FinanceTransfer.objects.create(
+                    event=transfer_event,
+                    from_account=from_account,
+                    to_account=to_account,
+                    amount=transfer_amount,
+                    transfer_date=transfer_date,
+                    status=(request.POST.get('transfer_status') or FinanceTransfer.STATUS_POSTED).strip() or FinanceTransfer.STATUS_POSTED,
+                    reference_number=(request.POST.get('transfer_reference_number') or '').strip() or _finance_build_transfer_reference(transfer_date, transfer_event),
+                    note=(request.POST.get('transfer_note') or '').strip() or None,
+                )
+                dashboard_log_action(request, transfer, ADDITION, 'Created finance transfer from finance dashboard.')
+                messages.success(request, f'Transfer saved as {transfer.reference_number}.')
                 return redirect(redirect_url)
 
             if action == 'add_expense':
@@ -9334,6 +9692,7 @@ def finance_dashboard(request):
                     expense=linked_expense,
                     event=payment_event,
                     amount=payment_amount,
+                    source_account=FinanceAccount.objects.filter(pk=(request.POST.get('payment_source_account') or '').strip(), is_active=True).first() if (request.POST.get('payment_source_account') or '').strip() else None,
                     payment_date=payment_date,
                     method=(request.POST.get('payment_method') or FinanceVendorPayment.METHOD_BANK).strip() or FinanceVendorPayment.METHOD_BANK,
                     status=payment_status,
@@ -9450,9 +9809,12 @@ def finance_dashboard(request):
     event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
     corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
     membership_payments = MembershipPayment.objects.select_related('user_profile').filter(status='completed')
-    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor').all()
+    sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor', 'received_account').all()
+    other_income_rows = FinanceOtherIncome.objects.select_related('event', 'received_account').all()
     expense_rows = FinanceExpense.objects.select_related('event', 'vendor', 'category').all()
-    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense').all()
+    vendor_payment_rows = FinanceVendorPayment.objects.select_related('event', 'vendor', 'expense', 'source_account').all()
+    transfer_rows = FinanceTransfer.objects.select_related('event', 'from_account', 'to_account').all()
+    account_rows = FinanceAccount.objects.filter(is_active=True).order_by('name')
     vendor_rows = FinanceVendor.objects.filter(is_active=True).order_by('name')
     category_rows = FinanceExpenseCategory.objects.filter(is_active=True).order_by('name')
     sponsor_rows = Sponsor.objects.select_related('event').order_by('name')
@@ -9462,8 +9824,10 @@ def finance_dashboard(request):
         corporate_payments = corporate_payments.filter(event_id=event_filter)
         membership_payments = membership_payments.none()
         sponsorship_rows = sponsorship_rows.filter(event_id=event_filter)
+        other_income_rows = other_income_rows.filter(event_id=event_filter)
         expense_rows = expense_rows.filter(event_id=event_filter)
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
+        transfer_rows = transfer_rows.filter(event_id=event_filter)
 
     if search_query:
         sponsorship_rows = sponsorship_rows.filter(
@@ -9471,6 +9835,13 @@ def finance_dashboard(request):
             | Q(title__icontains=search_query)
             | Q(reference_number__icontains=search_query)
             | Q(event__name__icontains=search_query)
+        )
+        other_income_rows = other_income_rows.filter(
+            Q(title__icontains=search_query)
+            | Q(source_name__icontains=search_query)
+            | Q(reference_number__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+            | Q(received_account__name__icontains=search_query)
         )
         expense_rows = expense_rows.filter(
             Q(title__icontains=search_query)
@@ -9484,7 +9855,16 @@ def finance_dashboard(request):
             | Q(reference_number__icontains=search_query)
             | Q(expense__title__icontains=search_query)
             | Q(event__name__icontains=search_query)
+            | Q(source_account__name__icontains=search_query)
         )
+        transfer_rows = transfer_rows.filter(
+            Q(reference_number__icontains=search_query)
+            | Q(note__icontains=search_query)
+            | Q(from_account__name__icontains=search_query)
+            | Q(to_account__name__icontains=search_query)
+            | Q(event__name__icontains=search_query)
+        )
+        account_rows = account_rows.filter(Q(name__icontains=search_query) | Q(code__icontains=search_query) | Q(note__icontains=search_query))
         vendor_rows = vendor_rows.filter(
             Q(name__icontains=search_query)
             | Q(contact_person__icontains=search_query)
@@ -9495,11 +9875,20 @@ def finance_dashboard(request):
     event_income = event_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     corporate_income = corporate_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     membership_income = membership_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    finance_control = _finance_get_control()
+    event_gateway_fee = _finance_calculate_gateway_fee(event_income, finance_control.gateway_charge_percent)
+    membership_gateway_fee = _finance_calculate_gateway_fee(membership_income, finance_control.gateway_charge_percent)
+    gateway_fee_total = event_gateway_fee + membership_gateway_fee
+    gateway_collections_gross = event_income + membership_income
+    gateway_net_settlement = gateway_collections_gross - gateway_fee_total
     sponsorship_received = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     sponsorship_expected = sponsorship_rows.filter(status=FinanceSponsorshipIncome.STATUS_EXPECTED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    other_income_received = other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    interest_income = other_income_rows.filter(status=FinanceOtherIncome.STATUS_RECEIVED, income_type__in=[FinanceOtherIncome.TYPE_FDR_INTEREST, FinanceOtherIncome.TYPE_BANK_INTEREST]).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     expense_recorded = expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
     expense_paid = expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED).aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
     vendor_paid = vendor_payment_rows.filter(status=FinanceVendorPayment.STATUS_PAID).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    transfer_total = transfer_rows.filter(status=FinanceTransfer.STATUS_POSTED).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     outstanding_payable = Decimal('0.00')
     for expense in expense_rows.exclude(status=FinanceExpense.STATUS_CANCELLED):
@@ -9519,8 +9908,14 @@ def finance_dashboard(request):
         })
     vendor_snapshots.sort(key=lambda row: row['outstanding_total'], reverse=True)
 
-    total_income = event_income + corporate_income + membership_income + sponsorship_received
-    net_cash_position = total_income - vendor_paid
+    account_balance_rows = _finance_build_account_balance_rows(event_filter=event_filter, date_from=None, date_to=None)
+    bank_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_BANK), Decimal('0.00'))
+    petty_cash_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_PETTY_CASH), Decimal('0.00'))
+    fdr_balance = sum((row['closing_balance'] for row in account_balance_rows if row['account'].account_type == FinanceAccount.TYPE_FDR), Decimal('0.00'))
+    total_account_balance = sum((row['closing_balance'] for row in account_balance_rows), Decimal('0.00'))
+
+    total_income = event_income + corporate_income + membership_income + sponsorship_received + other_income_received
+    net_cash_position = total_account_balance
     selected_event = Event.objects.filter(pk=event_filter).first() if event_filter else None
 
     context = {
@@ -9532,31 +9927,49 @@ def finance_dashboard(request):
             'q': search_query,
         },
         'active_finance_tab': active_tab,
+        'finance_control': finance_control,
         'totals': {
             'event_income': event_income,
             'corporate_income': corporate_income,
             'membership_income': membership_income,
             'sponsorship_received': sponsorship_received,
             'sponsorship_expected': sponsorship_expected,
+            'other_income_received': other_income_received,
+            'interest_income': interest_income,
+            'gateway_collections_gross': gateway_collections_gross,
+            'gateway_fee_total': gateway_fee_total,
+            'gateway_net_settlement': gateway_net_settlement,
             'total_income': total_income,
             'expense_recorded': expense_recorded,
             'expense_paid': expense_paid,
             'vendor_paid': vendor_paid,
             'outstanding_payable': outstanding_payable,
+            'transfer_total': transfer_total,
+            'bank_balance': bank_balance,
+            'petty_cash_balance': petty_cash_balance,
+            'fdr_balance': fdr_balance,
+            'total_account_balance': total_account_balance,
             'net_cash_position': net_cash_position,
         },
         'recent_sponsorships': sponsorship_rows.order_by('-received_on', '-created_at')[:8],
+        'recent_other_incomes': other_income_rows.order_by('-received_on', '-created_at')[:8],
         'recent_expenses': expense_rows.order_by('-expense_date', '-created_at')[:10],
         'recent_vendor_payments': vendor_payment_rows.order_by('-payment_date', '-created_at')[:10],
+        'recent_transfers': transfer_rows.order_by('-transfer_date', '-created_at')[:8],
         'vendor_snapshots': vendor_snapshots[:8],
+        'account_balance_rows': account_balance_rows[:8],
         'approval_expenses': expense_rows.filter(status=FinanceExpense.STATUS_DRAFT).order_by('-created_at')[:8],
         'approved_expenses': expense_rows.filter(status__in=[FinanceExpense.STATUS_APPROVED, FinanceExpense.STATUS_PARTIALLY_PAID]).order_by('-expense_date', '-updated_at')[:8],
         'scheduled_vendor_payments': vendor_payment_rows.filter(status=FinanceVendorPayment.STATUS_SCHEDULED).order_by('payment_date', '-created_at')[:8],
         'finance_categories': FinanceExpenseCategory.objects.filter(is_active=True).order_by('name'),
         'finance_vendors': FinanceVendor.objects.filter(is_active=True).order_by('name'),
+        'finance_accounts': account_rows,
         'sponsors': sponsor_rows[:50],
         'finance_status_choices': {
             'sponsorship': FinanceSponsorshipIncome.STATUS_CHOICES,
+            'other_income': FinanceOtherIncome.STATUS_CHOICES,
+            'other_income_types': FinanceOtherIncome.TYPE_CHOICES,
+            'transfer': FinanceTransfer.STATUS_CHOICES,
             'expense': FinanceExpense.STATUS_CHOICES,
             'payment': FinanceVendorPayment.STATUS_CHOICES,
             'payment_methods': FinanceVendorPayment.METHOD_CHOICES,
@@ -9566,7 +9979,10 @@ def finance_dashboard(request):
             'reports': reverse('finance_reports'),
             'categories': reverse('admin:registration_financeexpensecategory_changelist'),
             'vendors': reverse('admin:registration_financevendor_changelist'),
+            'accounts': reverse('admin:registration_financeaccount_changelist'),
             'sponsorships': reverse('admin:registration_financesponsorshipincome_changelist'),
+            'other_income': reverse('admin:registration_financeotherincome_changelist'),
+            'transfers': reverse('admin:registration_financetransfer_changelist'),
             'expenses': reverse('admin:registration_financeexpense_changelist'),
             'payments': reverse('admin:registration_financevendorpayment_changelist'),
             'payment_center': reverse('dashboard_payment_center'),
@@ -9676,6 +10092,7 @@ def finance_setup(request):
     from website.models import SiteSettings
 
     site_settings = SiteSettings.objects.first()
+    finance_control = _finance_get_control()
     scope = ((request.POST.get('scope') if request.method == 'POST' else request.GET.get('scope', 'all')) or 'all').strip()
     search_query = ((request.POST.get('q') if request.method == 'POST' else request.GET.get('q', '')) or '').strip()
 
@@ -9697,6 +10114,51 @@ def finance_setup(request):
     if request.method == 'POST':
         action = (request.POST.get('finance_action') or '').strip()
         try:
+            if action == 'save_finance_control':
+                previous_state = {
+                    'gateway_collection_account_id': finance_control.gateway_collection_account_id,
+                    'registration_receiving_account_id': finance_control.registration_receiving_account_id,
+                    'corporate_receiving_account_id': finance_control.corporate_receiving_account_id,
+                    'membership_receiving_account_id': finance_control.membership_receiving_account_id,
+                    'gateway_charge_percent': finance_control.gateway_charge_percent,
+                    'note': finance_control.note or None,
+                }
+                gateway_collection_account_id = (request.POST.get('gateway_collection_account') or '').strip()
+                registration_account_id = (request.POST.get('registration_receiving_account') or '').strip()
+                corporate_account_id = (request.POST.get('corporate_receiving_account') or '').strip()
+                membership_account_id = (request.POST.get('membership_receiving_account') or '').strip()
+                finance_control.gateway_collection_account = FinanceAccount.objects.filter(pk=gateway_collection_account_id, is_active=True).first() if gateway_collection_account_id else None
+                finance_control.registration_receiving_account = FinanceAccount.objects.filter(pk=registration_account_id, is_active=True).first() if registration_account_id else None
+                finance_control.corporate_receiving_account = FinanceAccount.objects.filter(pk=corporate_account_id, is_active=True).first() if corporate_account_id else None
+                finance_control.membership_receiving_account = FinanceAccount.objects.filter(pk=membership_account_id, is_active=True).first() if membership_account_id else None
+                gateway_percent = parse_amount(request.POST.get('gateway_charge_percent') or '0', 'gateway charge percent')
+                if gateway_percent < 0 or gateway_percent > Decimal('100'):
+                    raise ValueError('Gateway charge percent must be between 0 and 100.')
+                finance_control.gateway_charge_percent = gateway_percent
+                finance_control.note = (request.POST.get('finance_control_note') or '').strip() or None
+                new_state = {
+                    'gateway_collection_account_id': finance_control.gateway_collection_account_id,
+                    'registration_receiving_account_id': finance_control.registration_receiving_account_id,
+                    'corporate_receiving_account_id': finance_control.corporate_receiving_account_id,
+                    'membership_receiving_account_id': finance_control.membership_receiving_account_id,
+                    'gateway_charge_percent': finance_control.gateway_charge_percent,
+                    'note': finance_control.note or None,
+                }
+                if previous_state == new_state:
+                    messages.warning(request, 'No change was saved. The control is still using the same values as before.')
+                    return redirect(redirect_url)
+
+                finance_control.save()
+                dashboard_log_action(request, finance_control, CHANGE, 'Updated finance control from finance setup.')
+                messages.success(
+                    request,
+                    f'Finance control updated. Registration: {finance_control.registration_receiving_account or "Not configured"}, '
+                    f'Corporate: {finance_control.corporate_receiving_account or "Not configured"}, '
+                    f'Membership: {finance_control.membership_receiving_account or "Not configured"}, '
+                    f'Gateway: {finance_control.gateway_charge_percent}%.'
+                )
+                return redirect(redirect_url)
+
             if action == 'add_category':
                 name = (request.POST.get('category_name') or '').strip()
                 code = (request.POST.get('category_code') or '').strip() or None
@@ -9724,6 +10186,22 @@ def finance_setup(request):
                 dashboard_log_action(request, vendor, ADDITION, 'Created finance vendor from finance setup.')
                 messages.success(request, f'Vendor "{vendor.name}" created.')
                 return redirect(redirect_url)
+
+
+            if action == 'add_account':
+                name = (request.POST.get('account_name') or '').strip()
+                if not name:
+                    raise ValueError('Account name is required.')
+                account = FinanceAccount.objects.create(
+                    name=name,
+                    code=(request.POST.get('account_code') or '').strip() or None,
+                    account_type=(request.POST.get('account_type') or FinanceAccount.TYPE_BANK).strip() or FinanceAccount.TYPE_BANK,
+                    opening_balance=parse_amount(request.POST.get('account_opening_balance') or '0', 'account opening balance'),
+                    note=(request.POST.get('account_note') or '').strip() or None,
+                )
+                dashboard_log_action(request, account, ADDITION, 'Created finance account from finance setup.')
+                messages.success(request, f'Account "{account.name}" created.')
+                return redirect(redirect_url)
         except ValueError as exc:
             messages.error(request, str(exc))
         except Exception as exc:
@@ -9732,6 +10210,7 @@ def finance_setup(request):
 
     vendor_rows = FinanceVendor.objects.all().order_by('name')
     category_rows = FinanceExpenseCategory.objects.all().order_by('name')
+    account_rows = FinanceAccount.objects.all().order_by('name')
     if search_query:
         vendor_rows = vendor_rows.filter(
             Q(name__icontains=search_query)
@@ -9744,28 +10223,50 @@ def finance_setup(request):
             | Q(code__icontains=search_query)
             | Q(description__icontains=search_query)
         )
+        account_rows = account_rows.filter(
+            Q(name__icontains=search_query)
+            | Q(code__icontains=search_query)
+            | Q(note__icontains=search_query)
+        )
+
+    active_account_options = FinanceAccount.objects.filter(is_active=True).order_by('name')
+    gateway_account_options = active_account_options.filter(account_type__in=[FinanceAccount.TYPE_BKASH, FinanceAccount.TYPE_OTHER])
+    settlement_account_options = active_account_options.filter(account_type=FinanceAccount.TYPE_BANK)
+    if not gateway_account_options.exists():
+        gateway_account_options = active_account_options
+    if not settlement_account_options.exists():
+        settlement_account_options = active_account_options
 
     context = {
         'site_settings': site_settings,
+        'finance_control': finance_control,
         'current_filters': {
             'scope': scope,
             'q': search_query,
         },
         'vendor_rows': vendor_rows[:40],
         'category_rows': category_rows[:40],
+        'account_rows': account_rows[:40],
+        'active_account_options': active_account_options,
+        'gateway_account_options': gateway_account_options,
+        'settlement_account_options': settlement_account_options,
         'totals': {
             'vendors': vendor_rows.count(),
             'active_vendors': vendor_rows.filter(is_active=True).count(),
             'categories': category_rows.count(),
             'active_categories': category_rows.filter(is_active=True).count(),
+            'accounts': account_rows.count(),
+            'active_accounts': account_rows.filter(is_active=True).count(),
         },
         'view_flags': {
             'show_vendors': scope in {'all', 'vendors'},
             'show_categories': scope in {'all', 'categories'},
+            'show_accounts': scope in {'all', 'accounts'},
         },
         'setup_meta': {
-            'scope_label': 'All setup records' if scope == 'all' else ('Vendor setup only' if scope == 'vendors' else 'Category setup only'),
+            'scope_label': 'All setup records' if scope == 'all' else ('Vendor setup only' if scope == 'vendors' else ('Category setup only' if scope == 'categories' else 'Account setup only')),
         },
+        'account_type_choices': FinanceAccount.TYPE_CHOICES,
         'admin_links': {
             'dashboard': reverse('finance_dashboard'),
             'reports': reverse('finance_reports'),
@@ -9773,6 +10274,7 @@ def finance_setup(request):
             'setup': reverse('finance_setup'),
             'vendors': reverse('admin:registration_financevendor_changelist'),
             'categories': reverse('admin:registration_financeexpensecategory_changelist'),
+            'accounts': reverse('admin:registration_financeaccount_changelist'),
         },
     }
     return render(request, 'finance_setup.html', context)
@@ -14503,6 +15005,7 @@ def get_participant_summary(request, org_page_number=None):
     }
 
     return participant_summary, totals, participant_chart_data, organization_page_obj, organization_chart_data
+
 
 
 

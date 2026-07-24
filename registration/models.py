@@ -1,4 +1,4 @@
-﻿from django.db import models
+from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -2649,6 +2649,139 @@ class FinanceVendor(models.Model):
         return self.name
 
 
+class FinanceAccount(models.Model):
+    TYPE_BANK = 'bank'
+    TYPE_PETTY_CASH = 'petty_cash'
+    TYPE_BKASH = 'bkash'
+    TYPE_FDR = 'fdr'
+    TYPE_OTHER = 'other'
+    TYPE_CHOICES = [
+        (TYPE_BANK, 'Bank account'),
+        (TYPE_PETTY_CASH, 'Petty cash'),
+        (TYPE_BKASH, 'bKash or mobile wallet'),
+        (TYPE_FDR, 'FDR or term deposit'),
+        (TYPE_OTHER, 'Other account'),
+    ]
+
+    name = models.CharField(max_length=180, unique=True)
+    code = models.CharField(max_length=40, unique=True, blank=True, null=True)
+    account_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_BANK)
+    opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Finance account'
+        verbose_name_plural = 'Finance accounts'
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            self.code = slugify(self.name).upper().replace('-', '_')[:40]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class FinanceControl(models.Model):
+    gateway_collection_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_control_gateway_collection_account')
+    registration_receiving_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_control_registration_account')
+    corporate_receiving_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_control_corporate_account')
+    membership_receiving_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_control_membership_account')
+    gateway_charge_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Finance control'
+        verbose_name_plural = 'Finance control'
+
+    def __str__(self):
+        return 'Finance control'
+
+
+class FinanceOtherIncome(models.Model):
+    TYPE_FDR_INTEREST = 'fdr_interest'
+    TYPE_BANK_INTEREST = 'bank_interest'
+    TYPE_DONATION = 'donation'
+    TYPE_MISC = 'misc'
+    TYPE_OTHER = 'other'
+    TYPE_CHOICES = [
+        (TYPE_FDR_INTEREST, 'FDR interest'),
+        (TYPE_BANK_INTEREST, 'Bank interest'),
+        (TYPE_DONATION, 'Donation'),
+        (TYPE_MISC, 'Misc income'),
+        (TYPE_OTHER, 'Other income'),
+    ]
+
+    STATUS_EXPECTED = 'expected'
+    STATUS_RECEIVED = 'received'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_EXPECTED, 'Expected'),
+        (STATUS_RECEIVED, 'Received'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_other_incomes')
+    received_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='other_income_rows')
+    income_type = models.CharField(max_length=30, choices=TYPE_CHOICES, default=TYPE_OTHER)
+    title = models.CharField(max_length=180)
+    source_name = models.CharField(max_length=180, blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
+    received_on = models.DateField(blank=True, null=True)
+    reference_number = models.CharField(max_length=120, blank=True, null=True)
+    proof_file = models.FileField(upload_to='finance/other_income_proofs/', blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-received_on', '-created_at']
+        verbose_name = 'Finance other income'
+        verbose_name_plural = 'Finance other incomes'
+
+    def __str__(self):
+        return f"{self.title} - {self.amount}"
+
+
+class FinanceTransfer(models.Model):
+    STATUS_POSTED = 'posted'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_POSTED, 'Posted'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_transfers')
+    from_account = models.ForeignKey(FinanceAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
+    to_account = models.ForeignKey(FinanceAccount, on_delete=models.PROTECT, related_name='incoming_transfers')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    transfer_date = models.DateField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_POSTED)
+    reference_number = models.CharField(max_length=120, blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-transfer_date', '-created_at']
+        verbose_name = 'Finance transfer'
+        verbose_name_plural = 'Finance transfers'
+
+    def clean(self):
+        if self.from_account_id and self.to_account_id and self.from_account_id == self.to_account_id:
+            raise ValidationError({'to_account': 'Transfer destination must be different from the source account.'})
+
+    def __str__(self):
+        return f"{self.from_account} to {self.to_account} - {self.amount}"
+
+
 class FinanceSponsorshipIncome(models.Model):
     STATUS_EXPECTED = 'expected'
     STATUS_RECEIVED = 'received'
@@ -2661,6 +2794,7 @@ class FinanceSponsorshipIncome(models.Model):
 
     event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_sponsorship_incomes')
     sponsor = models.ForeignKey('Sponsor', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_income_rows')
+    received_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='sponsorship_income_rows')
     company_name = models.CharField(max_length=180)
     title = models.CharField(max_length=180, blank=True, null=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -2770,6 +2904,7 @@ class FinanceVendorPayment(models.Model):
     expense = models.ForeignKey(FinanceExpense, on_delete=models.SET_NULL, blank=True, null=True, related_name='vendor_payments')
     event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_vendor_payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    source_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='vendor_payments')
     payment_date = models.DateField(default=timezone.now)
     method = models.CharField(max_length=20, choices=METHOD_CHOICES, default=METHOD_BANK)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PAID)
@@ -2807,3 +2942,4 @@ class FinanceVendorPaymentAttachment(models.Model):
     def __str__(self):
         return self.title or self.file.name.rsplit('/', 1)[-1]
 # Finance Models END------------------------------------------------------------------------------------#
+

@@ -78,20 +78,100 @@
     <main class="mx-auto w-[min(1440px,calc(100%-32px))] py-5">
         {% if messages %}<section class="mb-3 space-y-2">{% for message in messages %}<div class="rounded-2xl px-4 py-3 text-sm font-bold {% if message.tags == 'success' %}bg-green-50 text-bsbcs-green{% elif message.tags == 'error' %}bg-pink-50 text-bsbcs-pink{% elif message.tags == 'warning' %}bg-amber-50 text-bsbcs-amber{% else %}bg-blue-50 text-bsbcs-blue{% endif %}">{{ message }}</div>{% endfor %}</section>{% endif %}
 
-        <section class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Event income</div><div class="mt-2 text-2xl font-black text-slate-900">BDT {{ totals.event_income }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Corporate event income</div><div class="mt-2 text-2xl font-black text-slate-900">BDT {{ totals.corporate_income }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Membership income</div><div class="mt-2 text-2xl font-black text-slate-900">BDT {{ totals.membership_income }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsorship received</div><div class="mt-2 text-2xl font-black text-emerald-700">BDT {{ totals.sponsorship_received }}</div><div class="mt-1 text-xs font-semibold text-slate-500">Expected: BDT {{ totals.sponsorship_expected }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Vendor paid out</div><div class="mt-2 text-2xl font-black text-rose-700">BDT {{ totals.vendor_paid }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Net cash position</div><div class="mt-2 text-2xl font-black {% if totals.net_cash_position >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_position }}</div></div>
+        <section class="grid gap-2 overflow-x-auto" style="grid-template-columns:repeat(5,minmax(180px,1fr));">
+            <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Realized income</div>
+                <div class="mt-1 text-[14px] font-black leading-tight text-bsbcs-green">BDT {{ totals.total_income }}</div>
+                <div class="mt-1 text-[10px] font-semibold leading-4 text-slate-500">Confirmed received income only.</div>
+            </article>
+            <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Gateway fee deducted</div>
+                <div class="mt-1 text-[14px] font-black leading-tight text-bsbcs-amber">BDT {{ totals.gateway_fee_total }}</div>
+                <div class="mt-1 text-[10px] font-semibold leading-4 text-slate-500">{{ finance_control.gateway_charge_percent }}% registration and membership fee.</div>
+            </article>
+            <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Gateway net settlement</div>
+                <div class="mt-1 text-[14px] font-black leading-tight text-bsbcs-blue">BDT {{ totals.gateway_net_settlement }}</div>
+                <div class="mt-1 text-[10px] font-semibold leading-4 text-slate-500">Registration: {{ finance_control.registration_receiving_account.name|default:'Not tagged' }}</div>
+            </article>
+            <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Expenses recorded</div>
+                <div class="mt-1 text-[14px] font-black leading-tight text-slate-900">BDT {{ totals.expense_recorded }}</div>
+                <div class="mt-1 text-[10px] font-semibold leading-4 text-slate-500">Recorded liability for the period.</div>
+            </article>
+            <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                <div class="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Tracked balance</div>
+                <div class="mt-1 text-[14px] font-black leading-tight {% if totals.net_cash_position >= 0 %}text-slate-900{% else %}text-rose-700{% endif %}">BDT {{ totals.net_cash_position }}</div>
+                <div class="mt-1 text-[10px] font-semibold leading-4 text-slate-500">Combined closing balance.</div>
+            </article>
         </section>
+        <section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
+            <details class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <summary class="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Income breakdown</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Where the money came from</h2>
+                    </div>
+                    <div class="rounded-full border border-line px-3 py-1 text-xs font-black text-slate-600">Open / close</div>
+                </summary>
+                <div class="mt-4 space-y-2">
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Event income</div><div class="text-[11px] font-semibold text-slate-500">Individual participant registrations</div></div><div class="text-right text-base font-black text-slate-900">BDT {{ totals.event_income }}</div></div>
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Membership income</div><div class="text-[11px] font-semibold text-slate-500">Completed membership collections</div></div><div class="text-right text-base font-black text-slate-900">BDT {{ totals.membership_income }}</div></div>
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Corporate event income</div><div class="text-[11px] font-semibold text-slate-500">Company-backed registrations</div></div><div class="text-right text-base font-black text-slate-900">BDT {{ totals.corporate_income }}</div></div>
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Sponsorship received</div><div class="text-[11px] font-semibold text-slate-500">Expected: BDT {{ totals.sponsorship_expected }}</div></div><div class="text-right text-base font-black text-emerald-700">BDT {{ totals.sponsorship_received }}</div></div>
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Other income</div><div class="text-[11px] font-semibold text-slate-500">Donation and miscellaneous finance receipts</div></div><div class="text-right text-base font-black text-bsbcs-green">BDT {{ totals.other_income_received }}</div></div>
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div><div class="text-sm font-black text-ink">Interest income</div><div class="text-[11px] font-semibold text-slate-500">Bank and FDR interest only</div></div><div class="text-right text-base font-black text-bsbcs-blue">BDT {{ totals.interest_income }}</div></div>
+                </div>
+            </details>
 
-        <section class="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Total income</div><div class="mt-2 text-2xl font-black text-bsbcs-blue">BDT {{ totals.total_income }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-2 text-2xl font-black text-slate-900">BDT {{ totals.expense_recorded }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Expense marked paid</div><div class="mt-2 text-2xl font-black text-emerald-700">BDT {{ totals.expense_paid }}</div></div>
-            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-2 text-2xl font-black text-amber-700">BDT {{ totals.outstanding_payable }}</div></div>
+            <div class="grid gap-3">
+                <details class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <summary class="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Gateway settlement</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Bkash to bank flow</h2>
+                        </div>
+                        <div class="rounded-full border border-line px-3 py-1 text-xs font-black text-slate-600">Open / close</div>
+                    </summary>
+                    <div class="mt-4 grid gap-2 sm:grid-cols-3">
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Gross collected</div><div class="mt-1 text-xl font-black text-bsbcs-teal">BDT {{ totals.gateway_collections_gross }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ finance_control.gateway_collection_account.name|default:'No gateway account tagged yet' }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Gateway charge</div><div class="mt-1 text-xl font-black text-bsbcs-amber">BDT {{ totals.gateway_fee_total }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ finance_control.gateway_charge_percent }}% deducted</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Net settled</div><div class="mt-1 text-xl font-black text-bsbcs-blue">BDT {{ totals.gateway_net_settlement }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ finance_control.registration_receiving_account.name|default:'No bank tagged yet' }}</div></div>
+                    </div>
+                </details>
+
+                <details class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <summary class="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Expense position</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">What has gone out and what is still owed</h2>
+                        </div>
+                        <div class="rounded-full border border-line px-3 py-1 text-xs font-black text-slate-600">Open / close</div>
+                    </summary>
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Expenses recorded</div><div class="mt-1 text-xl font-black text-slate-900">BDT {{ totals.expense_recorded }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Expense marked paid</div><div class="mt-1 text-xl font-black text-emerald-700">BDT {{ totals.expense_paid }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Vendor paid out</div><div class="mt-1 text-xl font-black text-rose-700">BDT {{ totals.vendor_paid }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Outstanding payable</div><div class="mt-1 text-xl font-black text-amber-700">BDT {{ totals.outstanding_payable }}</div></div>
+                    </div>
+                </details>
+
+                <details class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <summary class="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Cash position</div>
+                            <h2 class="mt-1 text-xl font-black text-ink">Where the money is sitting</h2>
+                        </div>
+                        <div class="rounded-full border border-line px-3 py-1 text-xs font-black text-slate-600">Open / close</div>
+                    </summary>
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Bank balance</div><div class="mt-1 text-xl font-black text-bsbcs-blue">BDT {{ totals.bank_balance }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Petty cash</div><div class="mt-1 text-xl font-black text-bsbcs-amber">BDT {{ totals.petty_cash_balance }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">FDR balance</div><div class="mt-1 text-xl font-black text-slate-900">BDT {{ totals.fdr_balance }}</div></div>
+                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-2.5"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Internal transfers</div><div class="mt-1 text-xl font-black text-slate-900">BDT {{ totals.transfer_total }}</div></div>
+                    </div>
+                </details>
+            </div>
         </section>
 
         <section class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
@@ -106,6 +186,7 @@
                         <button type="button" class="finance-desk-tab {% if active_finance_tab == 'expense' %}is-active{% endif %}" data-finance-desk-tab="expense">Expense desk</button>
                         <button type="button" class="finance-desk-tab {% if active_finance_tab == 'payment' %}is-active{% endif %}" data-finance-desk-tab="payment">Vendor payout</button>
                         <button type="button" class="finance-desk-tab {% if active_finance_tab == 'income' %}is-active{% endif %}" data-finance-desk-tab="income">Income intake</button>
+                        <button type="button" class="finance-desk-tab {% if active_finance_tab == 'transfer' %}is-active{% endif %}" data-finance-desk-tab="transfer">Transfer cash</button>
                     </div>
 
                     <div class="mt-4">
@@ -152,7 +233,8 @@
                                 <div><label class="finance-label">Payment date</label><input name="payment_date" type="date" class="finance-input"></div>
                                 <div><label class="finance-label">Method</label><select name="payment_method" class="finance-select">{% for value, label in finance_status_choices.payment_methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
                                 <div><label class="finance-label">Status</label><select name="payment_status" class="finance-select">{% for value, label in finance_status_choices.payment %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-                                <div><label class="finance-label">Voucher number / reference</label><input name="payment_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                <div><label class="finance-label">Paid from account</label><select name="payment_source_account" class="finance-select"><option value="">No account tagged</option>{% for account in finance_accounts %}<option value="{{ account.id }}">{{ account.name }} | {{ account.get_account_type_display }}</option>{% endfor %}</select></div>
+                                <div class="md:col-span-2"><label class="finance-label">Voucher number / reference</label><input name="payment_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
                                 <div class="md:col-span-2"><label class="finance-label">Payment proof file</label><input name="payment_proof_file" type="file" class="finance-file"></div>
                                 <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="payment_note" class="finance-textarea"></textarea></div>
                                 <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor payment</button></div>
@@ -175,11 +257,53 @@
                                 <div><label class="finance-label">Title</label><input name="sponsorship_title" class="finance-input"></div>
                                 <div><label class="finance-label">Amount</label><input name="sponsorship_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
                                 <div><label class="finance-label">Status</label><select name="sponsorship_status" class="finance-select">{% for value, label in finance_status_choices.sponsorship %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Received into</label><select name="sponsorship_received_account" class="finance-select"><option value="">No account tagged</option>{% for account in finance_accounts %}<option value="{{ account.id }}">{{ account.name }} | {{ account.get_account_type_display }}</option>{% endfor %}</select></div>
                                 <div><label class="finance-label">Received date</label><input name="sponsorship_received_on" type="date" class="finance-input"></div>
                                 <div><label class="finance-label">Income reference</label><input name="sponsorship_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
                                 <div class="md:col-span-2"><label class="finance-label">Agreement or proof file</label><input name="sponsorship_agreement_file" type="file" class="finance-file"></div>
                                 <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="sponsorship_note" class="finance-textarea"></textarea></div>
                                 <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save sponsorship income</button></div>
+                            </form>
+                            <div class="mt-6 border-t border-line pt-4">
+                                <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Other income</div>
+                                <h4 class="mt-1 text-xl font-black text-slate-900">Record interest, donation, or misc income</h4>
+                                <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-3 md:grid-cols-2">
+                                    {% csrf_token %}<input type="hidden" name="finance_action" value="add_other_income"><input type="hidden" name="tab" value="income"><input type="hidden" name="q" value="{{ current_filters.q }}">
+                                    <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General finance income</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                                    <div><label class="finance-label">Income type</label><select name="other_income_type" class="finance-select">{% for value, label in finance_status_choices.other_income_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                    <div><label class="finance-label">Income title</label><input name="other_income_title" class="finance-input" required></div>
+                                    <div><label class="finance-label">Source name</label><input name="other_income_source_name" class="finance-input" placeholder="Bank, donor, institution, etc."></div>
+                                    <div><label class="finance-label">Amount</label><input name="other_income_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
+                                    <div><label class="finance-label">Status</label><select name="other_income_status" class="finance-select">{% for value, label in finance_status_choices.other_income %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                    <div><label class="finance-label">Received into</label><select name="other_income_received_account" class="finance-select"><option value="">No account tagged</option>{% for account in finance_accounts %}<option value="{{ account.id }}">{{ account.name }} | {{ account.get_account_type_display }}</option>{% endfor %}</select></div>
+                                    <div><label class="finance-label">Received date</label><input name="other_income_received_on" type="date" class="finance-input"></div>
+                                    <div><label class="finance-label">Reference number</label><input name="other_income_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                    <div class="md:col-span-2"><label class="finance-label">Proof file</label><input name="other_income_proof_file" type="file" class="finance-file"></div>
+                                    <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="other_income_note" class="finance-textarea"></textarea></div>
+                                    <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save other income</button></div>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section class="finance-desk-panel" data-finance-desk-panel="transfer" {% if active_finance_tab != 'transfer' %}hidden{% endif %}>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Cash transfer</div>
+                                    <h3 class="mt-1 text-2xl font-black text-slate-900">Move money between bank, petty cash, and FDR</h3>
+                                </div>
+                                <a href="{{ admin_links.transfers }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Open admin</a>
+                            </div>
+                            <form method="post" class="mt-4 grid gap-3 md:grid-cols-2">
+                                {% csrf_token %}<input type="hidden" name="finance_action" value="add_transfer"><input type="hidden" name="tab" value="transfer"><input type="hidden" name="q" value="{{ current_filters.q }}">
+                                <div><label class="finance-label">Event</label><select name="event" class="finance-select"><option value="">General finance transfer</option>{% for event in events %}<option value="{{ event.id }}" {% if current_filters.event == event.id|stringformat:"s" %}selected{% endif %}>{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Status</label><select name="transfer_status" class="finance-select">{% for value, label in finance_status_choices.transfer %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">From account</label><select name="transfer_from_account" class="finance-select" required><option value="">Select source account</option>{% for account in finance_accounts %}<option value="{{ account.id }}">{{ account.name }} | {{ account.get_account_type_display }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">To account</label><select name="transfer_to_account" class="finance-select" required><option value="">Select destination account</option>{% for account in finance_accounts %}<option value="{{ account.id }}">{{ account.name }} | {{ account.get_account_type_display }}</option>{% endfor %}</select></div>
+                                <div><label class="finance-label">Amount</label><input name="transfer_amount" type="number" step="0.01" min="0" class="finance-input" required></div>
+                                <div><label class="finance-label">Transfer date</label><input name="transfer_date" type="date" class="finance-input"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Transfer reference</label><input name="transfer_reference_number" class="finance-input" placeholder="Auto if left empty"></div>
+                                <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="transfer_note" class="finance-textarea" placeholder="Example: withdrew cash from bank for day-to-day petty bills"></textarea></div>
+                                <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save transfer</button></div>
                             </form>
                         </section>
                     </div>
@@ -199,16 +323,17 @@
                             <div class="mb-2 text-sm font-black text-ink">Expenses waiting approval</div>
                             <div class="space-y-2">
                                 {% for row in approval_expenses %}
-                                    <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                                    <article class="min-w-0 rounded-xl border border-line bg-white px-3 py-2.5 shadow-quiet xl:flex-1">
                                         <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_140px_220px] lg:items-center">
                                             <div>
                                                 <div class="text-sm font-black text-ink">{{ row.title }}</div>
                                                 <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.category.name }}{% if row.vendor %} | {{ row.vendor.name }}{% endif %}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}{% if row.approved_by %} | last approved by {{ row.approved_by.get_username }}{% endif %}</div>
                                             </div>
                                             <div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div>
-                                            <div class="grid gap-2 sm:grid-cols-2">
+                                            <div class="grid gap-2 sm:grid-cols-3">
                                                 <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="approve_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Approve</button></form>
                                                 <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_expense"><input type="hidden" name="expense_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
+                                                <a href="{% url 'admin:registration_financeexpense_change' row.id %}" target="_blank" rel="noopener noreferrer" class="grid place-items-center rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a>
                                             </div>
                                         </div>
                                     </article>
@@ -222,14 +347,14 @@
                             <div class="mb-2 text-sm font-black text-ink">Approved expenses awaiting payout</div>
                             <div class="space-y-2">
                                 {% for row in approved_expenses %}
-                                    <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                                    <article class="min-w-0 rounded-xl border border-line bg-white px-3 py-2.5 shadow-quiet xl:flex-1">
                                         <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_120px] lg:items-center">
                                             <div>
                                                 <div class="text-sm font-black text-ink">{{ row.title }}</div>
                                                 <div class="mt-1 text-xs font-semibold text-slate-500">Outstanding: BDT {{ row.outstanding_amount }}{% if row.vendor %} | {{ row.vendor.name }}{% endif %}{% if row.approved_at %} | approved {{ row.approved_at|date:'d M Y h:i A' }}{% endif %}</div>
                                             </div>
                                             <div class="text-sm font-black text-slate-700">BDT {{ row.amount }}</div>
-                                            <div class="text-right text-xs font-black {% if row.status == 'partially_paid' %}text-bsbcs-amber{% else %}text-bsbcs-blue{% endif %}">{{ row.get_status_display }}</div>
+                                            <div class="flex items-center justify-end gap-2"><div class="text-right text-xs font-black {% if row.status == 'partially_paid' %}text-bsbcs-amber{% else %}text-bsbcs-blue{% endif %}">{{ row.get_status_display }}</div><a href="{% url 'admin:registration_financeexpense_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div>
                                         </div>
                                     </article>
                                 {% empty %}
@@ -242,16 +367,17 @@
                             <div class="mb-2 text-sm font-black text-ink">Scheduled vendor payments</div>
                             <div class="space-y-2">
                                 {% for row in scheduled_vendor_payments %}
-                                    <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
+                                    <article class="min-w-0 rounded-xl border border-line bg-white px-3 py-2.5 shadow-quiet xl:flex-1">
                                         <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_220px] lg:items-center">
                                             <div>
                                                 <div class="text-sm font-black text-ink">{{ row.vendor.name }}</div>
                                                 <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.get_method_display }}{% if row.expense %} | {{ row.expense.title }}{% endif %}{% if row.scheduled_by %} | scheduled by {{ row.scheduled_by.get_username }}{% endif %}</div>
                                             </div>
                                             <div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div>
-                                            <div class="grid gap-2 sm:grid-cols-2">
+                                            <div class="grid gap-2 sm:grid-cols-3">
                                                 <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="mark_payment_paid"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black text-bsbcs-green hover:bg-green-100">Mark paid</button></form>
                                                 <form method="post">{% csrf_token %}<input type="hidden" name="finance_action" value="cancel_vendor_payment"><input type="hidden" name="payment_id" value="{{ row.id }}"><input type="hidden" name="event" value="{{ current_filters.event }}"><input type="hidden" name="q" value="{{ current_filters.q }}"><input type="hidden" name="tab" value="{{ active_finance_tab }}"><button class="w-full rounded-lg border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-black text-bsbcs-pink hover:bg-pink-100">Cancel</button></form>
+                                                <a href="{% url 'admin:registration_financevendorpayment_change' row.id %}" target="_blank" rel="noopener noreferrer" class="grid place-items-center rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a>
                                             </div>
                                         </div>
                                     </article>
@@ -267,29 +393,38 @@
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Finance setup</div>
-                            <h2 class="mt-1 text-xl font-black text-ink">Keep vendors and categories in their own setup desk</h2>
-                            <p class="mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-600">Open the dedicated setup menu when accounts need to add or review vendor masters, category masters, and opening balances.</p>
+                            <h2 class="mt-1 text-xl font-black text-ink">Keep vendors, categories, and finance accounts in their own setup desk</h2>
+                            <p class="mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-600">Open the dedicated setup menu when accounts need to manage vendor masters, category masters, bank accounts, petty cash, and FDR opening balances.</p>
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <a href="{{ admin_links.setup }}" class="rounded-xl bg-bsbcs-blue px-4 py-2 text-sm font-black text-white hover:bg-bsbcs-navy">Open setup desk</a>
-                            <a href="{{ admin_links.vendors }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Vendor admin</a>
+                            <a href="{{ admin_links.accounts }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Account admin</a>
                         </div>
                     </div>
                 </section>
 
                 <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                    <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Account position board</div>
+                    <h2 class="mt-1 text-xl font-black text-ink">Where the money is sitting right now</h2>
+                    <p class="mt-1 text-sm font-semibold leading-6 text-slate-600">Gross registration and membership money lands in the tagged Bkash gateway account first. After gateway deduction, the net settlement moves into the selected bank account so finance can see where the money started and where it finally landed.</p>
+                    <div class="mt-3 space-y-2">{% for row in account_balance_rows %}<article class="rounded-2xl border border-line bg-slate-50 px-4 py-3"><div class="flex items-center justify-between gap-3"><div><div class="text-sm font-black text-slate-900">{{ row.account.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.account.get_account_type_display }} | Total inflows: BDT {{ row.total_inflows }}{% if row.gateway_collection_in %} | Gateway gross: BDT {{ row.gateway_collection_in }}{% endif %}{% if row.gateway_settlement_in %} | Gateway settled in: BDT {{ row.gateway_settlement_in }}{% endif %}{% if row.gateway_settlement_out %} | Gateway settled out: BDT {{ row.gateway_settlement_out }}{% endif %}{% if row.gateway_fee %} | Gateway charge: BDT {{ row.gateway_fee }}{% endif %} | Transfers in: BDT {{ row.transfers_in }}</div></div><div class="flex items-center gap-3"><div class="text-right"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Closing balance</div><div class="mt-1 text-lg font-black {% if row.closing_balance >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">BDT {{ row.closing_balance }}</div></div><a href="{% url 'admin:registration_financeaccount_change' row.account.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></article>{% empty %}<div class="rounded-2xl border border-line bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">No active finance accounts yet.</div>{% endfor %}</div>
+                </section>
+
+                <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                     <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Vendor payable board</div>
                     <h2 class="mt-1 text-xl font-black text-ink">Who we owe right now</h2>
-                    <div class="mt-3 space-y-2">{% for row in vendor_snapshots %}<article class="rounded-2xl border border-line bg-slate-50 px-4 py-3"><div class="flex items-center justify-between gap-3"><div><div class="text-sm font-black text-slate-900">{{ row.vendor.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">Recorded expense: BDT {{ row.expense_total }} | Paid out: BDT {{ row.paid_total }}</div></div><div class="text-right"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Outstanding</div><div class="mt-1 text-lg font-black {% if row.outstanding_total > 0 %}text-amber-700{% else %}text-emerald-700{% endif %}">BDT {{ row.outstanding_total }}</div></div></div></article>{% empty %}<div class="rounded-2xl border border-line bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">No active vendor data yet.</div>{% endfor %}</div>
+                    <div class="mt-3 space-y-2">{% for row in vendor_snapshots %}<article class="rounded-2xl border border-line bg-slate-50 px-4 py-3"><div class="flex items-center justify-between gap-3"><div><div class="text-sm font-black text-slate-900">{{ row.vendor.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">Recorded expense: BDT {{ row.expense_total }} | Paid out: BDT {{ row.paid_total }}</div></div><div class="flex items-center gap-3"><div class="text-right"><div class="text-[11px] font-black uppercase tracking-wide text-slate-500">Outstanding</div><div class="mt-1 text-lg font-black {% if row.outstanding_total > 0 %}text-amber-700{% else %}text-emerald-700{% endif %}">BDT {{ row.outstanding_total }}</div></div><a href="{% url 'admin:registration_financevendor_change' row.vendor.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></article>{% empty %}<div class="rounded-2xl border border-line bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">No active vendor data yet.</div>{% endfor %}</div>
                 </section>
 
                 <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                     <div class="text-xs font-black uppercase tracking-[0.16em] text-bsbcs-teal">Recent records</div>
-                    <h2 class="mt-1 text-xl font-black text-ink">Latest sponsorships, expenses, and payouts</h2>
+                    <h2 class="mt-1 text-xl font-black text-ink">Latest sponsorships, other income, transfers, expenses, and payouts</h2>
                     <div class="mt-4 space-y-4">
-                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent sponsorship income</div><a href="{{ admin_links.sponsorships }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_sponsorships %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.company_name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.title|default:"No title" }}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}</div></div><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'received' %}text-emerald-700{% elif row.status == 'cancelled' %}text-rose-700{% else %}text-amber-700{% endif %}">{{ row.get_status_display }}</div></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No sponsorship rows yet.</div>{% endfor %}</div></div>
-                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent expenses</div><a href="{{ admin_links.expenses }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_expenses %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.title }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.category.name }}{% if row.vendor %} | {{ row.vendor.name }}{% endif %}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}</div></div><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black text-amber-700">Due: BDT {{ row.outstanding_amount }}</div></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No expense rows yet.</div>{% endfor %}</div></div>
-                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent vendor payouts</div><a href="{{ admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_vendor_payments %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.vendor.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.get_method_display }}{% if row.reference_number %} | {{ row.reference_number }}{% endif %}</div></div><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'paid' %}text-emerald-700{% elif row.status == 'cancelled' %}text-rose-700{% else %}text-amber-700{% endif %}">{{ row.get_status_display }}</div></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No vendor payouts yet.</div>{% endfor %}</div></div>
+                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent sponsorship income</div><a href="{{ admin_links.sponsorships }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_sponsorships %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.company_name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.title|default:"No title" }}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}</div></div><div class="flex items-start gap-2"><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'received' %}text-emerald-700{% elif row.status == 'cancelled' %}text-rose-700{% else %}text-amber-700{% endif %}">{{ row.get_status_display }}</div></div><a href="{% url 'admin:registration_financesponsorshipincome_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No sponsorship rows yet.</div>{% endfor %}</div></div>
+                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent other income</div><a href="{{ admin_links.other_income }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_other_incomes %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.title }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.get_income_type_display }}{% if row.received_account %} | {{ row.received_account.name }}{% endif %}</div></div><div class="flex items-start gap-2"><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'received' %}text-emerald-700{% elif row.status == 'cancelled' %}text-rose-700{% else %}text-amber-700{% endif %}">{{ row.get_status_display }}</div></div><a href="{% url 'admin:registration_financeotherincome_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No other income rows yet.</div>{% endfor %}</div></div>
+                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent transfers</div><a href="{{ admin_links.transfers }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_transfers %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.from_account.name }} to {{ row.to_account.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.reference_number|default:'No reference' }}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}</div></div><div class="flex items-start gap-2"><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'posted' %}text-emerald-700{% else %}text-rose-700{% endif %}">{{ row.get_status_display }}</div></div><a href="{% url 'admin:registration_financetransfer_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No transfer rows yet.</div>{% endfor %}</div></div>
+                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent expenses</div><a href="{{ admin_links.expenses }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_expenses %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.title }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.category.name }}{% if row.vendor %} | {{ row.vendor.name }}{% endif %}{% if row.event %} | {{ row.event.name }} {{ row.event.year }}{% endif %}</div></div><div class="flex items-start gap-2"><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black text-amber-700">Due: BDT {{ row.outstanding_amount }}</div></div><a href="{% url 'admin:registration_financeexpense_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No expense rows yet.</div>{% endfor %}</div></div>
+                        <div><div class="flex items-center justify-between gap-3"><div class="text-sm font-black text-ink">Recent vendor payouts</div><a href="{{ admin_links.payments }}" target="_blank" rel="noopener noreferrer" class="text-xs font-black text-bsbcs-blue">View all</a></div><div class="mt-2 space-y-2">{% for row in recent_vendor_payments %}<div class="rounded-xl border border-line bg-white px-3 py-2.5"><div class="flex items-start justify-between gap-2"><div><div class="text-sm font-black text-slate-900">{{ row.vendor.name }}</div><div class="mt-1 text-xs font-semibold text-slate-500">{{ row.get_method_display }}{% if row.reference_number %} | {{ row.reference_number }}{% endif %}</div></div><div class="flex items-start gap-2"><div class="text-right"><div class="text-sm font-black text-slate-900">BDT {{ row.amount }}</div><div class="mt-1 text-[11px] font-black {% if row.status == 'paid' %}text-emerald-700{% elif row.status == 'cancelled' %}text-rose-700{% else %}text-amber-700{% endif %}">{{ row.get_status_display }}</div></div><a href="{% url 'admin:registration_financevendorpayment_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div></div></div>{% empty %}<div class="rounded-xl border border-line bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">No vendor payouts yet.</div>{% endfor %}</div></div>
                     </div>
                 </section>
             </div>
@@ -328,4 +463,8 @@
 </script>
 </body>
 </html>
+
+
+
+
 
