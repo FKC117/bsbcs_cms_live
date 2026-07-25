@@ -7234,6 +7234,16 @@ def dashboard_participant_center(request):
             | Q(event__name__icontains=search_query)
         )
 
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="participant-center-export.csv"'
+        response.write('\ufeff')
+        writer = csv.writer(response)
+        writer.writerow(['Participant ID', 'Name', 'Email', 'Phone', 'Event', 'Approval status', 'Payment status', 'Amount', 'Invoice number', 'Transaction ID', 'Organization', 'BMDC registration number', 'Registered at'])
+        for participant in participants:
+            payment = getattr(participant, 'payment_statuses', None)
+            writer.writerow([participant.id, participant.name, participant.email, participant.phone, f'{participant.event.name} {participant.event.year}', _participant_dashboard_status(participant), payment.get_status_display() if payment else 'No payment row', payment.amount if payment else '', payment.merchant_invoice_number if payment else '', payment.transaction_id if payment else '', participant.organization, participant.BMDC_registration_number, timezone.localtime(participant.created_at).strftime('%Y-%m-%d %H:%M:%S') if participant.created_at else ''])
+        return response
     event_scope = {'event_id': event_filter} if event_filter else {}
     payment_event_scope = {'event_id': event_filter} if event_filter else {}
     totals = {
@@ -7502,6 +7512,16 @@ def dashboard_membership_center(request):
             | Q(position__icontains=search_query)
         )
     active_page = Paginator(active_members_queryset, 10).get_page(request.GET.get('active_page'))
+    if request.GET.get('export') == 'csv' and panel in ('applications', 'approved_unpaid', 'active'):
+        export_members = {'applications': members_queryset, 'approved_unpaid': approved_unpaid_queryset, 'active': active_members_queryset}[panel]
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="membership-center-export.csv"'
+        response.write('\ufeff')
+        writer = csv.writer(response)
+        writer.writerow(['Member ID', 'Name', 'Email', 'Phone', 'Membership type', 'Approval status', 'Active', 'Institution', 'Position', 'Subscription start', 'Subscription expiry', 'Created at'])
+        for member in export_members:
+            writer.writerow([member.id, member.user_profile.name, member.user_profile.email, member.user_profile.phone, member.membership_type.name if member.membership_type else '', member.get_approval_status_display(), 'Yes' if member.is_active_member else 'No', member.institution, member.position, member.subscription_start_date or '', member.subscription_expiry_date or '', timezone.localtime(member.created_at).strftime('%Y-%m-%d %H:%M:%S') if member.created_at else ''])
+        return response
 
     shown_profile_ids = {
         member.user_profile_id
@@ -8186,6 +8206,13 @@ def dashboard_payment_center(request):
     membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').order_by('-updated_at')
     corporate_payments = CorporatePayment.objects.select_related('corporate_account', 'event', 'corporate_registration').prefetch_related('attendees').order_by('-updated_at')
 
+    if source_filter not in ('all', 'event'):
+        event_payments = event_payments.none()
+    if source_filter not in ('all', 'membership'):
+        membership_payments = membership_payments.none()
+    if source_filter not in ('all', 'corporate'):
+        corporate_payments = corporate_payments.none()
+
     if event_filter:
         event_payments = event_payments.filter(event_id=event_filter)
         corporate_payments = corporate_payments.filter(event_id=event_filter)
@@ -8229,6 +8256,19 @@ def dashboard_payment_center(request):
         membership_payments = membership_payments.filter(status=status_filter)
         corporate_payments = corporate_payments.filter(status=status_filter)
 
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="payment-center-export.csv"'
+        response.write('\ufeff')
+        writer = csv.writer(response)
+        writer.writerow(['Source', 'Payment ID', 'Name / account', 'Email', 'Event / membership', 'Status', 'Amount', 'Invoice number', 'Transaction ID', 'TRX ID', 'Invoice generated', 'Invoice email sent', 'Last updated'])
+        for payment in event_payments:
+            writer.writerow(['Event', payment.id, payment.participant.name, payment.participant.email, f'{payment.event.name} {payment.event.year}', payment.get_status_display(), payment.amount or 0, payment.merchant_invoice_number or '', payment.transaction_id or '', payment.trxID or '', 'Yes' if payment.invoice else 'No', 'Yes' if payment.email_sent else 'No', timezone.localtime(payment.updated_at).strftime('%Y-%m-%d %H:%M:%S') if payment.updated_at else ''])
+        for payment in membership_payments:
+            writer.writerow(['Membership', payment.id, payment.user_profile.name, payment.user_profile.email, payment.membership_type.name if payment.membership_type else 'Membership', payment.get_status_display(), payment.amount or 0, payment.merchant_invoice_number or '', payment.transaction_id or '', payment.trxID or '', 'Yes' if payment.invoice else 'No', 'No', timezone.localtime(payment.updated_at).strftime('%Y-%m-%d %H:%M:%S') if payment.updated_at else ''])
+        for payment in corporate_payments:
+            writer.writerow(['Corporate', payment.id, payment.corporate_account.company_name, payment.corporate_account.email, f'{payment.event.name} {payment.event.year}', payment.get_status_display(), payment.amount or 0, payment.merchant_invoice_number or '', payment.transaction_id or '', payment.trxID or '', 'Yes' if payment.invoice else 'No', 'Yes' if payment.email_sent else 'No', timezone.localtime(payment.updated_at).strftime('%Y-%m-%d %H:%M:%S') if payment.updated_at else ''])
+        return response
     event_rows = []
     membership_rows = []
     corporate_rows = []

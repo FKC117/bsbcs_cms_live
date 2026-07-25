@@ -91,6 +91,7 @@
                         <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                             <input id="q" class="workflow-input" type="search" name="q" value="{{ current_filters.q }}" placeholder="Name, email, phone, organization, BMDC, or event">
                             <button type="submit" class="rounded-xl bg-bsbcs-blue px-4 py-2.5 text-sm font-black text-white hover:bg-bsbcs-navy">Filter</button>
+                            <button name="export" value="csv" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-green-700">Export CSV</button>
                             <a href="{% url 'dashboard_participant_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
                         </div>
                     </div>

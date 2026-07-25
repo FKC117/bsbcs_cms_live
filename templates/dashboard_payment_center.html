@@ -99,7 +99,10 @@
                 </div>
                 <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
                     <input type="search" name="q" value="{{ current_filters.q }}" class="workflow-input" placeholder="Search name, email, invoice, payment ID, transaction ID">
-                    <a href="{% url 'dashboard_payment_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button name="export" value="csv" class="rounded-xl bg-bsbcs-green px-4 py-2.5 text-sm font-black text-white hover:bg-green-700">Export CSV</button>
+                        <a href="{% url 'dashboard_payment_center' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
+                    </div>
                 </div>
             </form>
         </div>
