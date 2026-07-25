@@ -2176,6 +2176,7 @@ class BulkEmail(models.Model):
     AUDIENCE_EMAIL_GROUP = 'email_group'
     AUDIENCE_EVENT_PARTICIPANTS = 'event_participants'
     AUDIENCE_EVENT_UNPAID = 'event_unpaid'
+    AUDIENCE_EVENT_PAID = 'event_paid'
     AUDIENCE_MEMBERSHIP_UNPAID = 'membership_unpaid'
     AUDIENCE_ABSTRACT_SUBMITTERS = 'abstract_submitters'
     AUDIENCE_CORPORATE_CONTACTS = 'corporate_contacts'
@@ -2186,6 +2187,7 @@ class BulkEmail(models.Model):
         (AUDIENCE_EMAIL_GROUP, 'Email group'),
         (AUDIENCE_EVENT_PARTICIPANTS, 'Event participants'),
         (AUDIENCE_EVENT_UNPAID, 'Approved event participants with pending payment'),
+        (AUDIENCE_EVENT_PAID, 'Approved event participants with completed payment'),
         (AUDIENCE_MEMBERSHIP_UNPAID, 'Approved members with pending membership payment'),
         (AUDIENCE_ABSTRACT_SUBMITTERS, 'Abstract submitters'),
         (AUDIENCE_CORPORATE_CONTACTS, 'Corporate contacts'),
@@ -2353,6 +2355,7 @@ class BulkSMS(models.Model):
     AUDIENCE_PHONE_GROUP = 'phone_group'
     AUDIENCE_EVENT_PARTICIPANTS = 'event_participants'
     AUDIENCE_EVENT_UNPAID = 'event_unpaid'
+    AUDIENCE_EVENT_PAID = 'event_paid'
     AUDIENCE_MEMBERSHIP_UNPAID = 'membership_unpaid'
     AUDIENCE_ABSTRACT_SUBMITTERS = 'abstract_submitters'
     AUDIENCE_CORPORATE_CONTACTS = 'corporate_contacts'
@@ -2363,6 +2366,7 @@ class BulkSMS(models.Model):
         (AUDIENCE_PHONE_GROUP, 'Phone group'),
         (AUDIENCE_EVENT_PARTICIPANTS, 'Event participants'),
         (AUDIENCE_EVENT_UNPAID, 'Approved event participants with pending payment'),
+        (AUDIENCE_EVENT_PAID, 'Approved event participants with completed payment'),
         (AUDIENCE_MEMBERSHIP_UNPAID, 'Approved members with pending membership payment'),
         (AUDIENCE_ABSTRACT_SUBMITTERS, 'Abstract submitters'),
         (AUDIENCE_CORPORATE_CONTACTS, 'Corporate contacts'),

@@ -13127,6 +13127,7 @@ def dashboard_bulk_email_center(request):
             elif audience_type in [
                 BulkEmail.AUDIENCE_EVENT_PARTICIPANTS,
                 BulkEmail.AUDIENCE_EVENT_UNPAID,
+                BulkEmail.AUDIENCE_EVENT_PAID,
                 BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS,
             ] and not event:
                 messages.error(request, 'Choose an event for this audience.')
@@ -13143,6 +13144,7 @@ def dashboard_bulk_email_center(request):
                     event=event if audience_type in [
                         BulkEmail.AUDIENCE_EVENT_PARTICIPANTS,
                         BulkEmail.AUDIENCE_EVENT_UNPAID,
+                        BulkEmail.AUDIENCE_EVENT_PAID,
                         BulkEmail.AUDIENCE_ABSTRACT_SUBMITTERS,
                     ] else None,
                     email_group=email_group if audience_type == BulkEmail.AUDIENCE_EMAIL_GROUP else None,
@@ -13494,6 +13496,7 @@ def dashboard_bulk_sms_center(request):
             elif audience_type in [
                 BulkSMS.AUDIENCE_EVENT_PARTICIPANTS,
                 BulkSMS.AUDIENCE_EVENT_UNPAID,
+                BulkSMS.AUDIENCE_EVENT_PAID,
                 BulkSMS.AUDIENCE_ABSTRACT_SUBMITTERS,
             ] and not event:
                 messages.error(request, 'Choose an event for this audience.')
@@ -13508,6 +13511,7 @@ def dashboard_bulk_sms_center(request):
                     event=event if audience_type in [
                         BulkSMS.AUDIENCE_EVENT_PARTICIPANTS,
                         BulkSMS.AUDIENCE_EVENT_UNPAID,
+                        BulkSMS.AUDIENCE_EVENT_PAID,
                         BulkSMS.AUDIENCE_ABSTRACT_SUBMITTERS,
                     ] else None,
                     phone_group=phone_group if audience_type == BulkSMS.AUDIENCE_PHONE_GROUP else None,

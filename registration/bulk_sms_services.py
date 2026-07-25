@@ -166,6 +166,7 @@ def prepare_bulk_sms_recipients(bulk_sms):
             event=bulk_sms.event,
             status__in=['unpaid', 'pending', 'failed', 'initiated'],
             participant__isnull=False,
+            participant__approved=True,
         ).select_related('participant')
         for payment in payments:
             participant = payment.participant
@@ -177,6 +178,17 @@ def prepare_bulk_sms_recipients(bulk_sms):
                     source_type=BulkSMSRecipient.SOURCE_PARTICIPANT,
                     participant=participant,
                 )
+    elif bulk_sms.audience_type == BulkSMS.AUDIENCE_EVENT_PAID and bulk_sms.event:
+        payments = PaymentStatus.objects.filter(
+            event=bulk_sms.event,
+            status__in=['paid', 'completed'],
+            participant__isnull=False,
+            participant__approved=True,
+        ).select_related('participant')
+        for payment in payments:
+            participant = payment.participant
+            if participant and participant.phone:
+                queue_target(participant.phone, country=participant.country or DEFAULT_COUNTRY, name=participant.name, source_type=BulkSMSRecipient.SOURCE_PARTICIPANT, participant=participant)
     elif bulk_sms.audience_type == BulkSMS.AUDIENCE_MEMBERSHIP_UNPAID:
         from website.models import Member
 

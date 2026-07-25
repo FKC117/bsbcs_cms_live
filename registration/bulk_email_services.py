@@ -172,6 +172,7 @@ def prepare_bulk_email_recipients(bulk_email):
             event=bulk_email.event,
             status__in=['unpaid', 'pending', 'failed', 'initiated'],
             participant__isnull=False,
+            participant__approved=True,
         ).select_related('participant')
         for payment in payments:
             participant = payment.participant
@@ -182,6 +183,24 @@ def prepare_bulk_email_recipients(bulk_email):
                     source_type=BulkEmailRecipient.SOURCE_PARTICIPANT,
                     participant=participant,
                 )
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_PAID and bulk_email.event:
+        payments = PaymentStatus.objects.filter(
+            event=bulk_email.event,
+            status__in=['paid', 'completed'],
+            participant__isnull=False,
+            participant__approved=True,
+        ).select_related('participant')
+        for payment in payments:
+            queue_target(payment.participant.email, name=payment.participant.name, source_type=BulkEmailRecipient.SOURCE_PARTICIPANT, participant=payment.participant)
+    elif bulk_email.audience_type == BulkEmail.AUDIENCE_EVENT_PAID and bulk_email.event:
+        payments = PaymentStatus.objects.filter(
+            event=bulk_email.event,
+            status__in=['paid', 'completed'],
+            participant__isnull=False,
+            participant__approved=True,
+        ).select_related('participant')
+        for payment in payments:
+            queue_target(payment.participant.email, name=payment.participant.name, source_type=BulkEmailRecipient.SOURCE_PARTICIPANT, participant=payment.participant)
     elif bulk_email.audience_type == BulkEmail.AUDIENCE_MEMBERSHIP_UNPAID:
         from website.models import Member
 
