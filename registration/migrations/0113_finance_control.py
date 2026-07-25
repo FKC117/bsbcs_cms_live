@@ -4,43 +4,27 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
-def ensure_finance_control_table(apps, schema_editor):
-    table_name = "registration_financecontrol"
-    existing_tables = schema_editor.connection.introspection.table_names()
-    if table_name in existing_tables:
-        return
-    finance_control_model = apps.get_model("registration", "FinanceControl")
-    schema_editor.create_model(finance_control_model)
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("registration", "0112_alter_financetransfer_transfer_date"),
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunPython(ensure_finance_control_table, migrations.RunPython.noop),
+        migrations.CreateModel(
+            name="FinanceControl",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("gateway_charge_percent", models.DecimalField(decimal_places=2, default=0, max_digits=5)),
+                ("note", models.TextField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("corporate_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_corporate_account", to="registration.financeaccount")),
+                ("membership_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_membership_account", to="registration.financeaccount")),
+                ("registration_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_registration_account", to="registration.financeaccount")),
             ],
-            state_operations=[
-                migrations.CreateModel(
-                    name="FinanceControl",
-                    fields=[
-                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                        ("gateway_charge_percent", models.DecimalField(decimal_places=2, default=0, max_digits=5)),
-                        ("note", models.TextField(blank=True, null=True)),
-                        ("created_at", models.DateTimeField(auto_now_add=True)),
-                        ("updated_at", models.DateTimeField(auto_now=True)),
-                        ("corporate_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_corporate_account", to="registration.financeaccount")),
-                        ("membership_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_membership_account", to="registration.financeaccount")),
-                        ("registration_receiving_account", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="finance_control_registration_account", to="registration.financeaccount")),
-                    ],
-                    options={
-                        "verbose_name": "Finance control",
-                        "verbose_name_plural": "Finance control",
-                    },
-                ),
-            ],
+            options={
+                "verbose_name": "Finance control",
+                "verbose_name_plural": "Finance control",
+            },
         ),
     ]
