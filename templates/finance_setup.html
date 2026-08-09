@@ -38,8 +38,8 @@
         <div class="mx-auto grid w-[min(1440px,calc(100%-32px))] gap-4 pb-7 lg:grid-cols-[minmax(0,1fr)_620px] lg:items-start">
             <div>
                 <div class="text-xs font-black uppercase tracking-[0.14em] text-cyan-100">Finance setup</div>
-                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage vendor masters and expense categories in one setup-only finance desk.</h1>
-                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Keep vendor records, opening balances, contact details, and finance categories separate from the live intake and approval workflow.</p>
+                <h1 class="mt-1 max-w-4xl text-3xl font-black tracking-normal !text-white sm:text-4xl">Manage vendor masters, sponsor company lists, and expense categories in one setup-only finance desk.</h1>
+                <p class="mt-2 max-w-3xl text-sm leading-6 !text-white/75">Keep vendor records, sponsor company masters, opening balances, contact details, and finance categories separate from the live intake and approval workflow.</p>
             </div>
             <form method="get" class="rounded-2xl border border-white/20 bg-white/95 p-3 text-ink shadow-lift">
                 <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -50,6 +50,7 @@
                             <option value="vendors" {% if current_filters.scope == 'vendors' %}selected{% endif %}>Vendors only</option>
                             <option value="categories" {% if current_filters.scope == 'categories' %}selected{% endif %}>Categories only</option>
                             <option value="accounts" {% if current_filters.scope == 'accounts' %}selected{% endif %}>Accounts only</option>
+                            <option value="sponsor_companies" {% if current_filters.scope == 'sponsor_companies' %}selected{% endif %}>Sponsor companies only</option>
                         </select>
                     </div>
                     <div class="grid content-end">
@@ -57,7 +58,7 @@
                     </div>
                 </div>
                 <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                    <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, contact, phone, code, or category">
+                    <input id="q" type="search" name="q" value="{{ current_filters.q }}" class="finance-input" placeholder="Search vendor, sponsor company, contact, phone, code, or category">
                     <a href="{% url 'finance_setup' %}" class="grid place-items-center rounded-xl border border-line px-4 py-2.5 text-sm font-black text-slate-600 hover:border-bsbcs-blue hover:text-bsbcs-blue">Reset</a>
                 </div>
             </form>
@@ -80,9 +81,11 @@
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Active categories</div><div class="mt-2 text-2xl font-black text-bsbcs-green">{{ totals.active_categories }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Accounts</div><div class="mt-2 text-2xl font-black text-ink">{{ totals.accounts }}</div></div>
             <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Active accounts</div><div class="mt-2 text-2xl font-black text-bsbcs-green">{{ totals.active_accounts }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Sponsor companies</div><div class="mt-2 text-2xl font-black text-ink">{{ totals.sponsor_companies }}</div></div>
+            <div class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet"><div class="text-xs font-black uppercase tracking-wide text-slate-500">Active sponsor companies</div><div class="mt-2 text-2xl font-black text-bsbcs-green">{{ totals.active_sponsor_companies }}</div></div>
         </section>
 
-        <section class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
+        <section id="finance-control-setup" class="mt-3 rounded-2xl border border-line bg-white p-4 shadow-quiet">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Finance control</div>
@@ -136,7 +139,7 @@
 
         <section class="mt-3 grid gap-3 xl:grid-cols-2">
             {% if view_flags.show_vendors %}
-            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <section id="vendor-setup" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Vendor setup</div>
@@ -160,28 +163,39 @@
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save vendor</button></div>
                     </div>
                 </form>
-                <div class="mt-3 space-y-2">
-                    {% for row in vendor_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_110px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.name }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.contact_person|default:'No contact person' }}{% if row.phone %} | {{ row.phone }}{% endif %}{% if row.email %} | {{ row.email }}{% endif %}</div>
-                                </div>
-                                <div class="text-sm font-black text-slate-700">BDT {{ row.opening_balance }}</div>
-                                <div class="text-right text-xs font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</div>
-                                <div class="flex justify-end gap-2"><a href="{% url 'admin:registration_financevendor_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No vendor rows matched this setup filter.</div>
-                    {% endfor %}
+                <div class="mt-3 overflow-x-auto rounded-xl border border-line bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2 text-left font-black">Vendor</th>
+                                <th class="px-3 py-2 text-left font-black">Contact</th>
+                                <th class="px-3 py-2 text-left font-black">Opening</th>
+                                <th class="px-3 py-2 text-left font-black">Address / note</th>
+                                <th class="px-3 py-2 text-right font-black">Status</th>
+                                <th class="px-3 py-2 text-right font-black">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in vendor_rows %}
+                                <tr class="border-t border-line align-middle">
+                                    <td class="px-3 py-2 font-black text-ink">{{ row.name }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-600">{{ row.contact_person|default:'No contact person' }}{% if row.phone %} | {{ row.phone }}{% endif %}{% if row.email %} | {{ row.email }}{% endif %}</td>
+                                    <td class="px-3 py-2 font-black text-slate-700">BDT {{ row.opening_balance }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-500">{{ row.address|default:row.notes|default:'No note' }}</td>
+                                    <td class="px-3 py-2 text-right text-[11px] font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
+                                    <td class="px-3 py-2 text-right"><a href="{% url 'admin:registration_financevendor_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-1.5 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6" class="bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No vendor rows matched this setup filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </section>
             {% endif %}
 
             {% if view_flags.show_accounts %}
-            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <section id="account-setup" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Account setup</div>
@@ -203,29 +217,93 @@
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save account</button></div>
                     </div>
                 </form>
-                <div class="mt-3 space-y-2">
-                    {% for row in account_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_130px_1fr_90px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.name }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.get_account_type_display }}{% if row.code %} | {{ row.code }}{% endif %}</div>
-                                </div>
-                                <div class="text-sm font-black text-slate-700">BDT {{ row.opening_balance }}</div>
-                                <div class="text-xs font-black text-slate-600">{{ row.note|default:'No note' }}</div>
-                                <div class="text-right text-xs font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</div>
-                                <div class="flex justify-end gap-2"><a href="{% url 'admin:registration_financeaccount_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No account rows matched this setup filter.</div>
-                    {% endfor %}
+                <div class="mt-3 overflow-x-auto rounded-xl border border-line bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2 text-left font-black">Account</th>
+                                <th class="px-3 py-2 text-left font-black">Type / code</th>
+                                <th class="px-3 py-2 text-left font-black">Opening</th>
+                                <th class="px-3 py-2 text-left font-black">Note</th>
+                                <th class="px-3 py-2 text-right font-black">Status</th>
+                                <th class="px-3 py-2 text-right font-black">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in account_rows %}
+                                <tr class="border-t border-line align-middle">
+                                    <td class="px-3 py-2 font-black text-ink">{{ row.name }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-600">{{ row.get_account_type_display }}{% if row.code %} | {{ row.code }}{% endif %}</td>
+                                    <td class="px-3 py-2 font-black text-slate-700">BDT {{ row.opening_balance }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-500">{{ row.note|default:'No note' }}</td>
+                                    <td class="px-3 py-2 text-right text-[11px] font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
+                                    <td class="px-3 py-2 text-right"><a href="{% url 'admin:registration_financeaccount_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-1.5 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6" class="bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No account rows matched this setup filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </section>
             {% endif %}
 
+            {% if view_flags.show_sponsor_companies %}
+            <section id="sponsor-company-setup" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Sponsor company setup</div>
+                        <h2 class="mt-1 text-xl font-black text-ink">Add and review sponsor companies</h2>
+                    </div>
+                    <a href="{{ admin_links.sponsor_companies }}" target="_blank" rel="noopener noreferrer" class="rounded-xl border border-line px-4 py-2 text-sm font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Sponsor company admin</a>
+                </div>
+                <form method="post" class="mt-4 rounded-xl border border-line bg-slate-50 p-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="finance_action" value="add_sponsor_company">
+                    <input type="hidden" name="scope" value="{{ current_filters.scope }}">
+                    <input type="hidden" name="q" value="{{ current_filters.q }}">
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <div><label class="finance-label">Sponsor company name</label><input name="sponsor_company_name" class="finance-input" required></div>
+                        <div><label class="finance-label">Contact person</label><input name="sponsor_company_contact_person" class="finance-input"></div>
+                        <div><label class="finance-label">Email</label><input name="sponsor_company_email" type="email" class="finance-input"></div>
+                        <div><label class="finance-label">Phone</label><input name="sponsor_company_phone" class="finance-input"></div>
+                        <div class="md:col-span-2"><label class="finance-label">Address</label><input name="sponsor_company_address" class="finance-input"></div>
+                        <div class="md:col-span-2"><label class="finance-label">Notes</label><textarea name="sponsor_company_notes" class="finance-textarea"></textarea></div>
+                        <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save sponsor company</button></div>
+                    </div>
+                </form>
+                <div class="mt-3 overflow-x-auto rounded-xl border border-line bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2 text-left font-black">Company</th>
+                                <th class="px-3 py-2 text-left font-black">Contact person</th>
+                                <th class="px-3 py-2 text-left font-black">Phone, email, address</th>
+                                <th class="px-3 py-2 text-right font-black">Status</th>
+                                <th class="px-3 py-2 text-right font-black">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in sponsor_company_rows %}
+                                <tr class="border-t border-line align-middle">
+                                    <td class="px-3 py-2 font-black text-ink">{{ row.name }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-600">{{ row.contact_person|default:'No contact person' }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-500">{% if row.phone %}{{ row.phone }}{% else %}No phone{% endif %}{% if row.email %} | {{ row.email }}{% endif %}{% if row.address %} | {{ row.address }}{% elif row.notes %} | {{ row.notes|truncatechars:50 }}{% endif %}</td>
+                                    <td class="px-3 py-2 text-right text-[11px] font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
+                                    <td class="px-3 py-2 text-right"><a href="{% url 'admin:registration_sponsorcompany_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-1.5 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No sponsor company rows matched this setup filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            {% endif %}
+
+
             {% if view_flags.show_categories %}
-            <section class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
+            <section id="category-setup" class="rounded-2xl border border-line bg-white p-4 shadow-quiet">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div class="text-xs font-black uppercase tracking-[0.14em] text-bsbcs-teal">Category setup</div>
@@ -245,22 +323,31 @@
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save category</button></div>
                     </div>
                 </form>
-                <div class="mt-3 space-y-2">
-                    {% for row in category_rows %}
-                        <article class="rounded-xl border border-line bg-white px-3 py-3 shadow-quiet">
-                            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_90px_150px] md:items-center">
-                                <div>
-                                    <div class="text-sm font-black text-ink">{{ row.name }}</div>
-                                    <div class="mt-1 text-xs font-semibold text-slate-500">{{ row.description|default:'No description yet.' }}</div>
-                                </div>
-                                <div class="text-sm font-black text-slate-700">{{ row.code|default:'No code' }}</div>
-                                <div class="text-right text-xs font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</div>
-                                <div class="flex justify-end gap-2"><a href="{% url 'admin:registration_financeexpensecategory_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-2 text-xs font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></div>
-                            </div>
-                        </article>
-                    {% empty %}
-                        <div class="rounded-xl border border-line bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No category rows matched this setup filter.</div>
-                    {% endfor %}
+                <div class="mt-3 overflow-x-auto rounded-xl border border-line bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2 text-left font-black">Category</th>
+                                <th class="px-3 py-2 text-left font-black">Code</th>
+                                <th class="px-3 py-2 text-left font-black">Description</th>
+                                <th class="px-3 py-2 text-right font-black">Status</th>
+                                <th class="px-3 py-2 text-right font-black">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in category_rows %}
+                                <tr class="border-t border-line align-middle">
+                                    <td class="px-3 py-2 font-black text-ink">{{ row.name }}</td>
+                                    <td class="px-3 py-2 font-black text-slate-700">{{ row.code|default:'No code' }}</td>
+                                    <td class="px-3 py-2 text-[11px] font-semibold text-slate-500">{{ row.description|default:'No description yet.' }}</td>
+                                    <td class="px-3 py-2 text-right text-[11px] font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
+                                    <td class="px-3 py-2 text-right"><a href="{% url 'admin:registration_financeexpensecategory_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-1.5 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="bg-slate-50 px-3 py-8 text-center text-sm font-semibold text-slate-500">No category rows matched this setup filter.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </section>
             {% endif %}

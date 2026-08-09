@@ -9577,10 +9577,30 @@ def finance_dashboard(request):
                 return redirect(redirect_url)
 
             if action == 'add_sponsorship':
-                company_name = (request.POST.get('sponsorship_company_name') or '').strip()
-                if not company_name:
-                    raise ValueError('Sponsor or company name is required.')
+                sponsor_choice = (request.POST.get('sponsor_company_id') or '').strip()
                 sponsorship_event = Event.objects.filter(pk=(request.POST.get('event') or '').strip()).first() if (request.POST.get('event') or '').strip() else None
+                selected_sponsor_company = None
+                selected_event_sponsor = None
+                company_name = ''
+
+                if sponsor_choice.startswith('company:'):
+                    selected_sponsor_company = SponsorCompany.objects.filter(pk=sponsor_choice.split(':', 1)[1], is_active=True).first()
+                    if not selected_sponsor_company:
+                        raise ValueError('Choose a valid sponsor company from the master list.')
+                    company_name = selected_sponsor_company.name
+                    if sponsorship_event:
+                        selected_event_sponsor = Sponsor.objects.filter(event=sponsorship_event, name__iexact=selected_sponsor_company.name).first()
+                elif sponsor_choice.startswith('sponsor:'):
+                    selected_event_sponsor = Sponsor.objects.filter(pk=sponsor_choice.split(':', 1)[1]).select_related('event').first()
+                    if not selected_event_sponsor:
+                        raise ValueError('Choose a valid event sponsor company.')
+                    if sponsorship_event and selected_event_sponsor.event_id != sponsorship_event.id:
+                        raise ValueError('The selected sponsor does not belong to the selected event.')
+                    company_name = selected_event_sponsor.name
+                    selected_sponsor_company = SponsorCompany.objects.filter(name__iexact=selected_event_sponsor.name, is_active=True).first()
+                else:
+                    raise ValueError('Choose a sponsor company from the list.')
+
                 sponsorship_status = (request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED
                 received_on = parse_date(request.POST.get('sponsorship_received_on'), 'received date')
                 received_account = FinanceAccount.objects.filter(pk=(request.POST.get('sponsorship_received_account') or '').strip(), is_active=True).first() if (request.POST.get('sponsorship_received_account') or '').strip() else None
@@ -9589,7 +9609,8 @@ def finance_dashboard(request):
                 reference_number = (request.POST.get('sponsorship_reference_number') or '').strip() or _finance_build_income_reference(received_on or timezone.localdate(), sponsorship_event)
                 sponsorship = FinanceSponsorshipIncome.objects.create(
                     event=sponsorship_event,
-                    sponsor=Sponsor.objects.filter(pk=(request.POST.get('sponsor_id') or '').strip()).first() if (request.POST.get('sponsor_id') or '').strip() else None,
+                    sponsor=selected_event_sponsor,
+                    sponsor_company=selected_sponsor_company,
                     received_account=received_account,
                     company_name=company_name,
                     title=(request.POST.get('sponsorship_title') or '').strip() or None,
@@ -9602,6 +9623,24 @@ def finance_dashboard(request):
                 )
                 dashboard_log_action(request, sponsorship, ADDITION, 'Created sponsorship income from finance dashboard.')
                 messages.success(request, f'Sponsorship income saved for {sponsorship.company_name} as {sponsorship.reference_number}.')
+                return redirect(redirect_url)
+
+            if action == 'update_sponsorship':
+                sponsorship = get_object_or_404(FinanceSponsorshipIncome, pk=(request.POST.get('sponsorship_id') or '').strip())
+                sponsorship_status = (request.POST.get('sponsorship_status') or FinanceSponsorshipIncome.STATUS_EXPECTED).strip() or FinanceSponsorshipIncome.STATUS_EXPECTED
+                received_on = parse_date(request.POST.get('sponsorship_received_on'), 'received date')
+                received_account = FinanceAccount.objects.filter(
+                    pk=(request.POST.get('sponsorship_received_account') or '').strip(),
+                    is_active=True,
+                ).first() if (request.POST.get('sponsorship_received_account') or '').strip() else None
+                if sponsorship_status == FinanceSponsorshipIncome.STATUS_RECEIVED and not received_on:
+                    received_on = sponsorship.received_on or timezone.localdate()
+                sponsorship.status = sponsorship_status
+                sponsorship.received_on = received_on
+                sponsorship.received_account = received_account
+                sponsorship.save(update_fields=['status', 'received_on', 'received_account', 'updated_at'])
+                dashboard_log_action(request, sponsorship, CHANGE, 'Updated sponsorship income from finance dashboard.')
+                messages.success(request, f'Sponsorship income updated for {sponsorship.company_name}.')
                 return redirect(redirect_url)
 
             if action == 'add_other_income':
@@ -9632,6 +9671,24 @@ def finance_dashboard(request):
                 messages.success(request, f'Other income "{other_income.title}" saved as {other_income.reference_number}.')
                 return redirect(redirect_url)
 
+            if action == 'update_other_income':
+                other_income = get_object_or_404(FinanceOtherIncome, pk=(request.POST.get('other_income_id') or '').strip())
+                other_income_status = (request.POST.get('other_income_status') or FinanceOtherIncome.STATUS_RECEIVED).strip() or FinanceOtherIncome.STATUS_RECEIVED
+                received_on = parse_date(request.POST.get('other_income_received_on'), 'other income date')
+                received_account = FinanceAccount.objects.filter(
+                    pk=(request.POST.get('other_income_received_account') or '').strip(),
+                    is_active=True,
+                ).first() if (request.POST.get('other_income_received_account') or '').strip() else None
+                if other_income_status == FinanceOtherIncome.STATUS_RECEIVED and not received_on:
+                    received_on = other_income.received_on or timezone.localdate()
+                other_income.status = other_income_status
+                other_income.received_on = received_on
+                other_income.received_account = received_account
+                other_income.save(update_fields=['status', 'received_on', 'received_account', 'updated_at'])
+                dashboard_log_action(request, other_income, CHANGE, 'Updated other income from finance dashboard.')
+                messages.success(request, f'Other income "{other_income.title}" updated.')
+                return redirect(redirect_url)
+
             if action == 'add_transfer':
                 from_account = FinanceAccount.objects.filter(pk=(request.POST.get('transfer_from_account') or '').strip(), is_active=True).first()
                 to_account = FinanceAccount.objects.filter(pk=(request.POST.get('transfer_to_account') or '').strip(), is_active=True).first()
@@ -9656,6 +9713,15 @@ def finance_dashboard(request):
                 )
                 dashboard_log_action(request, transfer, ADDITION, 'Created finance transfer from finance dashboard.')
                 messages.success(request, f'Transfer saved as {transfer.reference_number}.')
+                return redirect(redirect_url)
+
+            if action == 'update_transfer':
+                transfer = get_object_or_404(FinanceTransfer, pk=(request.POST.get('transfer_id') or '').strip())
+                transfer.status = (request.POST.get('transfer_status') or FinanceTransfer.STATUS_POSTED).strip() or FinanceTransfer.STATUS_POSTED
+                transfer.transfer_date = parse_date(request.POST.get('transfer_date'), 'transfer date') or transfer.transfer_date or timezone.localdate()
+                transfer.save(update_fields=['status', 'transfer_date', 'updated_at'])
+                dashboard_log_action(request, transfer, CHANGE, 'Updated finance transfer from finance dashboard.')
+                messages.success(request, f'Transfer "{transfer.reference_number or transfer.id}" updated.')
                 return redirect(redirect_url)
 
             if action == 'add_expense':
@@ -9704,6 +9770,40 @@ def finance_dashboard(request):
                     FinanceExpenseAttachment.objects.create(expense=expense, title='Primary bill', file=expense_file)
                 dashboard_log_action(request, expense, ADDITION, 'Created expense row from finance dashboard.')
                 messages.success(request, f'Expense "{expense.title}" saved as {expense.bill_number}.')
+                return redirect(redirect_url)
+
+            if action == 'update_expense':
+                expense = get_object_or_404(FinanceExpense, pk=(request.POST.get('expense_id') or '').strip())
+                requested_status = (request.POST.get('expense_status') or expense.status).strip() or expense.status
+                due_date = parse_date(request.POST.get('expense_due_date'), 'expense due date')
+                expense_vendor = FinanceVendor.objects.filter(pk=(request.POST.get('expense_vendor') or '').strip()).first() if (request.POST.get('expense_vendor') or '').strip() else None
+                has_paid_vouchers = expense.vendor_payments.filter(status=FinanceVendorPayment.STATUS_PAID).exists()
+                if due_date and expense.expense_date and due_date < expense.expense_date:
+                    raise ValueError('Due date cannot be earlier than the expense date.')
+                if requested_status == FinanceExpense.STATUS_CANCELLED and has_paid_vouchers:
+                    raise ValueError('This expense already has paid vouchers. Cancel it from admin only after reconciliation.')
+                expense.vendor = expense_vendor
+                expense.due_date = due_date
+                if requested_status == FinanceExpense.STATUS_CANCELLED:
+                    expense.status = FinanceExpense.STATUS_CANCELLED
+                    expense.cancelled_by = request.user
+                    expense.cancelled_at = timezone.now()
+                    expense.approved_by = None
+                    expense.approved_at = None
+                else:
+                    if not has_paid_vouchers:
+                        if requested_status == FinanceExpense.STATUS_PAID:
+                            expense.paid_amount = expense.amount or Decimal('0.00')
+                        elif requested_status == FinanceExpense.STATUS_APPROVED:
+                            expense.paid_amount = Decimal('0.00')
+                    expense.status = requested_status
+                    _finance_sync_expense_state(
+                        expense,
+                        acting_user=request.user if requested_status != FinanceExpense.STATUS_DRAFT or (expense.paid_amount or Decimal('0.00')) > 0 else None,
+                    )
+                expense.save(update_fields=['vendor', 'due_date', 'paid_amount', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+                dashboard_log_action(request, expense, CHANGE, 'Updated expense from finance dashboard.')
+                messages.success(request, f'Expense "{expense.title}" updated.')
                 return redirect(redirect_url)
 
             if action == 'add_vendor_payment':
@@ -9755,6 +9855,63 @@ def finance_dashboard(request):
                     expense.save(update_fields=['paid_amount', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
                 dashboard_log_action(request, vendor_payment, ADDITION, 'Created vendor payment from finance dashboard.')
                 messages.success(request, f'Vendor payment saved for {vendor.name} as {vendor_payment.reference_number}.')
+                return redirect(redirect_url)
+
+            if action == 'update_vendor_payment':
+                vendor_payment = get_object_or_404(FinanceVendorPayment, pk=(request.POST.get('payment_id') or '').strip())
+                previous_status = vendor_payment.status
+                payment_status = (request.POST.get('payment_status') or vendor_payment.status).strip() or vendor_payment.status
+                payment_date = parse_date(request.POST.get('payment_date'), 'payment date') or vendor_payment.payment_date or timezone.localdate()
+                source_account = FinanceAccount.objects.filter(
+                    pk=(request.POST.get('payment_source_account') or '').strip(),
+                    is_active=True,
+                ).first() if (request.POST.get('payment_source_account') or '').strip() else None
+
+                if vendor_payment.expense_id:
+                    expense = vendor_payment.expense
+                    if payment_status == FinanceVendorPayment.STATUS_PAID and expense.status in {FinanceExpense.STATUS_DRAFT, FinanceExpense.STATUS_CANCELLED}:
+                        raise ValueError('This linked expense cannot receive a paid voucher.')
+                    if previous_status != FinanceVendorPayment.STATUS_PAID and payment_status == FinanceVendorPayment.STATUS_PAID and vendor_payment.amount > expense.outstanding_amount:
+                        raise ValueError('This voucher amount is greater than the linked expense outstanding amount.')
+
+                vendor_payment.status = payment_status
+                vendor_payment.payment_date = payment_date
+                vendor_payment.source_account = source_account
+                if payment_status == FinanceVendorPayment.STATUS_SCHEDULED:
+                    vendor_payment.scheduled_by = request.user
+                    vendor_payment.scheduled_at = timezone.now()
+                    vendor_payment.paid_confirmed_by = None
+                    vendor_payment.paid_confirmed_at = None
+                    vendor_payment.cancelled_by = None
+                    vendor_payment.cancelled_at = None
+                elif payment_status == FinanceVendorPayment.STATUS_PAID:
+                    vendor_payment.paid_confirmed_by = request.user
+                    vendor_payment.paid_confirmed_at = timezone.now()
+                    vendor_payment.cancelled_by = None
+                    vendor_payment.cancelled_at = None
+                elif payment_status == FinanceVendorPayment.STATUS_CANCELLED:
+                    vendor_payment.cancelled_by = request.user
+                    vendor_payment.cancelled_at = timezone.now()
+                vendor_payment.save(update_fields=[
+                    'status', 'payment_date', 'source_account',
+                    'scheduled_by', 'scheduled_at',
+                    'paid_confirmed_by', 'paid_confirmed_at',
+                    'cancelled_by', 'cancelled_at',
+                    'updated_at',
+                ])
+
+                if vendor_payment.expense_id and previous_status != payment_status:
+                    expense = vendor_payment.expense
+                    adjustment = vendor_payment.amount or Decimal('0.00')
+                    if previous_status == FinanceVendorPayment.STATUS_PAID and payment_status != FinanceVendorPayment.STATUS_PAID:
+                        expense.paid_amount = max(Decimal('0.00'), (expense.paid_amount or Decimal('0.00')) - adjustment)
+                    elif previous_status != FinanceVendorPayment.STATUS_PAID and payment_status == FinanceVendorPayment.STATUS_PAID:
+                        expense.paid_amount = min((expense.amount or Decimal('0.00')), (expense.paid_amount or Decimal('0.00')) + adjustment)
+                    _finance_sync_expense_state(expense, acting_user=request.user)
+                    expense.save(update_fields=['paid_amount', 'status', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'updated_at'])
+
+                dashboard_log_action(request, vendor_payment, CHANGE, 'Updated vendor payment from finance dashboard.')
+                messages.success(request, f'Vendor payment for {vendor_payment.vendor.name} updated.')
                 return redirect(redirect_url)
 
             if action == 'approve_expense':
@@ -9857,7 +10014,42 @@ def finance_dashboard(request):
     account_rows = FinanceAccount.objects.filter(is_active=True).order_by('name')
     vendor_rows = FinanceVendor.objects.filter(is_active=True).order_by('name')
     category_rows = FinanceExpenseCategory.objects.filter(is_active=True).order_by('name')
-    sponsor_rows = Sponsor.objects.select_related('event').order_by('name')
+    sponsor_company_rows = SponsorCompany.objects.filter(is_active=True).order_by('name')
+    historical_sponsor_names = {
+        (name or '').strip().lower()
+        for name in Sponsor.objects.exclude(name__isnull=True).exclude(name__exact='').values_list('name', flat=True)
+        if (name or '').strip()
+    }
+    sponsor_company_rows = sponsor_company_rows.exclude(
+        name__in=[
+            row.name for row in sponsor_company_rows
+            if row.name
+            and row.name.strip().lower() in historical_sponsor_names
+            and not any([
+                row.contact_person,
+                row.email,
+                row.phone,
+                row.address,
+                row.notes,
+            ])
+        ]
+    )
+    sponsor_company_lookup = {row.name.strip().lower(): row for row in sponsor_company_rows if row.name}
+    event_sponsor_company_map = {}
+    for sponsor in Sponsor.objects.select_related('event').order_by('event_id', 'name'):
+        if not sponsor.event_id:
+            continue
+        event_key = str(sponsor.event_id)
+        options = event_sponsor_company_map.setdefault(event_key, [])
+        sponsor_name = (sponsor.name or '').strip()
+        if not sponsor_name or any((option.get('name') or '').strip().lower() == sponsor_name.lower() for option in options):
+            continue
+        matched_company = sponsor_company_lookup.get(sponsor_name.lower())
+        options.append({
+            'id': sponsor.id,
+            'name': sponsor_name,
+            'sponsor_company_id': matched_company.id if matched_company else '',
+        })
 
     if event_filter:
         event_payments = event_payments.filter(event_id=event_filter)
@@ -10004,7 +10196,8 @@ def finance_dashboard(request):
         'finance_categories': FinanceExpenseCategory.objects.filter(is_active=True).order_by('name'),
         'finance_vendors': FinanceVendor.objects.filter(is_active=True).order_by('name'),
         'finance_accounts': account_rows,
-        'sponsors': sponsor_rows[:50],
+        'sponsor_companies': sponsor_company_rows[:100],
+        'event_sponsor_company_map': event_sponsor_company_map,
         'finance_status_choices': {
             'sponsorship': FinanceSponsorshipIncome.STATUS_CHOICES,
             'other_income': FinanceOtherIncome.STATUS_CHOICES,
@@ -10020,6 +10213,7 @@ def finance_dashboard(request):
             'categories': reverse('admin:registration_financeexpensecategory_changelist'),
             'vendors': reverse('admin:registration_financevendor_changelist'),
             'accounts': reverse('admin:registration_financeaccount_changelist'),
+            'sponsor_companies': reverse('admin:registration_sponsorcompany_changelist'),
             'sponsorships': reverse('admin:registration_financesponsorshipincome_changelist'),
             'other_income': reverse('admin:registration_financeotherincome_changelist'),
             'transfers': reverse('admin:registration_financetransfer_changelist'),
@@ -10145,6 +10339,18 @@ def finance_setup(request):
     if query_params:
         redirect_url = f"{redirect_url}?{urlencode(query_params)}"
 
+    action_anchor_map = {
+        'save_finance_control': 'finance-control-setup',
+        'add_vendor': 'vendor-setup',
+        'add_account': 'account-setup',
+        'add_sponsor_company': 'sponsor-company-setup',
+        'add_category': 'category-setup',
+    }
+
+    def redirect_with_anchor(action_name=''):
+        anchor = action_anchor_map.get(action_name or '')
+        return f"{redirect_url}#{anchor}" if anchor else redirect_url
+
     def parse_amount(value, label):
         try:
             return Decimal(str(value or '').strip())
@@ -10186,7 +10392,7 @@ def finance_setup(request):
                 }
                 if previous_state == new_state:
                     messages.warning(request, 'No change was saved. The control is still using the same values as before.')
-                    return redirect(redirect_url)
+                    return redirect(redirect_with_anchor(action))
 
                 finance_control.save()
                 dashboard_log_action(request, finance_control, CHANGE, 'Updated finance control from finance setup.')
@@ -10197,7 +10403,7 @@ def finance_setup(request):
                     f'Membership: {finance_control.membership_receiving_account or "Not configured"}, '
                     f'Gateway: {finance_control.gateway_charge_percent}%.'
                 )
-                return redirect(redirect_url)
+                return redirect(redirect_with_anchor(action))
 
             if action == 'add_category':
                 name = (request.POST.get('category_name') or '').strip()
@@ -10208,7 +10414,7 @@ def finance_setup(request):
                 category = FinanceExpenseCategory.objects.create(name=name, code=code, description=description)
                 dashboard_log_action(request, category, ADDITION, 'Created finance expense category from finance setup.')
                 messages.success(request, f'Expense category "{category.name}" created.')
-                return redirect(redirect_url)
+                return redirect(redirect_with_anchor(action))
 
             if action == 'add_vendor':
                 name = (request.POST.get('vendor_name') or '').strip()
@@ -10225,8 +10431,33 @@ def finance_setup(request):
                 )
                 dashboard_log_action(request, vendor, ADDITION, 'Created finance vendor from finance setup.')
                 messages.success(request, f'Vendor "{vendor.name}" created.')
-                return redirect(redirect_url)
+                return redirect(redirect_with_anchor(action))
 
+
+            if action == 'add_sponsor_company':
+                name = (request.POST.get('sponsor_company_name') or '').strip()
+                if not name:
+                    raise ValueError('Sponsor company name is required.')
+                sponsor_company, created = SponsorCompany.objects.get_or_create(
+                    name=name,
+                    defaults={
+                        'contact_person': (request.POST.get('sponsor_company_contact_person') or '').strip() or None,
+                        'email': (request.POST.get('sponsor_company_email') or '').strip() or None,
+                        'phone': (request.POST.get('sponsor_company_phone') or '').strip() or None,
+                        'address': (request.POST.get('sponsor_company_address') or '').strip() or None,
+                        'notes': (request.POST.get('sponsor_company_notes') or '').strip() or None,
+                    },
+                )
+                if not created:
+                    sponsor_company.contact_person = (request.POST.get('sponsor_company_contact_person') or '').strip() or sponsor_company.contact_person
+                    sponsor_company.email = (request.POST.get('sponsor_company_email') or '').strip() or sponsor_company.email
+                    sponsor_company.phone = (request.POST.get('sponsor_company_phone') or '').strip() or sponsor_company.phone
+                    sponsor_company.address = (request.POST.get('sponsor_company_address') or '').strip() or sponsor_company.address
+                    sponsor_company.notes = (request.POST.get('sponsor_company_notes') or '').strip() or sponsor_company.notes
+                    sponsor_company.save()
+                dashboard_log_action(request, sponsor_company, ADDITION if created else CHANGE, 'Saved sponsor company from finance setup.')
+                messages.success(request, f'Sponsor company "{sponsor_company.name}" saved.')
+                return redirect(redirect_with_anchor(action))
 
             if action == 'add_account':
                 name = (request.POST.get('account_name') or '').strip()
@@ -10241,7 +10472,7 @@ def finance_setup(request):
                 )
                 dashboard_log_action(request, account, ADDITION, 'Created finance account from finance setup.')
                 messages.success(request, f'Account "{account.name}" created.')
-                return redirect(redirect_url)
+                return redirect(redirect_with_anchor(action))
         except ValueError as exc:
             messages.error(request, str(exc))
         except Exception as exc:
@@ -10251,6 +10482,7 @@ def finance_setup(request):
     vendor_rows = FinanceVendor.objects.all().order_by('name')
     category_rows = FinanceExpenseCategory.objects.all().order_by('name')
     account_rows = FinanceAccount.objects.all().order_by('name')
+    sponsor_company_rows = SponsorCompany.objects.all().order_by('name')
     if search_query:
         vendor_rows = vendor_rows.filter(
             Q(name__icontains=search_query)
@@ -10267,6 +10499,14 @@ def finance_setup(request):
             Q(name__icontains=search_query)
             | Q(code__icontains=search_query)
             | Q(note__icontains=search_query)
+        )
+        sponsor_company_rows = sponsor_company_rows.filter(
+            Q(name__icontains=search_query)
+            | Q(contact_person__icontains=search_query)
+            | Q(email__icontains=search_query)
+            | Q(phone__icontains=search_query)
+            | Q(address__icontains=search_query)
+            | Q(notes__icontains=search_query)
         )
 
     active_account_options = FinanceAccount.objects.filter(is_active=True).order_by('name')
@@ -10287,6 +10527,7 @@ def finance_setup(request):
         'vendor_rows': vendor_rows[:40],
         'category_rows': category_rows[:40],
         'account_rows': account_rows[:40],
+        'sponsor_company_rows': sponsor_company_rows[:40],
         'active_account_options': active_account_options,
         'gateway_account_options': gateway_account_options,
         'settlement_account_options': settlement_account_options,
@@ -10297,14 +10538,17 @@ def finance_setup(request):
             'active_categories': category_rows.filter(is_active=True).count(),
             'accounts': account_rows.count(),
             'active_accounts': account_rows.filter(is_active=True).count(),
+            'sponsor_companies': sponsor_company_rows.count(),
+            'active_sponsor_companies': sponsor_company_rows.filter(is_active=True).count(),
         },
         'view_flags': {
             'show_vendors': scope in {'all', 'vendors'},
             'show_categories': scope in {'all', 'categories'},
             'show_accounts': scope in {'all', 'accounts'},
+            'show_sponsor_companies': scope in {'all', 'sponsor_companies'},
         },
         'setup_meta': {
-            'scope_label': 'All setup records' if scope == 'all' else ('Vendor setup only' if scope == 'vendors' else ('Category setup only' if scope == 'categories' else 'Account setup only')),
+            'scope_label': 'All setup records' if scope == 'all' else ('Vendor setup only' if scope == 'vendors' else ('Category setup only' if scope == 'categories' else ('Account setup only' if scope == 'accounts' else 'Sponsor company setup only'))),
         },
         'account_type_choices': FinanceAccount.TYPE_CHOICES,
         'admin_links': {
@@ -10315,6 +10559,7 @@ def finance_setup(request):
             'vendors': reverse('admin:registration_financevendor_changelist'),
             'categories': reverse('admin:registration_financeexpensecategory_changelist'),
             'accounts': reverse('admin:registration_financeaccount_changelist'),
+            'sponsor_companies': reverse('admin:registration_sponsorcompany_changelist'),
         },
     }
     return render(request, 'finance_setup.html', context)

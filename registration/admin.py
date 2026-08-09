@@ -4,7 +4,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.contrib import messages
-from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup, SystemSMSTemplate, SystemSMSSendLog, FinanceExpenseCategory, FinanceVendor, FinanceAccount, FinanceControl, FinanceOtherIncome, FinanceTransfer, FinanceSponsorshipIncome, FinanceExpense, FinanceExpenseAttachment, FinanceVendorPayment, FinanceVendorPaymentAttachment
+from .models import FeatureSpeaker, Participant, ParticipantEmailLog, AbstractSubmission, Department, HallRoom, TimeSlot, ProgramDay, ProgramSchedule, ProgramPerson, ProgramPersonEmailLog, ProgramSession, ProgramSessionFaculty, ProgramSessionItem, ProgramTalkSlot, ProgramItemFaculty, PresentationUpload, Invitation, AboutTheConference, Sponsor, Event, Chairperson, Panelist, Moderator, PaymentStatus, UserProfile, CorporateAccountRequest, CorporateAccount, CorporateEventRegistration, CorporateEventComplementaryQuota, CorporateEventAttendee, CorporatePayment, ProgramSchedulePdf, UploadAbstractBook, UploadNoteBook, BulkSMS, BulkSMSRecipient, BulkSMSSendLog, PhoneGroup, SystemSMSTemplate, SystemSMSSendLog, FinanceExpenseCategory, FinanceVendor, FinanceAccount, FinanceControl, FinanceOtherIncome, FinanceTransfer, SponsorCompany, FinanceSponsorshipIncome, FinanceExpense, FinanceExpenseAttachment, FinanceVendorPayment, FinanceVendorPaymentAttachment
 from .forms import AbstractSubmissionForm, RegistrationForm, ProgramScheduleForm
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -2679,11 +2679,19 @@ class FinanceTransferAdmin(admin.ModelAdmin):
     search_fields = ('reference_number', 'note', 'from_account__name', 'to_account__name', 'event__name')
 
 
+@admin.register(SponsorCompany)
+class SponsorCompanyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'contact_person', 'phone', 'email', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'contact_person', 'phone', 'email', 'address', 'notes')
+    readonly_fields = ('created_at', 'updated_at')
+
+
 @admin.register(FinanceSponsorshipIncome)
 class FinanceSponsorshipIncomeAdmin(admin.ModelAdmin):
-    list_display = ('company_name', 'event', 'received_account', 'amount', 'status', 'received_on', 'reference_number')
-    list_filter = ('status', 'event', 'received_account')
-    search_fields = ('company_name', 'title', 'reference_number', 'event__name', 'sponsor__name')
+    list_display = ('company_name', 'sponsor_company', 'event', 'received_account', 'amount', 'status', 'received_on', 'reference_number')
+    list_filter = ('status', 'event', 'received_account', 'sponsor_company')
+    search_fields = ('company_name', 'title', 'reference_number', 'event__name', 'sponsor__name', 'sponsor_company__name')
 
 
 @admin.register(FinanceExpense)

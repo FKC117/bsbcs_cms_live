@@ -432,6 +432,26 @@ class FeatureSpeaker(models.Model):
     def __str__(self):
         return self.name
 
+
+class SponsorCompany(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    contact_person = models.CharField(max_length=180, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=40, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Sponsor company'
+        verbose_name_plural = 'Sponsor company list'
+
+    def __str__(self):
+        return self.name
+
 #Feature Speaker Models END------------------------------------------------------------------------------------#
 
 #Department Models START------------------------------------------------------------------------------------#
@@ -2798,6 +2818,7 @@ class FinanceSponsorshipIncome(models.Model):
 
     event = models.ForeignKey('Event', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_sponsorship_incomes')
     sponsor = models.ForeignKey('Sponsor', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_income_rows')
+    sponsor_company = models.ForeignKey('SponsorCompany', on_delete=models.SET_NULL, blank=True, null=True, related_name='finance_income_rows')
     received_account = models.ForeignKey(FinanceAccount, on_delete=models.SET_NULL, blank=True, null=True, related_name='sponsorship_income_rows')
     company_name = models.CharField(max_length=180)
     title = models.CharField(max_length=180, blank=True, null=True)
