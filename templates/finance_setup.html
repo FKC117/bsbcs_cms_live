@@ -213,6 +213,8 @@
                         <div><label class="finance-label">Account code</label><input name="account_code" class="finance-input" placeholder="AUTO if left empty"></div>
                         <div><label class="finance-label">Account type</label><select name="account_type" class="finance-select">{% for value, label in account_type_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
                         <div><label class="finance-label">Opening balance</label><input name="account_opening_balance" type="number" step="0.01" value="0" class="finance-input"></div>
+                        <div><label class="finance-label">Opening snapshot date and time</label><input name="account_opening_balance_at" type="datetime-local" class="finance-input"></div>
+                        <div class="text-xs font-semibold text-slate-500 md:self-end">Use the exact date and time of the real account snapshot. Anything posted after that moment will be added on top of the opening balance.</div>
                         <div class="md:col-span-2"><label class="finance-label">Note</label><textarea name="account_note" class="finance-textarea"></textarea></div>
                         <div class="md:col-span-2 flex justify-end"><button class="rounded-xl bg-bsbcs-blue px-5 py-3 text-sm font-black text-white hover:bg-bsbcs-navy">Save account</button></div>
                     </div>
@@ -234,7 +236,7 @@
                                 <tr class="border-t border-line align-middle">
                                     <td class="px-3 py-2 font-black text-ink">{{ row.name }}</td>
                                     <td class="px-3 py-2 text-[11px] font-semibold text-slate-600">{{ row.get_account_type_display }}{% if row.code %} | {{ row.code }}{% endif %}</td>
-                                    <td class="px-3 py-2 font-black text-slate-700">BDT {{ row.opening_balance }}</td>
+                                    <td class="px-3 py-2 font-black text-slate-700">BDT {{ row.opening_balance }}{% if row.opening_balance_at %}<div class="text-[11px] font-semibold text-slate-500">As of {{ row.opening_balance_at|date:"Y-m-d H:i" }}</div>{% elif row.opening_balance_date %}<div class="text-[11px] font-semibold text-slate-500">As of {{ row.opening_balance_date|date:"Y-m-d" }}</div>{% endif %}</td>
                                     <td class="px-3 py-2 text-[11px] font-semibold text-slate-500">{{ row.note|default:'No note' }}</td>
                                     <td class="px-3 py-2 text-right text-[11px] font-black {% if row.is_active %}text-bsbcs-green{% else %}text-bsbcs-pink{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
                                     <td class="px-3 py-2 text-right"><a href="{% url 'admin:registration_financeaccount_change' row.id %}" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-line px-3 py-1.5 text-[11px] font-black text-bsbcs-blue hover:border-bsbcs-blue hover:bg-blue-50">Edit</a></td>

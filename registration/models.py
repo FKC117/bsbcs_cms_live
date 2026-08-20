@@ -2691,6 +2691,16 @@ class FinanceAccount(models.Model):
     code = models.CharField(max_length=40, unique=True, blank=True, null=True)
     account_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_BANK)
     opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    opening_balance_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text='Optional snapshot date for the opening balance. When set, older transactions are not counted again.',
+    )
+    opening_balance_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text='Optional exact snapshot time for the opening balance. Movements posted after this moment are counted.',
+    )
     note = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2759,6 +2769,7 @@ class FinanceOtherIncome(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
     received_on = models.DateField(blank=True, null=True)
+    received_at = models.DateTimeField(blank=True, null=True)
     reference_number = models.CharField(max_length=120, blank=True, null=True)
     proof_file = models.FileField(upload_to='finance/other_income_proofs/', blank=True, null=True)
     note = models.TextField(blank=True, null=True)
@@ -2825,6 +2836,7 @@ class FinanceSponsorshipIncome(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_EXPECTED)
     received_on = models.DateField(blank=True, null=True)
+    received_at = models.DateTimeField(blank=True, null=True)
     reference_number = models.CharField(max_length=120, blank=True, null=True)
     agreement_file = models.FileField(upload_to='finance/sponsorships/', blank=True, null=True)
     note = models.TextField(blank=True, null=True)
