@@ -8458,6 +8458,17 @@ def _finance_apply_range(queryset, field_name, date_from=None, date_to=None):
     return queryset.filter(**filters) if filters else queryset
 
 
+def _finance_apply_timestamp_range(queryset, field_name, date_from=None, date_to=None):
+    """Filter a timestamp using local day boundaries without MySQL DATE()."""
+    filters = {}
+    if date_from:
+        filters[f'{field_name}__gte'] = _finance_day_start(date_from)
+    if date_to:
+        # A half-open interval keeps every value on the selected final day.
+        filters[f'{field_name}__lt'] = _finance_day_start(_finance_next_day(date_to))
+    return queryset.filter(**filters) if filters else queryset
+
+
 def _finance_decimal_text(value):
     try:
         return f'{Decimal(value or 0):.2f}'
@@ -8755,9 +8766,9 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
         transfer_rows = transfer_rows.filter(event_id=event_filter)
 
-    event_payments = _finance_apply_range(event_payments, 'updated_at__date', date_from, date_to)
-    corporate_payments = _finance_apply_range(corporate_payments, 'updated_at__date', date_from, date_to)
-    membership_payments = _finance_apply_range(membership_payments, 'updated_at__date', date_from, date_to)
+    event_payments = _finance_apply_timestamp_range(event_payments, 'updated_at', date_from, date_to)
+    corporate_payments = _finance_apply_timestamp_range(corporate_payments, 'updated_at', date_from, date_to)
+    membership_payments = _finance_apply_timestamp_range(membership_payments, 'updated_at', date_from, date_to)
     other_income_rows = _finance_apply_range(other_income_rows, 'received_on', date_from, date_to)
     expense_rows = _finance_apply_range(expense_rows, 'expense_date', date_from, date_to)
     vendor_payment_rows = _finance_apply_range(vendor_payment_rows, 'payment_date', date_from, date_to)
@@ -10244,9 +10255,9 @@ def finance_dashboard(request):
         vendor_payment_rows = vendor_payment_rows.filter(event_id=event_filter)
         transfer_rows = transfer_rows.filter(event_id=event_filter)
 
-    event_payments = _finance_apply_range(event_payments, 'updated_at__date', date_from, date_to)
-    corporate_payments = _finance_apply_range(corporate_payments, 'updated_at__date', date_from, date_to)
-    membership_payments = _finance_apply_range(membership_payments, 'updated_at__date', date_from, date_to)
+    event_payments = _finance_apply_timestamp_range(event_payments, 'updated_at', date_from, date_to)
+    corporate_payments = _finance_apply_timestamp_range(corporate_payments, 'updated_at', date_from, date_to)
+    membership_payments = _finance_apply_timestamp_range(membership_payments, 'updated_at', date_from, date_to)
     sponsorship_rows = _finance_apply_range(sponsorship_rows, 'received_on', date_from, date_to)
     other_income_rows = _finance_apply_range(other_income_rows, 'received_on', date_from, date_to)
     expense_rows = _finance_apply_range(expense_rows, 'expense_date', date_from, date_to)
