@@ -8733,7 +8733,9 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
     events = Event.objects.order_by('-year', '-start_date', 'name')
     selected_event = events.filter(pk=event_filter).first() if event_filter else None
 
-    event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
+    # Historical payment rows can outlive an event record in older imports. Do not
+    # join Event here, otherwise an orphaned event FK silently removes real money.
+    event_payments = PaymentStatus.objects.select_related('participant').filter(status__in=['paid', 'completed'])
     corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
     membership_payments = MembershipPayment.objects.select_related('user_profile', 'membership_type').filter(status='completed')
     sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor', 'received_account').all()
@@ -8985,8 +8987,9 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
             event_profit_index[event_obj.id] = row
         return row
 
+    event_lookup = {event.id: event for event in events}
     for payment in event_payments:
-        row = ensure_event_row(payment.event)
+        row = ensure_event_row(event_lookup.get(payment.event_id))
         if row is not None:
             payment_amount = payment.amount or Decimal('0.00')
             row['event_income'] += payment_amount
@@ -9045,11 +9048,15 @@ def _finance_build_report_context(request, event_filter='', date_from=None, date
 
     ledger_rows = []
     for payment in event_payments.order_by('-updated_at'):
+        event = event_lookup.get(payment.event_id)
         ledger_rows.append({
             'date': payment.updated_at,
             'kind': 'Event income',
             'title': payment.participant.name,
-            'context': f'{payment.event.name} {payment.event.year} | {payment.merchant_invoice_number}',
+            'context': (
+                f'{event.name} {event.year} | {payment.merchant_invoice_number}'
+                if event else f'Archived event #{payment.event_id} | {payment.merchant_invoice_number}'
+            ),
             'amount': payment.amount or Decimal('0.00'),
             'tone': 'text-bsbcs-green',
         })
@@ -9407,7 +9414,8 @@ def _finance_build_account_balance_rows(event_filter='', date_from=None, date_to
     filter_from_at = _finance_day_start(date_from)
     filter_to_at = _finance_day_end(date_to)
 
-    event_payments = PaymentStatus.objects.select_related('event').filter(status__in=['paid', 'completed'])
+    # Keep completed collections even where an older event row is no longer present.
+    event_payments = PaymentStatus.objects.filter(status__in=['paid', 'completed'])
     corporate_payments = CorporatePayment.objects.select_related('event').filter(status__in=['paid', 'completed'])
     membership_payments = MembershipPayment.objects.filter(status='completed')
     sponsorship_rows = FinanceSponsorshipIncome.objects.filter(status=FinanceSponsorshipIncome.STATUS_RECEIVED)
@@ -10176,7 +10184,9 @@ def finance_dashboard(request):
             messages.error(request, 'Finance action failed. Please review the values and try again.')
             return redirect(redirect_url)
 
-    event_payments = PaymentStatus.objects.select_related('event', 'participant').filter(status__in=['paid', 'completed'])
+    # Do not use select_related('event'): its inner join hides historical paid
+    # rows whose event was removed, causing income and bank balance undercounts.
+    event_payments = PaymentStatus.objects.filter(status__in=['paid', 'completed'])
     corporate_payments = CorporatePayment.objects.select_related('event', 'corporate_account').filter(status__in=['paid', 'completed'])
     membership_payments = MembershipPayment.objects.select_related('user_profile').filter(status='completed')
     sponsorship_rows = FinanceSponsorshipIncome.objects.select_related('event', 'sponsor', 'received_account').all()
